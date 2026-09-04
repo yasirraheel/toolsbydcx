@@ -62,7 +62,7 @@ function UserDashboard({ dashboardData, onNavigate, onLaunchResource }) {
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '16px' }}>
           <div>
             <h4 style={{ margin: '0 0 8px 0', fontSize: '18px', fontWeight: 800, color: '#f8fafc' }}>
-              ⚡ FlowByDcx Tool Access Hub
+              ⚡ ToolsByDcx Tool Access Hub
             </h4>
             <p style={{ margin: 0, fontSize: '15px', color: '#94a3b8' }}>
               Access your assigned AI tools and premium services directly in your browser with 1-click launch.

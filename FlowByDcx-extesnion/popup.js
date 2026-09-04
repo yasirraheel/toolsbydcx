@@ -89,14 +89,14 @@ function updateRenewBanner(days) {
 function tryAutoConnect(storedToken) {
   if (storedToken) return; // already connected
   if (typeof chrome === 'undefined' || !chrome.tabs) return;
-  chrome.tabs.query({ url: ['https://flowbydcx.com/*', 'https://*.flowbydcx.com/*', 'http://localhost/*', 'http://127.0.0.1/*'] }, function(tabs) {
+  chrome.tabs.query({ url: ['https://toolsbydcx.com/*', 'https://*.toolsbydcx.com/*', 'https://flowbydcx.com/*', 'https://*.flowbydcx.com/*', 'http://localhost/*', 'http://127.0.0.1/*'] }, function(tabs) {
     if (!tabs || tabs.length === 0) return;
     var lockEmoji = document.querySelector('.lock-emoji');
     var notConnH3 = document.querySelector('.not-connected-header h3');
     var notConnP  = document.querySelector('.not-connected-header p');
     if (lockEmoji)  lockEmoji.textContent = '⏳';
     if (notConnH3)  notConnH3.textContent = 'Auto-connecting\u2026';
-    if (notConnP)   notConnP.textContent  = 'Syncing with your FlowByDcx session\u2026';
+    if (notConnP)   notConnP.textContent  = 'Syncing with your ToolsByDcx session\u2026';
     try {
       chrome.runtime.sendMessage({ type: 'BF_PORTAL_SYNC_REQ' }, function() {
         if (chrome.runtime.lastError) {}

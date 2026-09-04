@@ -81,7 +81,7 @@ function UserLayout({ currentUser, onExitUserPanel, onSwitchPortal, onLogout }) 
           <div className="admin-brand-block">
             <div className="admin-brand-icon">⚡</div>
             <div>
-              <div className="admin-brand-title">FlowByDcx</div>
+              <div className="admin-brand-title">ToolsByDcx</div>
               <div className="admin-brand-subtitle">User Portal</div>
             </div>
           </div>

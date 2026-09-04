@@ -27,7 +27,7 @@ export default function LandingPage({ currentUser, onOpenAuth, onNavigate, onLog
       setPlans([
         {
           id: "plan_free",
-          name: "Flow Basic",
+          name: "Tools Basic",
           price: 0,
           billing_cycle: "monthly",
           description: "Standard preview access to shared resources.",
@@ -35,7 +35,7 @@ export default function LandingPage({ currentUser, onOpenAuth, onNavigate, onLog
         },
         {
           id: "plan_pro",
-          name: "Flow Ultra",
+          name: "Tools Ultra",
           price: 9.99,
           billing_cycle: "monthly",
           description: "Full access to premium shared accounts with Chrome extension.",
@@ -43,7 +43,7 @@ export default function LandingPage({ currentUser, onOpenAuth, onNavigate, onLog
         },
         {
           id: "plan_unlimited",
-          name: "Flow Max",
+          name: "Tools Max",
           price: 29.99,
           billing_cycle: "monthly",
           description: "All-inclusive VIP access for high-volume usage and teams.",
@@ -103,7 +103,7 @@ export default function LandingPage({ currentUser, onOpenAuth, onNavigate, onLog
               </svg>
             </div>
             <span className="landing-brand-text">
-              FlowBy<span>Dcx</span>
+              ToolsBy<span>Dcx</span>
             </span>
           </div>
 
@@ -165,7 +165,7 @@ export default function LandingPage({ currentUser, onOpenAuth, onNavigate, onLog
           </h1>
 
           <p className="landing-hero-subtitle">
-            Eliminate password leaks and tedious logins. FlowByDcx seamlessly synchronizes verified account access directly to your browser with 1-click authentication, automated account pools, and high-uptime proxies.
+            Eliminate password leaks and tedious logins. ToolsByDcx seamlessly synchronizes verified account access directly to your browser with 1-click authentication, automated account pools, and high-uptime proxies.
           </p>
 
           <div className="landing-hero-actions">
@@ -394,7 +394,7 @@ export default function LandingPage({ currentUser, onOpenAuth, onNavigate, onLog
               <div className="landing-step-num">01</div>
               <h3 className="landing-step-title">Select Your Plan</h3>
               <p className="landing-step-desc">
-                Pick a plan that fits your resource needs, create your FlowByDcx account, and verify your email in seconds.
+                Pick a plan that fits your resource needs, create your ToolsByDcx account, and verify your email in seconds.
               </p>
             </div>
 
@@ -402,7 +402,7 @@ export default function LandingPage({ currentUser, onOpenAuth, onNavigate, onLog
               <div className="landing-step-num">02</div>
               <h3 className="landing-step-title">Install Companion Extension</h3>
               <p className="landing-step-desc">
-                Add the FlowByDcx Chrome Extension to your browser. It links automatically to your active dashboard session.
+                Add the ToolsByDcx Chrome Extension to your browser. It links automatically to your active dashboard session.
               </p>
             </div>
 
@@ -424,9 +424,9 @@ export default function LandingPage({ currentUser, onOpenAuth, onNavigate, onLog
             <div className="landing-pill-badge" style={{ marginBottom: "16px" }}>
               Chrome Extension v1.4 Available
             </div>
-            <h2 className="landing-ext-title">Power Your Browser with FlowByDcx</h2>
+            <h2 className="landing-ext-title">Power Your Browser with ToolsByDcx</h2>
             <p className="landing-ext-desc">
-              The FlowByDcx Chrome extension coordinates directly with your web session. Features automatic site detection, multi-account switcher dropdown, and instant 1-click launch.
+              The ToolsByDcx Chrome extension coordinates directly with your web session. Features automatic tool detection, instant 1-click launch, and real-time generation credit sync.
             </p>
             <div style={{ display: "flex", gap: "12px", flexWrap: "wrap" }}>
               <button
@@ -483,7 +483,7 @@ export default function LandingPage({ currentUser, onOpenAuth, onNavigate, onLog
                   <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
                 </svg>
               </div>
-              <span className="landing-brand-text">FlowBy<span>Dcx</span></span>
+              <span className="landing-brand-text">ToolsBy<span>Dcx</span></span>
             </div>
 
             <div className="landing-nav-links">
@@ -503,7 +503,7 @@ export default function LandingPage({ currentUser, onOpenAuth, onNavigate, onLog
           </div>
 
           <div className="landing-footer-bottom">
-            <div>© {new Date().getFullYear()} FlowByDcx. All rights reserved. Professional Cloud Account Access Platform.</div>
+            <div>© {new Date().getFullYear()} ToolsByDcx. All rights reserved. Professional Cloud Account Access Platform.</div>
             <div style={{ display: "flex", gap: "16px" }}>
               <span>Privacy Policy</span>
               <span>•</span>

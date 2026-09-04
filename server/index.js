@@ -1622,7 +1622,7 @@ app.post(['/api/extension/inject-cookies', '/api/extension2/inject-cookies'], as
     if (!user) {
       return res.status(401).json({
         ok: false,
-        error: 'Unauthorized: Please log in to your FlowByDcx dashboard.',
+        error: 'Unauthorized: Please log in to your ToolsByDcx dashboard.',
         forceSignout: true,
       });
     }
@@ -1675,7 +1675,7 @@ app.post(['/api/extension/inject-cookies', '/api/extension2/inject-cookies'], as
       } else {
         return res.status(403).json({
           ok: false,
-          error: `Your current plan (${userPlan}) does not have access to this shared pool. Please upgrade your plan in FlowByDcx.`,
+          error: `Your current plan (${userPlan}) does not have access to this shared pool. Please upgrade your plan in ToolsByDcx.`,
           upgradeRequired: true,
         });
       }

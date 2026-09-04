@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "FlowByDcx",
+  "name": "ToolsByDcx",
   "version": "1.4",
-  "description": "AI Access Platform — Unlock Google Flow and AI tools with your FlowByDcx plan.",
+  "description": "AI Access Platform — Unlock Google Flow and AI tools with your ToolsByDcx plan.",
   "permissions": [
     "cookies",
     "tabs",
@@ -15,6 +15,8 @@
   "host_permissions": [
     "https://labs.google/*",
     "https://*.labs.google/*",
+    "https://toolsbydcx.com/*",
+    "https://*.toolsbydcx.com/*",
     "https://flowbydcx.com/*",
     "https://*.flowbydcx.com/*",
     "http://localhost/*",
@@ -142,6 +144,8 @@
     },
     {
       "matches": [
+        "https://toolsbydcx.com/*",
+        "https://*.toolsbydcx.com/*",
         "https://flowbydcx.com/*",
         "https://*.flowbydcx.com/*",
         "http://localhost/*",

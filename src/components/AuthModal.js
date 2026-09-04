@@ -361,7 +361,7 @@ function AuthModal({ isOpen, onClose, currentUser, onAuthSuccess, onLogout, init
   return (
     <div className="auth-modal-backdrop" onClick={onClose}>
       <div className="auth-modal-card" onClick={(e) => e.stopPropagation()}>
-        {/* Professional Header with FlowByDcx Vector Symbol & Close */}
+        {/* Professional Header with ToolsByDcx Vector Symbol & Close */}
         <div className="auth-modal-header">
           <div className="auth-modal-brand">
             <div className="auth-brand-badge-icon" style={{ background: "rgba(34, 197, 94, 0.15)", color: "#22c55e", borderColor: "rgba(34, 197, 94, 0.35)" }}>
@@ -371,13 +371,13 @@ function AuthModal({ isOpen, onClose, currentUser, onAuthSuccess, onLogout, init
             </div>
             <div>
               <h3 className="auth-modal-title">
-                {mode === "login" && "FlowByDcx Sign In"}
-                {mode === "signup" && "Create FlowByDcx Account"}
+                {mode === "login" && "ToolsByDcx Sign In"}
+                {mode === "signup" && "Create ToolsByDcx Account"}
                 {mode === "verify" && "Verify Email Address"}
                 {mode === "forgot" && "Recover Account"}
                 {mode === "reset" && "Set New Password"}
               </h3>
-              <span className="auth-modal-sub" style={{ color: "#4ade80" }}>Session Management Platform</span>
+              <span className="auth-modal-sub" style={{ color: "#4ade80" }}>Tools Access & Credit Platform</span>
             </div>
           </div>
           <button type="button" className="auth-modal-close" onClick={onClose} title="Close">
@@ -459,7 +459,7 @@ function AuthModal({ isOpen, onClose, currentUser, onAuthSuccess, onLogout, init
                   <input
                     type="email"
                     className="auth-input"
-                    placeholder="user@flowbydcx.com"
+                    placeholder="user@toolsbydcx.com"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     required
@@ -495,7 +495,7 @@ function AuthModal({ isOpen, onClose, currentUser, onAuthSuccess, onLogout, init
               </div>
 
               <button type="submit" className="btn-auth-primary" disabled={loading}>
-                {loading ? "Authenticating..." : "Sign In to FlowByDcx ➜"}
+                {loading ? "Authenticating..." : "Sign In to ToolsByDcx ➜"}
               </button>
 
               <div className="auth-footer-prompt">
@@ -538,7 +538,7 @@ function AuthModal({ isOpen, onClose, currentUser, onAuthSuccess, onLogout, init
                   <input
                     type="email"
                     className="auth-input"
-                    placeholder="user@flowbydcx.com"
+                    placeholder="user@toolsbydcx.com"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     required
@@ -688,7 +688,7 @@ function AuthModal({ isOpen, onClose, currentUser, onAuthSuccess, onLogout, init
                 </div>
                 <h4>Reset Your Password</h4>
                 <p>
-                  Enter the email address associated with your FlowByDcx account. We will send you a verification code to set a new password.
+                  Enter the email address associated with your ToolsByDcx account. We will send you a verification code to set a new password.
                 </p>
               </div>
 
@@ -698,7 +698,7 @@ function AuthModal({ isOpen, onClose, currentUser, onAuthSuccess, onLogout, init
                   <input
                     type="email"
                     className="auth-input"
-                    placeholder="user@flowbydcx.com"
+                    placeholder="user@toolsbydcx.com"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     required

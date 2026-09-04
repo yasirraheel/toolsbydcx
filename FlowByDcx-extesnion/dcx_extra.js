@@ -30,7 +30,7 @@
         <div style="font-size:48px;margin-bottom:16px">🚫</div>
         <h2 style="font-size:22px;font-weight:700;margin:0 0 8px;color:#f87171">Plan Expired</h2>
         <p style="color:#9ca3af;font-size:14px;margin:0 0 24px;line-height:1.6">
-          Your FlowByDcx plan has expired.<br>
+          Your ToolsByDcx plan has expired.<br>
           Contact your admin to renew access.
         </p>
         <a href="${dashUrl}" target="_blank"
@@ -71,7 +71,7 @@
 
     var strong = document.createElement('strong');
     strong.textContent = days + ' day' + (days === 1 ? '' : 's') + ' left';
-    var label = document.createTextNode(' on your FlowByDcx plan.');
+    var label = document.createTextNode(' on your ToolsByDcx plan.');
     textWrap.appendChild(strong);
     textWrap.appendChild(label);
 
@@ -2452,7 +2452,7 @@
           if (!_isOpenerButton(el)) {
             e.stopImmediatePropagation();
             e.preventDefault();
-            showBfToast('🔒 This Option Is Locked', 'Upgrade your FlowByDcx plan');
+            showBfToast('🔒 This Option Is Locked', 'Upgrade your ToolsByDcx plan');
             return;
           }
         }

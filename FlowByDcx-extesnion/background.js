@@ -369,13 +369,18 @@
 /* FlowByDcx fetch shim v3.0.6 — dynamic origin, keep /extension/* paths */
 (function(){
   var _dynCanonical = 'http://localhost:5000';
+  var CANONICAL = _dynCanonical;
   try {
     chrome.storage.local.get(['apiBase', 'serverUrl'], function(st){
-      if (st && (st.apiBase || st.serverUrl)) _dynCanonical = String(st.apiBase || st.serverUrl).replace(/\/+$/, '');
+      if (st && (st.apiBase || st.serverUrl)) {
+        _dynCanonical = String(st.apiBase || st.serverUrl).replace(/\/+$/, '');
+        CANONICAL = _dynCanonical;
+      }
     });
     chrome.storage.onChanged.addListener(function(ch, area){
       if (area === 'local' && ch.apiBase && ch.apiBase.newValue) {
         _dynCanonical = String(ch.apiBase.newValue).replace(/\/+$/, '');
+        CANONICAL = _dynCanonical;
       }
     });
   } catch(_) {}
@@ -393,7 +398,7 @@
       var isVerify = url.includes('/api/extension/verify') || url.includes('/api/extension2/verify');
 
       if (isExtApi) {
-        // Rewrite hostname to active FlowByDcx server for all extension API calls.
+        // Rewrite hostname to active ToolsByDcx server for all extension API calls.
         url = url.replace(/^https?:\/\/[^\/]+/, _dynCanonical);
         // Daily-basis: keep /api/extension/* paths as-is. Rewrite any /extension2/*
         // calls back to /extension/* so this build only ever talks to the Ext1 pool.
@@ -433,7 +438,7 @@
                     extension2_expiry: data.user.planExpiresAt || '',
                     planExpires: data.user.planExpiresAt || '',
                     userPlan: (data.user.plan || '').toLowerCase(),
-                    apiBase: CANONICAL,
+                    apiBase: _dynCanonical,
                   };
                   // Server issued a fresh token (expired token was silently renewed)
                   if (data.newToken) {
@@ -443,7 +448,7 @@
                   chrome.storage.local.set(_storePayload);
                 } catch(e) {}
               } else if (data) {
-                try { chrome.storage.local.set({ apiBase: CANONICAL }); } catch(e) {}
+                try { chrome.storage.local.set({ apiBase: _dynCanonical }); } catch(e) {}
               }
             }).catch(function(){});
           } catch(e) {}
@@ -457,8 +462,8 @@
   // Lock apiBase immediately on startup (in case it was set to a wrong domain)
   try {
     chrome.storage.local.get(['apiBase'], function(d) {
-      if (!d.apiBase || d.apiBase !== CANONICAL) {
-        chrome.storage.local.set({ apiBase: CANONICAL });
+      if (!d || !d.apiBase || d.apiBase !== _dynCanonical) {
+        chrome.storage.local.set({ apiBase: _dynCanonical });
       }
     });
   } catch(e) {}

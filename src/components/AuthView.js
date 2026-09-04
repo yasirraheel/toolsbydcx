@@ -327,8 +327,8 @@ function AuthView({
   };
 
   const pageTitle =
-    mode === "login"   ? "FlowByDcx Sign In"        :
-    mode === "signup"  ? "Create FlowByDcx Account"  :
+    mode === "login"   ? "ToolsByDcx Sign In"        :
+    mode === "signup"  ? "Create ToolsByDcx Account"  :
     mode === "verify"  ? "Verify Email Address"       :
     mode === "forgot"  ? "Recover Account"            :
                          "Set New Password";
@@ -354,8 +354,8 @@ function AuthView({
               </svg>
             </div>
             <div className="auth-brand-text">
-              <span className="auth-brand-title-main">FlowByDcx</span>
-              <span className="auth-brand-subtitle-mini" style={{ color: "#4ade80" }}>Session Platform</span>
+              <span className="auth-brand-title-main">ToolsByDcx</span>
+              <span className="auth-brand-subtitle-mini" style={{ color: "#4ade80" }}>Access Platform</span>
             </div>
           </div>
         </div>
@@ -369,7 +369,7 @@ function AuthView({
               {mode === "signup" && "Create an account to start accessing high-tier AI services."}
               {mode === "verify" && "Enter verification code to activate your account."}
               {mode === "forgot" && "Enter your email to receive a password reset code."}
-              {mode === "reset" && "Set a new password for your FlowByDcx account."}
+              {mode === "reset" && "Set a new password for your ToolsByDcx account."}
             </p>
           </div>
 
@@ -438,7 +438,7 @@ function AuthView({
                   <input
                     type="email"
                     className="auth-input"
-                    placeholder="user@flowbydcx.com"
+                    placeholder="user@toolsbydcx.com"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     required
@@ -467,7 +467,7 @@ function AuthView({
               </div>
 
               <button type="submit" className="btn-auth-primary" disabled={loading}>
-                {loading ? "Authenticating..." : "Sign In to FlowByDcx →"}
+                {loading ? "Authenticating..." : "Sign In to ToolsByDcx →"}
               </button>
 
               <div className="auth-footer-prompt">
@@ -492,7 +492,7 @@ function AuthView({
               <div className="auth-field-group">
                 <label className="auth-label">Email Address</label>
                 <div className="auth-input-wrapper">
-                  <input type="email" className="auth-input" placeholder="user@flowbydcx.com" value={email} onChange={(e) => setEmail(e.target.value)} required />
+                  <input type="email" className="auth-input" placeholder="user@toolsbydcx.com" value={email} onChange={(e) => setEmail(e.target.value)} required />
                 </div>
               </div>
 
@@ -513,7 +513,7 @@ function AuthView({
               </div>
 
               <button type="submit" className="btn-auth-primary" disabled={loading}>
-                {loading ? "Creating Account..." : "Create FlowByDcx Account →"}
+                {loading ? "Creating Account..." : "Create ToolsByDcx Account →"}
               </button>
 
               <div className="auth-footer-prompt">
@@ -570,7 +570,7 @@ function AuthView({
               <div className="auth-field-group">
                 <label className="auth-label">Account Email</label>
                 <div className="auth-input-wrapper">
-                  <input type="email" className="auth-input" placeholder="user@flowbydcx.com" value={email} onChange={(e) => setEmail(e.target.value)} required />
+                  <input type="email" className="auth-input" placeholder="user@toolsbydcx.com" value={email} onChange={(e) => setEmail(e.target.value)} required />
                 </div>
               </div>
               <button type="submit" className="btn-auth-primary" disabled={loading}>

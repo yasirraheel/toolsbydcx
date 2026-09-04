@@ -104,7 +104,7 @@ function AdminLayout({ currentUser, onExitAdmin, onSwitchPortal, onLogout }) {
           <div className="admin-brand-block">
             <div className="admin-brand-icon">⚡</div>
             <div>
-              <div className="admin-brand-title">Access Hub</div>
+              <div className="admin-brand-title">ToolsByDcx</div>
               <div className="admin-brand-subtitle">Admin Portal</div>
             </div>
           </div>
