@@ -773,9 +773,10 @@
   border: 1px solid #334155;
   border-radius: 12px;
   width: 100%;
-  max-width: 520px;
+  max-width: 680px;
   max-height: 90vh;
   overflow-y: auto;
+  overflow-x: hidden;
   box-shadow: 0 20px 40px rgba(0,0,0,0.6);
 }
 

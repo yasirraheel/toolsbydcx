@@ -117,13 +117,13 @@ function UserResources() {
               {loading ? (
                 <tr>
                   <td colSpan="5" style={{ textAlign: 'center', padding: '32px', color: '#64748b' }}>
-                    Loading shared accounts...
+                    Loading tools...
                   </td>
                 </tr>
               ) : filteredResources.length === 0 ? (
                 <tr>
                   <td colSpan="5" style={{ textAlign: 'center', padding: '32px', color: '#64748b' }}>
-                    No shared accounts available on your subscription tier.
+                    No tools available on your subscription tier.
                   </td>
                 </tr>
               ) : (
@@ -134,7 +134,7 @@ function UserResources() {
                         {res.name || res.service}
                       </div>
                       <div style={{ fontSize: '13px', color: '#64748b' }}>
-                        {res.service || 'Shared Resource'}
+                        {res.service || 'Active Tool'}
                       </div>
                     </td>
                     <td>

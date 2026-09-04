@@ -30,24 +30,24 @@ export default function LandingPage({ currentUser, onOpenAuth, onNavigate, onLog
           name: "Tools Basic",
           price: 0,
           billing_cycle: "monthly",
-          description: "Standard preview access to shared resources.",
-          features: ["Standard shared account access", "Community support", "1 active session"]
+          description: "Starter plan with essential credits for AI video creation.",
+          features: ["200 AI Video Generation Credits", "Standard Generation Speed", "ToolsByDcx Extension Access", "720p / HD Video Output", "Email Support"]
         },
         {
           id: "plan_pro",
           name: "Tools Ultra",
           price: 9.99,
           billing_cycle: "monthly",
-          description: "Full access to premium shared accounts with Chrome extension.",
-          features: ["Instant 1-Click Access", "Auto-refresh session tokens", "Priority account access", "High-speed proxy sync"]
+          description: "Complete access with high-speed rendering for creators and professionals.",
+          features: ["1,000 AI Video Generation Credits", "Priority High-Speed Rendering", "Full ToolsByDcx Suite Access", "1080p Full HD Video Quality", "Priority Support"]
         },
         {
           id: "plan_unlimited",
           name: "Tools Max",
           price: 29.99,
           billing_cycle: "monthly",
-          description: "All-inclusive VIP access for high-volume usage and teams.",
-          features: ["All Pro features", "Multi-device extension support", "Dedicated high-speed proxies", "Zero rate limits guarantee"]
+          description: "All-inclusive VIP plan for unlimited video generation and top priority processing.",
+          features: ["Unlimited AI Generation Credits", "Instant High-Speed Rendering", "VIP Priority Processing Queue", "4K Ultra HD Video Quality", "24/7 Dedicated VIP Support"]
         }
       ]);
     } finally {
@@ -157,15 +157,15 @@ export default function LandingPage({ currentUser, onOpenAuth, onNavigate, onLog
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
               <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
             </svg>
-            <span>Next-Gen Cloud Account Access Platform</span>
+            <span>Next-Gen AI Creation Platform</span>
           </div>
 
           <h1 className="landing-hero-title">
-            Unlock High-Tier AI & Pro Accounts in <span className="landing-hero-gradient">One Click</span>
+            Unlock High-Tier AI Video Tools in <span className="landing-hero-gradient">One Click</span>
           </h1>
 
           <p className="landing-hero-subtitle">
-            Eliminate password leaks and tedious logins. ToolsByDcx seamlessly synchronizes verified account access directly to your browser with 1-click authentication, automated account pools, and high-uptime proxies.
+            Experience seamless AI creation without complicated setups. ToolsByDcx connects verified access directly to your browser with 1-click launch, dedicated rendering, and high-uptime performance.
           </p>
 
           <div className="landing-hero-actions">
@@ -355,9 +355,9 @@ export default function LandingPage({ currentUser, onOpenAuth, onNavigate, onLog
                   <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
                 </svg>
               </div>
-              <h3 className="landing-feature-title">Zero Credential Exposure</h3>
+              <h3 className="landing-feature-title">Secure & Instant Access</h3>
               <p className="landing-feature-desc">
-                Your master account passwords are never revealed to end-users or clients. Users receive scoped session tokens strictly protected by AES encryption.
+                Your personal credentials are safe and secure. Access premium AI video tools instantly through our secure browser companion without manual configuration.
               </p>
             </div>
 

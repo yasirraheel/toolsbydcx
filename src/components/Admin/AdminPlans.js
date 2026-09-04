@@ -182,8 +182,8 @@ const API_BASE = process.env.REACT_APP_API_URL || (window.location.hostname === 
                 price: 9.99,
                 billingCycle: 'monthly',
                 durationDays: 30,
-                description: '',
-                features: ['Access to shared accounts', 'Chrome extension cookie sync'],
+                description: 'Complete access with AI video generation credits and tools.',
+                features: ['500 AI Video Generation Credits', 'Priority High-Speed Rendering', 'ToolsByDcx Extension Access'],
                 isActive: true
               });
               setIsCreateOpen(true);
@@ -286,7 +286,7 @@ const API_BASE = process.env.REACT_APP_API_URL || (window.location.hostname === 
                   />
                 </div>
 
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '16px' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '16px' }}>
                   <div className="admin-form-group">
                     <label className="admin-form-label">Price (USD)</label>
                     <input
@@ -341,7 +341,7 @@ const API_BASE = process.env.REACT_APP_API_URL || (window.location.hostname === 
                     <input
                       type="text"
                       className="admin-form-input"
-                      placeholder="Add feature e.g. Access to shared accounts"
+                      placeholder="Add feature e.g. 500 AI Video Credits, HD Quality"
                       value={featureInput}
                       onChange={(e) => setFeatureInput(e.target.value)}
                       onKeyDown={(e) => {

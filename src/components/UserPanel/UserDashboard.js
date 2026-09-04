@@ -84,7 +84,7 @@ function UserDashboard({ dashboardData, onNavigate, onLaunchResource }) {
       <div className="admin-card">
         <div className="admin-card-header">
           <h3 className="admin-card-title">
-            <span>🚀</span> Shared Accounts & Tools
+            <span>🚀</span> Available Tools & Apps
           </h3>
           <button
             type="button"
@@ -92,7 +92,7 @@ function UserDashboard({ dashboardData, onNavigate, onLaunchResource }) {
             style={{ padding: '8px 16px', fontSize: '14px' }}
             onClick={() => onNavigate('resources')}
           >
-            All Accounts →
+            All Tools →
           </button>
         </div>
 
@@ -110,7 +110,7 @@ function UserDashboard({ dashboardData, onNavigate, onLaunchResource }) {
               {recentAccounts.length === 0 ? (
                 <tr>
                   <td colSpan="4" style={{ textAlign: 'center', padding: '32px', color: '#64748b' }}>
-                    No shared accounts available on your current plan.
+                    No tools available on your current plan.
                   </td>
                 </tr>
               ) : (

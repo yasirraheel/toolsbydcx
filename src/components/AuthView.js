@@ -365,7 +365,7 @@ function AuthView({
           <div className="auth-card-header">
             <h2 className="auth-page-title">{pageTitle}</h2>
             <p className="auth-page-desc">
-              {mode === "login" && "Sign in to access your shared accounts, sessions & tools."}
+              {mode === "login" && "Sign in to access your AI video tools and credits."}
               {mode === "signup" && "Create an account to start accessing high-tier AI services."}
               {mode === "verify" && "Enter verification code to activate your account."}
               {mode === "forgot" && "Enter your email to receive a password reset code."}
