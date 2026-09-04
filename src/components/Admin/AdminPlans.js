@@ -73,15 +73,6 @@ const API_BASE = process.env.REACT_APP_API_URL || (window.location.hostname === 
   };
 
   const handleDeletePlan = async (plan) => {
-    if (plan.id === 'plan_free' || plan.id === 'plan_pro') {
-      await showCustomAlert({
-        title: 'Protected Core Plan',
-        message: `Default core plan "${plan.name}" cannot be deleted because system services depend on it.`,
-        type: 'warning'
-      });
-      return;
-    }
-
     const confirmed = await confirm({
       title: 'Delete Subscription Plan',
       message: `Are you sure you want to permanently delete plan "${plan.name}"?`,
@@ -216,8 +207,11 @@ const API_BASE = process.env.REACT_APP_API_URL || (window.location.hostname === 
                 </div>
 
                 <div className="admin-plan-desc">{p.description}</div>
-
-
+                <div style={{ margin: '8px 0 6px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <span className="badge-pill badge-pro" style={{ fontSize: '12px', padding: '4px 10px', fontWeight: 700 }}>
+                    ⏱ {p.duration_days ? `${p.duration_days} Days Access` : (p.billing_cycle === 'lifetime' ? 'Lifetime Access' : '30 Days Access')}
+                  </span>
+                </div>
 
                 <ul className="admin-plan-features">
                   {p.features && p.features.map((f, i) => (
@@ -231,21 +225,23 @@ const API_BASE = process.env.REACT_APP_API_URL || (window.location.hostname === 
                     className="btn-admin-secondary"
                     style={{ flex: 1 }}
                     onClick={() => {
-                      setEditingPlan(p);
+                      setEditingPlan({
+                        ...p,
+                        durationDays: p.duration_days !== undefined && p.duration_days !== null ? p.duration_days : 30
+                      });
                       setIsCreateOpen(true);
                     }}
                   >
                     ✏️ Edit Plan
                   </button>
-                  {p.id !== 'plan_free' && p.id !== 'plan_pro' && (
-                    <button
-                      type="button"
-                      className="btn-table-action btn-table-delete"
-                      onClick={() => handleDeletePlan(p)}
-                    >
-                      🗑️
-                    </button>
-                  )}
+                  <button
+                    type="button"
+                    className="btn-table-action btn-table-delete"
+                    title="Delete Plan"
+                    onClick={() => handleDeletePlan(p)}
+                  >
+                    🗑️
+                  </button>
                 </div>
               </div>
             );
@@ -282,7 +278,7 @@ const API_BASE = process.env.REACT_APP_API_URL || (window.location.hostname === 
                   />
                 </div>
 
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '16px' }}>
                   <div className="admin-form-group">
                     <label className="admin-form-label">Price (USD)</label>
                     <input
@@ -300,12 +296,33 @@ const API_BASE = process.env.REACT_APP_API_URL || (window.location.hostname === 
                     <select
                       className="admin-select"
                       value={editingPlan.billingCycle || editingPlan.billing_cycle || 'monthly'}
-                      onChange={(e) => setEditingPlan({ ...editingPlan, billingCycle: e.target.value, billing_cycle: e.target.value })}
+                      onChange={(e) => {
+                        const cycle = e.target.value;
+                        let defDays = 30;
+                        if (cycle === 'quarterly') defDays = 90;
+                        else if (cycle === 'lifetime') defDays = 3650;
+                        setEditingPlan({ ...editingPlan, billingCycle: cycle, billing_cycle: cycle, durationDays: defDays, duration_days: defDays });
+                      }}
                     >
                       <option value="monthly">Monthly</option>
                       <option value="quarterly">Quarterly (90 Days)</option>
                       <option value="lifetime">Lifetime Access</option>
                     </select>
+                  </div>
+
+                  <div className="admin-form-group">
+                    <label className="admin-form-label">Duration (Days)</label>
+                    <input
+                      type="number"
+                      min="1"
+                      className="admin-form-input"
+                      value={editingPlan.durationDays !== undefined && editingPlan.durationDays !== null ? editingPlan.durationDays : (editingPlan.duration_days || 30)}
+                      onChange={(e) => {
+                        const d = parseInt(e.target.value, 10) || 30;
+                        setEditingPlan({ ...editingPlan, durationDays: d, duration_days: d });
+                      }}
+                      required
+                    />
                   </div>
                 </div>
 

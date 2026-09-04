@@ -406,9 +406,14 @@ function AdminUsers({ currentUser, isCreateOpen, onCloseCreate }) {
                       {(() => {
                         const pInfo = getPlanInfo(u.plan);
                         return (
-                          <span className={`badge-pill ${pInfo.className}`}>
-                            {pInfo.name}
-                          </span>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                            <span className={`badge-pill ${pInfo.className}`}>
+                              {pInfo.name}
+                            </span>
+                            <span style={{ fontSize: '11px', color: '#94a3b8' }}>
+                              ⏱ {u.daysRemaining !== null && u.daysRemaining !== undefined ? `${u.daysRemaining} days left` : 'Unlimited'}
+                            </span>
+                          </div>
                         );
                       })()}
                     </td>
@@ -495,7 +500,7 @@ function AdminUsers({ currentUser, isCreateOpen, onCloseCreate }) {
                   />
                 </div>
 
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '16px' }}>
                   <div className="admin-form-group">
                     <label className="admin-form-label">System Role</label>
                     <select
@@ -513,7 +518,15 @@ function AdminUsers({ currentUser, isCreateOpen, onCloseCreate }) {
                     <select
                       className="admin-select"
                       value={editingUser.plan || (availablePlans[0]?.id || 'plan_free')}
-                      onChange={(e) => setEditingUser({ ...editingUser, plan: e.target.value })}
+                      onChange={(e) => {
+                        const newPlan = e.target.value;
+                        const match = availablePlans.find((p) => p.id === newPlan);
+                        setEditingUser({
+                          ...editingUser,
+                          plan: newPlan,
+                          durationDays: match?.duration_days !== undefined ? match.duration_days : 30
+                        });
+                      }}
                     >
                       {availablePlans.length > 0 ? (
                         availablePlans.map((plan) => (
@@ -523,12 +536,23 @@ function AdminUsers({ currentUser, isCreateOpen, onCloseCreate }) {
                         ))
                       ) : (
                         <>
-                          <option value="plan_free">Flow Basic (Free)</option>
-                          <option value="plan_pro">Flow Ultra</option>
-                          <option value="plan_unlimited">Flow Max</option>
+                          <option value="plan_free">Tools Basic (Free)</option>
+                          <option value="plan_pro">Tools Ultra</option>
+                          <option value="plan_unlimited">Tools Max</option>
                         </>
                       )}
                     </select>
+                  </div>
+
+                  <div className="admin-form-group">
+                    <label className="admin-form-label">Duration (Days)</label>
+                    <input
+                      type="number"
+                      min="1"
+                      className="admin-form-input"
+                      value={editingUser.durationDays !== undefined ? editingUser.durationDays : (editingUser.daysRemaining !== null && editingUser.daysRemaining !== undefined ? editingUser.daysRemaining : 30)}
+                      onChange={(e) => setEditingUser({ ...editingUser, durationDays: parseInt(e.target.value, 10) || 30 })}
+                    />
                   </div>
                 </div>
 
@@ -642,7 +666,15 @@ function AdminUsers({ currentUser, isCreateOpen, onCloseCreate }) {
                     <select
                       className="admin-select"
                       value={newUserData.plan}
-                      onChange={(e) => setNewUserData({ ...newUserData, plan: e.target.value })}
+                      onChange={(e) => {
+                        const newPlan = e.target.value;
+                        const match = availablePlans.find((p) => p.id === newPlan);
+                        setNewUserData({
+                          ...newUserData,
+                          plan: newPlan,
+                          durationDays: match?.duration_days !== undefined ? match.duration_days : 30
+                        });
+                      }}
                     >
                       {availablePlans.length > 0 ? (
                         availablePlans.map((plan) => (
@@ -652,12 +684,23 @@ function AdminUsers({ currentUser, isCreateOpen, onCloseCreate }) {
                         ))
                       ) : (
                         <>
-                          <option value="plan_free">Flow Basic (Free)</option>
-                          <option value="plan_pro">Flow Ultra</option>
-                          <option value="plan_unlimited">Flow Max</option>
+                          <option value="plan_free">Tools Basic (Free)</option>
+                          <option value="plan_pro">Tools Ultra</option>
+                          <option value="plan_unlimited">Tools Max</option>
                         </>
                       )}
                     </select>
+                  </div>
+
+                  <div className="admin-form-group">
+                    <label className="admin-form-label">Duration (Days)</label>
+                    <input
+                      type="number"
+                      min="1"
+                      className="admin-form-input"
+                      value={newUserData.durationDays !== undefined ? newUserData.durationDays : 30}
+                      onChange={(e) => setNewUserData({ ...newUserData, durationDays: parseInt(e.target.value, 10) || 30 })}
+                    />
                   </div>
                 </div>
 

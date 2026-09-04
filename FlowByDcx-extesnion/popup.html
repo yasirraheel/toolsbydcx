@@ -333,19 +333,13 @@
     <!-- Active Account Switcher Dropdown Removed -->
 
     <!-- Stats -->
-    <div class="stats-row">
+    <div class="stats-row" style="grid-template-columns: 1fr;">
       <div class="stat-card">
         <div class="stat-val days" id="ext2-days">—</div>
         <div class="stat-lbl">Days Left</div>
       </div>
-      <div class="stat-card" style="display:none" aria-hidden="true">
-        <div class="stat-val credits" id="ext2-credits">—</div>
-        <div class="stat-lbl">Generation Credits</div>
-      </div>
-      <div class="stat-card" style="display:none" aria-hidden="true">
-        <div class="stat-val sessions" id="cookies-count">—</div>
-        <div class="stat-lbl">AI Sessions</div>
-      </div>
+      <span id="ext2-credits" style="display:none;"></span>
+      <span id="cookies-count" style="display:none;"></span>
     </div>
 
     <!-- Service Page Status Indicator -->

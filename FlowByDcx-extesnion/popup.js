@@ -15,6 +15,10 @@ function initials(name) {
 }
 
 function computeDaysLeft(data) {
+  if (data.daysRemaining !== undefined && data.daysRemaining !== null) {
+    let dr = parseInt(data.daysRemaining, 10);
+    if (!isNaN(dr)) return dr;
+  }
   // Prefer extension2_days if present, otherwise compute from planExpires
   let days = parseInt(data.extension2_days, 10);
   if (!isNaN(days)) return days;

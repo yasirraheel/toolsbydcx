@@ -348,8 +348,11 @@ app.get('/api/auth/me', async (req, res) => {
     const pool = getPool();
     const [rows] = await pool.query(
       `SELECT u.id, u.name, u.email, u.role, u.reseller_id, u.plan, u.expires_at, u.is_verified, u.created_at,
-       (SELECT r.name FROM users r WHERE r.id = u.reseller_id) as reseller_name
-       FROM users u WHERE u.id = ?`,
+       (SELECT r.name FROM users r WHERE r.id = u.reseller_id) as reseller_name,
+       p.duration_days, p.billing_cycle, p.name as plan_name
+       FROM users u
+       LEFT JOIN plans p ON (u.plan = p.id OR p.id = CONCAT('plan_', u.plan))
+       WHERE u.id = ?`,
       [decoded.id]
     );
 
@@ -358,15 +361,21 @@ app.get('/api/auth/me', async (req, res) => {
     }
 
     const user = rows[0];
+    const isLifetime = user.billing_cycle === 'lifetime' || Number(user.duration_days) >= 3650;
     let daysRemaining = null;
     let isExpired = false;
-    if (user.expires_at) {
-      const diffMs = new Date(user.expires_at).getTime() - Date.now();
-      daysRemaining = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
-      if (daysRemaining <= 0) {
-        isExpired = true;
-        daysRemaining = 0;
-      }
+    let finalExpiresAt = user.expires_at;
+
+    if (isLifetime) {
+      daysRemaining = null;
+      isExpired = false;
+    } else {
+      const planDuration = Number(user.duration_days) || 30;
+      const createdAt = user.created_at ? new Date(user.created_at) : new Date();
+      const elapsedDays = Math.floor((Date.now() - createdAt.getTime()) / (1000 * 60 * 60 * 24));
+      daysRemaining = Math.max(0, planDuration - Math.max(0, elapsedDays));
+      isExpired = daysRemaining <= 0;
+      finalExpiresAt = new Date(createdAt.getTime() + planDuration * 86400000);
     }
 
     res.json({
@@ -378,10 +387,11 @@ app.get('/api/auth/me', async (req, res) => {
         reseller_id: user.reseller_id,
         reseller_name: user.reseller_name,
         plan: user.plan || 'free',
-        expires_at: user.expires_at,
+        plan_name: user.plan_name || user.plan,
+        expires_at: finalExpiresAt,
         daysRemaining,
         isExpired,
-        isLifetime: !user.expires_at,
+        isLifetime,
         isVerified: Boolean(user.is_verified),
         createdAt: user.created_at,
       },
@@ -567,8 +577,11 @@ app.get('/api/admin/users', requireAdminRole, async (req, res) => {
     const { search, role, status } = req.query;
 
     let sql = `SELECT u.id, u.name, u.email, u.role, u.reseller_id, u.plan, u.credits, u.expires_at, u.is_verified, u.created_at,
-               (SELECT r.name FROM users r WHERE r.id = u.reseller_id) as reseller_name
-               FROM users u WHERE 1=1`;
+               (SELECT r.name FROM users r WHERE r.id = u.reseller_id) as reseller_name,
+               p.duration_days, p.billing_cycle, p.name as plan_name
+               FROM users u
+               LEFT JOIN plans p ON (u.plan = p.id OR p.id = CONCAT('plan_', u.plan))
+               WHERE 1=1`;
     const params = [];
 
     if (search && search.trim()) {
@@ -589,22 +602,30 @@ app.get('/api/admin/users', requireAdminRole, async (req, res) => {
     const [users] = await pool.query(sql, params);
 
     const annotated = users.map(u => {
+      const isLifetime = u.billing_cycle === 'lifetime' || Number(u.duration_days) >= 3650;
       let daysRemaining = null;
       let isExpired = false;
-      if (u.expires_at) {
-        const diffMs = new Date(u.expires_at).getTime() - Date.now();
-        daysRemaining = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
-        if (daysRemaining <= 0) {
-          isExpired = true;
-          daysRemaining = 0;
-        }
+      let finalExpiresAt = u.expires_at;
+
+      if (isLifetime) {
+        daysRemaining = null;
+        isExpired = false;
+      } else {
+        const planDuration = Number(u.duration_days) || 30;
+        const createdAt = u.created_at ? new Date(u.created_at) : new Date();
+        const elapsedDays = Math.floor((Date.now() - createdAt.getTime()) / (1000 * 60 * 60 * 24));
+        daysRemaining = Math.max(0, planDuration - Math.max(0, elapsedDays));
+        isExpired = daysRemaining <= 0;
+        finalExpiresAt = new Date(createdAt.getTime() + planDuration * 86400000);
       }
+
       return {
         ...u,
+        expires_at: finalExpiresAt,
         credits: u.credits !== null && u.credits !== undefined ? Number(u.credits) : 100,
         daysRemaining,
         isExpired,
-        isLifetime: !u.expires_at
+        isLifetime
       };
     });
 
@@ -631,21 +652,28 @@ app.post('/api/admin/users', requireAdminRole, async (req, res) => {
       return res.status(409).json({ error: 'A user with this email already exists.' });
     }
 
-    let userCredits = credits !== undefined && credits !== null ? Number(credits) : null;
-    if (userCredits === null) {
-      const selectedPlan = plan || 'free';
-      const [planRows] = await pool.query('SELECT credits FROM plans WHERE id = ? OR id = ? LIMIT 1', [selectedPlan, `plan_${selectedPlan}`]);
-      userCredits = planRows.length > 0 && planRows[0].credits !== null ? Number(planRows[0].credits) : 100;
-    }
+    const selectedPlan = plan || 'free';
+    const [planRows] = await pool.query('SELECT duration_days, billing_cycle, credits FROM plans WHERE id = ? OR id = ? LIMIT 1', [selectedPlan, `plan_${selectedPlan}`]);
+    const planObj = planRows[0];
+    const userCredits = credits !== undefined && credits !== null ? Number(credits) : (planObj && planObj.credits !== null ? Number(planObj.credits) : 100);
+    const durationDays = req.body.durationDays ? Number(req.body.durationDays) : (planObj ? Number(planObj.duration_days) : 30);
+    const isLifetime = planObj?.billing_cycle === 'lifetime' || durationDays >= 3650;
 
     const userId = `usr_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
     const salt = await bcrypt.genSalt(10);
     const hash = await bcrypt.hash(password || 'Password123!', salt);
 
-    await pool.query(
-      'INSERT INTO users (id, name, email, password_hash, is_verified, role, plan, credits) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-      [userId, name.trim(), cleanEmail, hash, isVerified ? 1 : 0, role || 'user', plan || 'free', userCredits]
-    );
+    if (isLifetime) {
+      await pool.query(
+        'INSERT INTO users (id, name, email, password_hash, is_verified, role, plan, credits, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL)',
+        [userId, name.trim(), cleanEmail, hash, isVerified ? 1 : 0, role || 'user', plan || 'free', userCredits]
+      );
+    } else {
+      await pool.query(
+        'INSERT INTO users (id, name, email, password_hash, is_verified, role, plan, credits, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, DATE_ADD(NOW(), INTERVAL ? DAY))',
+        [userId, name.trim(), cleanEmail, hash, isVerified ? 1 : 0, role || 'user', plan || 'free', userCredits, durationDays]
+      );
+    }
 
     res.json({ success: true, message: 'User created successfully.', id: userId });
   } catch (error) {
@@ -658,11 +686,32 @@ app.post('/api/admin/users', requireAdminRole, async (req, res) => {
 app.put('/api/admin/users/:id', requireAdminRole, async (req, res) => {
   try {
     const userId = req.params.id;
-    const { name, email, role, plan, credits, is_verified, password } = req.body;
+    const { name, email, role, plan, credits, is_verified, password, durationDays } = req.body;
 
     const pool = getPool();
     const updates = ['name = ?', 'email = ?', 'role = ?', 'plan = ?', 'is_verified = ?'];
     const params = [name, email ? email.trim().toLowerCase() : '', role || 'user', plan || 'free', is_verified ? 1 : 0];
+
+    if (durationDays !== undefined && durationDays !== null) {
+      const dDays = Number(durationDays);
+      if (dDays >= 3650) {
+        updates.push('expires_at = NULL');
+      } else {
+        updates.push('expires_at = DATE_ADD(NOW(), INTERVAL ? DAY)');
+        params.push(dDays);
+      }
+    } else if (plan) {
+      const [planRows] = await pool.query('SELECT duration_days, billing_cycle FROM plans WHERE id = ? OR id = ? LIMIT 1', [plan, `plan_${plan}`]);
+      if (planRows.length > 0) {
+        const pObj = planRows[0];
+        if (pObj.billing_cycle === 'lifetime' || Number(pObj.duration_days) >= 3650) {
+          updates.push('expires_at = NULL');
+        } else {
+          updates.push('expires_at = DATE_ADD(NOW(), INTERVAL ? DAY)');
+          params.push(Number(pObj.duration_days) || 30);
+        }
+      }
+    }
 
     if (credits !== undefined && credits !== null) {
       updates.push('credits = ?');
@@ -908,44 +957,56 @@ app.get('/api/reseller/users', async (req, res) => {
     const resellerId = user.id;
     const { search, status, plan } = req.query;
 
-    let sql = 'SELECT id, name, email, role, plan, expires_at, is_verified, created_at FROM users WHERE reseller_id = ?';
+    let sql = `SELECT u.id, u.name, u.email, u.role, u.plan, u.expires_at, u.is_verified, u.created_at,
+               p.duration_days, p.billing_cycle, p.name as plan_name
+               FROM users u
+               LEFT JOIN plans p ON (u.plan = p.id OR p.id = CONCAT('plan_', u.plan))
+               WHERE u.reseller_id = ?`;
     const params = [resellerId];
 
     if (search && search.trim()) {
-      sql += ' AND (name LIKE ? OR email LIKE ?)';
+      sql += ' AND (u.name LIKE ? OR u.email LIKE ?)';
       params.push(`%${search.trim()}%`, `%${search.trim()}%`);
     }
     if (plan && plan.trim()) {
-      sql += ' AND (plan = ? OR plan = ?)';
+      sql += ' AND (u.plan = ? OR u.plan = ?)';
       params.push(plan.trim(), `plan_${plan.trim()}`);
     }
     if (status === 'active') {
-      sql += ' AND is_verified = 1 AND (expires_at IS NULL OR expires_at > NOW())';
+      sql += ' AND u.is_verified = 1 AND (u.expires_at IS NULL OR u.expires_at > NOW())';
     } else if (status === 'expired') {
-      sql += ' AND expires_at <= NOW()';
+      sql += ' AND u.expires_at <= NOW()';
     } else if (status === 'suspended') {
-      sql += ' AND is_verified = 0';
+      sql += ' AND u.is_verified = 0';
     }
 
-    sql += ' ORDER BY created_at DESC';
+    sql += ' ORDER BY u.created_at DESC';
     const [users] = await pool.query(sql, params);
 
     const annotated = users.map(u => {
+      const isLifetime = u.billing_cycle === 'lifetime' || Number(u.duration_days) >= 3650;
       let daysRemaining = null;
       let isExpired = false;
-      if (u.expires_at) {
-        const diffMs = new Date(u.expires_at).getTime() - Date.now();
-        daysRemaining = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
-        if (daysRemaining <= 0) {
-          isExpired = true;
-          daysRemaining = 0;
-        }
+      let finalExpiresAt = u.expires_at;
+
+      if (isLifetime) {
+        daysRemaining = null;
+        isExpired = false;
+      } else {
+        const planDuration = Number(u.duration_days) || 30;
+        const createdAt = u.created_at ? new Date(u.created_at) : new Date();
+        const elapsedDays = Math.floor((Date.now() - createdAt.getTime()) / (1000 * 60 * 60 * 24));
+        daysRemaining = Math.max(0, planDuration - Math.max(0, elapsedDays));
+        isExpired = daysRemaining <= 0;
+        finalExpiresAt = new Date(createdAt.getTime() + planDuration * 86400000);
       }
+
       return {
         ...u,
+        expires_at: finalExpiresAt,
         daysRemaining,
         isExpired,
-        isLifetime: !u.expires_at
+        isLifetime
       };
     });
 
@@ -1198,15 +1259,21 @@ app.get('/api/user/dashboard', async (req, res) => {
     const isUnlimited = uPlan.includes('unlimited') || uPlan.includes('max') || profile.credits === -1 || planDetails.credits === -1;
     const userCredits = isUnlimited ? -1 : (profile.credits !== null && profile.credits !== undefined ? Number(profile.credits) : 100);
 
+    const isLifetime = planDetails.billing_cycle === 'lifetime' || Number(planDetails.duration_days) >= 3650;
     let daysRemaining = null;
     let isExpired = false;
-    if (profile.expires_at) {
-      const diffMs = new Date(profile.expires_at).getTime() - Date.now();
-      daysRemaining = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
-      if (daysRemaining <= 0) {
-        isExpired = true;
-        daysRemaining = 0;
-      }
+    let finalExpiresAt = profile.expires_at;
+
+    if (isLifetime) {
+      daysRemaining = null;
+      isExpired = false;
+    } else {
+      const planDuration = Number(planDetails.duration_days) || 30;
+      const createdAt = profile.created_at ? new Date(profile.created_at) : new Date();
+      const elapsedDays = Math.floor((Date.now() - createdAt.getTime()) / (1000 * 60 * 60 * 24));
+      daysRemaining = Math.max(0, planDuration - Math.max(0, elapsedDays));
+      isExpired = daysRemaining <= 0;
+      finalExpiresAt = new Date(createdAt.getTime() + planDuration * 86400000);
     }
 
     const [sessionCountRows] = await pool.query(
@@ -1240,10 +1307,10 @@ app.get('/api/user/dashboard', async (req, res) => {
         credits: userCredits,
         isUnlimitedCredits: isUnlimited,
         reseller_name: profile.reseller_name,
-        expires_at: profile.expires_at,
+        expires_at: finalExpiresAt,
         daysRemaining,
         isExpired,
-        isLifetime: !profile.expires_at,
+        isLifetime,
         is_verified: profile.is_verified,
         created_at: profile.created_at
       },
@@ -1262,7 +1329,7 @@ app.get('/api/user/dashboard', async (req, res) => {
       credits: userCredits,
       isUnlimitedCredits: isUnlimited,
       daysRemaining,
-      expiresAt: profile.expires_at,
+      expiresAt: finalExpiresAt,
       sharedAccountsCount: accessibleAccounts.length,
       activeSessionsCount: activeDevices,
       recentAccounts: accessibleAccounts.slice(0, 5).map(acc => ({
@@ -1741,7 +1808,7 @@ app.post(['/api/extension/verify', '/api/extension2/verify'], async (req, res) =
 
     const pool = getPool();
     const [uRows] = await pool.query(
-      'SELECT u.*, p.credits as plan_credits FROM users u LEFT JOIN plans p ON (u.plan = p.id OR (p.id = CONCAT("plan_", u.plan))) WHERE u.id = ?',
+      'SELECT u.*, p.credits as plan_credits, p.duration_days as plan_duration, p.billing_cycle as plan_billing_cycle FROM users u LEFT JOIN plans p ON (u.plan = p.id OR (p.id = CONCAT("plan_", u.plan))) WHERE u.id = ?',
       [user.id]
     );
     const fullUser = uRows[0] || user;
@@ -1749,10 +1816,19 @@ app.post(['/api/extension/verify', '/api/extension2/verify'], async (req, res) =
     const isUnlimited = userPlan.includes('unlimited') || userPlan.includes('max') || fullUser.credits === -1 || fullUser.plan_credits === -1;
     const creditsLeft = isUnlimited ? 999999 : (fullUser.credits !== null && fullUser.credits !== undefined ? Number(fullUser.credits) : 100);
 
-    let daysRemaining = 30;
-    if (fullUser.expires_at) {
-      const diff = new Date(fullUser.expires_at).getTime() - Date.now();
-      daysRemaining = Math.max(0, Math.ceil(diff / (1000 * 60 * 60 * 24)));
+    const isLifetime = fullUser.plan_billing_cycle === 'lifetime' || Number(fullUser.plan_duration) >= 3650;
+    let daysRemaining = null;
+    let planExpiresAt = null;
+
+    if (isLifetime) {
+      daysRemaining = null;
+      planExpiresAt = null;
+    } else {
+      const planDuration = Number(fullUser.plan_duration) || 30;
+      const createdAt = fullUser.created_at ? new Date(fullUser.created_at) : new Date();
+      const elapsedDays = Math.floor((Date.now() - createdAt.getTime()) / (1000 * 60 * 60 * 24));
+      daysRemaining = Math.max(0, planDuration - Math.max(0, elapsedDays));
+      planExpiresAt = new Date(createdAt.getTime() + planDuration * 86400000).toISOString();
     }
 
     res.json({
@@ -1766,7 +1842,7 @@ app.post(['/api/extension/verify', '/api/extension2/verify'], async (req, res) =
         creditsLeft: creditsLeft,
         credits: creditsLeft,
         daysRemaining: daysRemaining,
-        planExpiresAt: fullUser.expires_at ? new Date(fullUser.expires_at).toISOString() : new Date(Date.now() + 365 * 86400000).toISOString(),
+        planExpiresAt: planExpiresAt,
       },
       cookieSystemDisabled: false,
     });
