@@ -26,8 +26,8 @@
   // Locked model OPTIONS are inside a dropdown list and have role=option/menuitem/listitem.
   // The dropdown TOGGLE button (showing current model name) must NOT be blocked so we
   // can programmatically open the dropdown.
-  const _LP_RE   = /low(?:er)?.{0,6}priority/i;
-  const _LITE_RE = /veo.{0,20}lite/i;
+  const _LP_RE   = /low(?:er)?[\s._-]*priority|\blite\b|veo.*lite/i;
+  const _LITE_RE = /veo.{0,20}lite|\blite\b/i;
   const _FREE_RE = /nano.{0,5}banana|pro.{0,5}imagen/i;
   const _LOCK_RE = /\bveo\b.{0,40}(quality|fast)\b/i;
   const _OPT_SEL = '[role="option"],[role="menuitem"],[role="listitem"],li';
@@ -238,8 +238,8 @@
     for (var i = 0; i < btns.length; i++) {
       var txt = (btns[i].textContent || '').trim();
       if (txt.length < 3 || txt.length > 120) continue;
-      if (!/veo|fast|quality|standard/i.test(txt)) continue;
-      if (/low(?:er)?.{0,6}priority/i.test(txt)) continue;
+      if (!/veo/i.test(txt)) continue;
+      if (_LP_RE.test(txt) && !/quality|fast/i.test(txt)) continue;
       var r = btns[i].getBoundingClientRect();
       if (r.width < 10 || r.height < 6) continue;
       try { btns[i].click(); } catch(_) {}
@@ -250,45 +250,52 @@
 
   function _bfClickLPOption() {
     var opts = document.querySelectorAll(
-      '[role="option"],[role="menuitem"],[role="listitem"],li,[tabindex="0"],[tabindex="-1"]'
+      '[role="option"],[role="menuitem"],[role="listitem"],li,[tabindex="0"],[tabindex="-1"],div,span'
     );
     for (var i = 0; i < opts.length; i++) {
       var txt = (opts[i].textContent || '').trim();
-      if (txt.length < 3 || txt.length > 150) continue;
-      if (!/low(?:er)?.{0,6}priority/i.test(txt)) continue;
+      if (txt.length < 3 || txt.length > 100) continue;
+      if (!_LP_RE.test(txt)) continue;
+      if (/quality|fast/i.test(txt)) continue;
       var r = opts[i].getBoundingClientRect();
-      if (r.width < 2 && r.height < 2) continue;
+      if (r.width < 5 || r.height < 5) continue;
+      var target = opts[i].closest('[role="option"],[role="menuitem"],li,button') || opts[i];
       try {
-        opts[i].dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }));
-        opts[i].dispatchEvent(new MouseEvent('mouseup',   { bubbles: true, cancelable: true }));
-        opts[i].dispatchEvent(new MouseEvent('click',     { bubbles: true, cancelable: true }));
-        opts[i].click();
+        ['mouseover', 'pointerdown', 'mousedown', 'pointerup', 'mouseup', 'click'].forEach(function(ev) {
+          target.dispatchEvent(new MouseEvent(ev, { bubbles: true, cancelable: true, view: window }));
+        });
+        if (typeof target.click === 'function') target.click();
       } catch(_) {}
       return true;
     }
     return false;
   }
 
-  var _bfLpAttempts = 0;
   function _bfAutoSelectLP() {
-    if (_bfLpDone || _bfLpAttempts > 25) return;
-    _bfLpAttempts++;
-    if (_bfIsAllowedSelected()) { _bfLpDone = true; return; }
+    if (_bfIsAllowedSelected()) return;
     if (_bfClickLPOption()) {
-      // Clicked — check after 600ms if it worked
       setTimeout(function() {
-        if (_bfIsAllowedSelected()) _bfLpDone = true;
-        else _bfOpenModelDropdown(); // try again
-      }, 600);
+        if (!_bfIsAllowedSelected()) _bfOpenModelDropdown();
+      }, 350);
       return;
     }
-    // Dropdown not open — open it
     _bfOpenModelDropdown();
+    setTimeout(function() {
+      _bfClickLPOption();
+    }, 250);
   }
 
-  // Auto-LP loop DISABLED — was causing white screen by clicking wrong buttons
-  // when Google Flow updates their UI. Send-button lock still enforces LP selection.
-  _bfLpDone = true; // mark as done so nothing tries to click
+  // Active continuous auto-LP loop: ensures Lower Priority / Lite model is forcefully selected
+  function _startBfAutoLPLoop() {
+    _bfAutoSelectLP();
+    setInterval(function() {
+      if (!_bfIsAllowedSelected()) {
+        _bfAutoSelectLP();
+      }
+    }, 600);
+  }
+  if (document.body) _startBfAutoLPLoop();
+  else document.addEventListener('DOMContentLoaded', _startBfAutoLPLoop);
 
   // Block click on any locked button (data-bf-locked) OR when model is non-LP
   document.addEventListener('click', function(e) {
@@ -752,6 +759,9 @@
         (!!_xb && /"videoModelKey"\s*:/i.test(_xb) && !_isSt && !_isHist &&
          !/batchlog|logfrontend|log.?events|analytics|telemetry/i.test(url));
       if (_isGen || _isSt || _isHist) {
+        if (_isGen) {
+          try { window.postMessage({ __bf_gen_submit: { url: url } }, '*'); } catch (_) {}
+        }
         xhr.addEventListener('load', function() {
           try {
             var t = '';

@@ -362,6 +362,51 @@
       return false;
     }
 
+    // DEDUCT_CREDITS / USE_CREDITS — reliable credit consumption handler
+    if (msg.type === 'DEDUCT_CREDITS' || msg.type === 'USE_CREDITS') {
+      try {
+        chrome.storage.local.get(['token', 'sessionToken', 'apiBase', 'serverUrl'], function(st) {
+          var token = st && st.token;
+          if (!token && st && st.sessionToken) {
+            token = st.sessionToken.includes(':') ? st.sessionToken.split(':')[1] : st.sessionToken;
+          }
+          var api = (st && (st.apiBase || st.serverUrl) || BF_DEFAULT_SERVER || 'http://localhost:5000').replace(/\/+$/, '');
+          if (api.includes(':3000')) api = api.replace(':3000', ':5000');
+          if (api.includes('flowbydcx.com') || api.includes('labs.google')) api = 'http://localhost:5000';
+
+          var costAmount = typeof msg.cost === 'number' ? msg.cost : 50;
+
+          fetch(api + '/api/extension/use-credits', {
+            method: 'POST',
+            headers: {
+              'Authorization': 'Bearer ' + token,
+              'Content-Type': 'application/json',
+              'X-Ext-Version': '1.4'
+            },
+            body: JSON.stringify({ cost: costAmount, type: msg.mediaType || 'video', qty: 1 })
+          })
+          .then(function(r) { return r.json().then(function(d) { return { status: r.status, data: d }; }); })
+          .then(function(resObj) {
+            var data = resObj.data;
+            if (data && data.creditsRemaining != null) {
+              chrome.storage.local.set({
+                credits: data.creditsRemaining,
+                creditsLeft: data.creditsRemaining,
+                omniCreditsLeft: data.creditsRemaining
+              });
+            }
+            try { sendResponse({ ok: true, data: data, status: resObj.status }); } catch(_) {}
+          })
+          .catch(function(err) {
+            try { sendResponse({ ok: false, error: err.message }); } catch(_) {}
+          });
+        });
+      } catch(e) {
+        try { sendResponse({ ok: false, error: e.message }); } catch(_) {}
+      }
+      return true; // async
+    }
+
     return false;
   });
 })();

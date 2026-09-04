@@ -28,40 +28,46 @@ function computeDaysLeft(data) {
   return null;
 }
 
-// Fetch the same "Bunny AI Credits" balance the dashboard shows, using the
-// stored bearer token. free-quota returns creditsRemaining for free + metered
-// paid plans, and { enforced:false } for unlimited plans (basic/unlimited).
+// Fetch the same "ToolsByDcx Credits" balance the dashboard shows
 async function loadCredits(plan) {
   const el = $('ext2-credits');
   if (!el) return;
-  // Heavy plan: show Omni Flash credits (separate heavy_credits ledger).
-  if ((plan || '').toLowerCase() === 'heavy') {
-    try {
-      const st = await chrome.storage.local.get(['heavyCredits']);
-      el.textContent = (typeof st.heavyCredits === 'number' ? st.heavyCredits : 0);
-    } catch (_) { el.textContent = '—'; }
-    return;
-  }
+
   try {
-    const st = await chrome.storage.local.get(['token', 'apiBase']);
-    const token = st.token;
-    const api = (st.apiBase || DEFAULT_API).replace(/\/$/, '');
-    if (!token) { el.textContent = '—'; return; }
+    const st = await chrome.storage.local.get(['token', 'sessionToken', 'apiBase', 'credits', 'creditsRemaining', 'heavyCredits']);
+    if (typeof st.credits === 'number') {
+      el.textContent = st.credits;
+    } else if (typeof st.creditsRemaining === 'number') {
+      el.textContent = st.creditsRemaining;
+    }
+
+    if ((plan || '').toLowerCase() === 'heavy' && typeof st.heavyCredits === 'number') {
+      el.textContent = st.heavyCredits;
+      return;
+    }
+
+    let token = st.token;
+    if (!token && st.sessionToken) {
+      token = st.sessionToken.includes(':') ? st.sessionToken.split(':')[1] : st.sessionToken;
+    }
+    let api = (st.apiBase || DEFAULT_API).replace(/\/$/, '');
+    if (api.includes(':3000')) api = api.replace(':3000', ':5000');
+    if (api.includes('flowbydcx.com') || api.includes('labs.google')) api = 'http://localhost:5000';
+
+    if (!token) return;
+
     const res = await fetch(api + '/api/user/free-quota', {
       headers: { 'Authorization': 'Bearer ' + token }
     });
-    if (!res.ok) { el.textContent = '—'; return; }
+    if (!res.ok) return;
     const q = await res.json();
     if (q && q.enforced === false) {
       el.textContent = '∞';
     } else if (q && typeof q.creditsRemaining === 'number') {
       el.textContent = q.creditsRemaining;
-    } else {
-      el.textContent = '—';
+      chrome.storage.local.set({ credits: q.creditsRemaining, creditsLeft: q.creditsRemaining });
     }
-  } catch (_) {
-    el.textContent = '—';
-  }
+  } catch (_) {}
 }
 
 function updateRenewBanner(days) {

@@ -110,9 +110,9 @@
   new MutationObserver(injectCSS).observe(document.documentElement, { childList: true });
 
   // ── 2. MATCHERS ───────────────────────────────────────────────────────────
-  const LOCK_RE  = /veo.*(quality|fast(?!.*lower))/i;
-  const LP_RE    = /low(?:er)?.{0,6}priority/i;
-  const FREE_RE  = /nano.{0,5}banana|pro.{0,5}imagen|^imagen\b|veo.*lite/i;
+  const LOCK_RE  = /veo.*(quality|fast(?!.*lower))|\bquality\b|\bfast\b/i;
+  const LP_RE    = /low(?:er)?[\s._-]*priority|\blite\b|veo.*lite/i;
+  const FREE_RE  = /nano.{0,5}banana|pro.{0,5}imagen|^imagen\b|veo.*lite|\blite\b/i;
   const OMNI_RE  = /omni[\s._-]*flash/i;
 
   let _userPlan = 'basic';
@@ -157,6 +157,7 @@
 
       // Always re-enforce — inline styles survive React re-renders, attribute may not
       el.dataset.bfLocked = '1';
+      el.style.setProperty('display', 'none',        'important');
       el.style.setProperty('opacity', '0.35',        'important');
       el.style.setProperty('cursor',  'not-allowed', 'important');
 
@@ -325,53 +326,86 @@
 
   // ─── Credit API call: 50 credits per video ─────────────────────────────────
   function callUseCredits(type, costAmount, cb) {
-    if (typeof chrome === 'undefined' || !chrome.storage) return;
+    if (typeof chrome === 'undefined') return;
 
     // Per-charge cooldown — prevent double deduction within 3 seconds
     const now = Date.now();
     if (now - _chargeTs < 3000) return;
     _chargeTs = now;
 
-    chrome.storage.local.get(null, function(all) {
-      const token   = _extractJwt(all);
-      const apiBase = (all.apiBase || all.origin || (typeof location !== 'undefined' && location.origin.includes('localhost') ? 'http://localhost:5000' : 'https://flowbydcx.com')).replace(/\/+$/, '');
-      if (!token || token.length < 20) return;
+    const chargeCost = typeof costAmount === 'number' ? costAmount : 50;
 
-      const chargeCost = typeof costAmount === 'number' ? costAmount : 50;
-
-      fetch(apiBase + '/api/extension/use-credits', {
-        method: 'POST',
-        headers: {
-          'Authorization': 'Bearer ' + token,
-          'Content-Type': 'application/json',
-          'X-Ext-Version': '1.4',
-        },
-        body: JSON.stringify({ type: type || 'video', cost: chargeCost, qty: 1 }),
-      })
-      .then(function(res) {
-        return res.json().then(function(d) { return { status: res.status, data: d }; });
-      })
-      .then(function(resObj) {
-        var data = resObj.data;
-        if (resObj.status === 402 || (data && data.error === 'OMNI_CREDITS_EXHAUSTED')) {
-          _showOmniNotice('⚠️ Insufficient credits: 50 credits required per video generation. Please upgrade your plan.', '#78350f', '#fde68a');
-          if (cb) cb(false, 0);
-          return;
-        }
-        if (data && data.creditsRemaining != null && chrome.storage) {
-          chrome.storage.local.set({ credits: data.creditsRemaining, creditsLeft: data.creditsRemaining });
-          if (data.enforced !== false) {
-            _bfStatus('🎬 Video generating · 50 credits used · ' + data.creditsRemaining + ' left', 'busy', 10000);
-          } else {
-            _bfStatus('🎬 Video generating · Unlimited VIP', 'busy', 6000);
+    // 1. Send via background service worker for reliable execution
+    try {
+      if (chrome.runtime && chrome.runtime.sendMessage) {
+        chrome.runtime.sendMessage({
+          type: 'DEDUCT_CREDITS',
+          cost: chargeCost,
+          mediaType: type || 'video'
+        }, function(resp) {
+          if (resp && resp.ok && resp.data) {
+            var d = resp.data;
+            if (d.creditsRemaining != null) {
+              if (d.enforced !== false) {
+                _bfStatus('🎬 Video generating · 50 credits used · ' + d.creditsRemaining + ' left', 'busy', 10000);
+              } else {
+                _bfStatus('🎬 Video generating · Unlimited VIP', 'busy', 6000);
+              }
+              if (cb) cb(true, d.creditsRemaining);
+            }
+          } else if (resp && resp.status === 402) {
+            _showOmniNotice('⚠️ Insufficient credits: 50 credits required per video generation. Please upgrade your plan.', '#78350f', '#fde68a');
+            if (cb) cb(false, 0);
           }
-        }
-        if (cb) cb(true, data ? data.creditsRemaining : null);
-      })
-      .catch(function() {
-        if (cb) cb(false, null);
+        });
+      }
+    } catch(_) {}
+
+    // 2. Direct fetch fallback from content script
+    if (chrome.storage && chrome.storage.local) {
+      chrome.storage.local.get(null, function(all) {
+        const token = _extractJwt(all);
+        var apiBase = (all && (all.apiBase || all.serverUrl || all.origin)) || 'http://localhost:5000';
+        if (apiBase.includes(':3000')) apiBase = apiBase.replace(':3000', ':5000');
+        if (apiBase.includes('flowbydcx.com') || apiBase.includes('labs.google')) apiBase = 'http://localhost:5000';
+        apiBase = apiBase.replace(/\/+$/, '');
+
+        if (!token || token.length < 20) return;
+
+        fetch(apiBase + '/api/extension/use-credits', {
+          method: 'POST',
+          headers: {
+            'Authorization': 'Bearer ' + token,
+            'Content-Type': 'application/json',
+            'X-Ext-Version': '1.4',
+          },
+          body: JSON.stringify({ type: type || 'video', cost: chargeCost, qty: 1 }),
+        })
+        .then(function(res) {
+          return res.json().then(function(d) { return { status: res.status, data: d }; });
+        })
+        .then(function(resObj) {
+          var data = resObj.data;
+          if (resObj.status === 402 || (data && data.error === 'OMNI_CREDITS_EXHAUSTED')) {
+            _showOmniNotice('⚠️ Insufficient credits: 50 credits required per video generation. Please upgrade your plan.', '#78350f', '#fde68a');
+            if (cb) cb(false, 0);
+            return;
+          }
+          if (data && data.creditsRemaining != null && chrome.storage) {
+            chrome.storage.local.set({ credits: data.creditsRemaining, creditsLeft: data.creditsRemaining, omniCreditsLeft: data.creditsRemaining });
+            if (data.enforced !== false) {
+              _bfStatus('🎬 Video generating · 50 credits used · ' + data.creditsRemaining + ' left', 'busy', 10000);
+            } else {
+              _bfStatus('🎬 Video generating · Unlimited VIP', 'busy', 6000);
+            }
+          }
+          if (cb) cb(true, data ? data.creditsRemaining : null);
+        })
+        .catch(function() {
+          if (cb) cb(false, null);
+        });
       });
-    });
+    }
 
     // Also notify background.js
     if (typeof chrome !== 'undefined' && chrome.runtime) {
@@ -972,6 +1006,7 @@
     try {
       if (e && e.data && e.data.__bf_boot) _chAlive('MAIN-wrapper');
       if (e && e.data && e.data.__bf_req) { _chAlive('req'); _lastReqEvtAt = Date.now(); _onBfReq(e.data.__bf_req); }
+      if (e && e.data && e.data.__bf_gen_submit) { _triggerGenerationDeduction('Network API Generate'); }
       if (e && e.data && e.data.__bf_gen2) { _chAlive('GEN'); _onBfGen2(e.data.__bf_gen2); }
       if (e && e.data && e.data.__bf_st2) { _chAlive('ST'); _onBfSt2(e.data.__bf_st2); }
       if (e && e.data && e.data.__bf_hist) { _chAlive('HIST'); _onBfHist(e.data.__bf_hist); }
@@ -1397,10 +1432,8 @@
     // sends ko QUEUE karta hai — dusri video ki bar pehli ke baad aati hai).
     if (current > _lastBarCount) {
       var _nowC = Date.now();
-      // Bars jitne BARHE utni videos shuru huin — HAR unit ke liye ek intent
-      // kharch karo (2 parallel sends par bars 0→2 jump karta hai; pehle sirf
-      // ek intent kharch hota tha → doosri Omni FREE nikal jati thi).
       var _delta = current - _lastBarCount;
+      _triggerGenerationDeduction('Progress Bar Appeared (' + _delta + ')');
       // Har unit ke liye ek intent-qty kharch hoti hai. x2/x4: submit ke intent
       // mein qty>1 hoti hai — usi jump ke andar reuse hoti hai. Jump khatam hote
       // hi bachi hui qty ZAYA ho jati hai (kabhi agli video par nahi jati —
@@ -1525,60 +1558,54 @@
   let _lpOpening = false;   // true while we're in the open→click sequence
 
   function _isLPSelected() {
-    // Check all visible buttons/selectors for LP text
-    const all = document.querySelectorAll('[role="button"],[role="combobox"],button,select');
+    const all = document.querySelectorAll('button[aria-haspopup="menu"],button[aria-haspopup="listbox"],[role="combobox"],button');
     for (var i = 0; i < all.length; i++) {
       const txt = (all[i].textContent || all[i].value || '').trim();
-      if (txt.length > 2 && txt.length < 100 && /low(?:er)?.{0,6}priority/i.test(txt)) return true;
+      if (txt.length < 3 || txt.length > 120) continue;
+      if (!/veo/i.test(txt)) continue;
+      if (all[i].getBoundingClientRect().width < 10) continue;
+      return LP_RE.test(txt) && !/quality|fast/i.test(txt);
     }
-    return false;
+    return true; // No Veo button visible (e.g. image mode)
   }
 
   function _clickLPInDropdown() {
-    // Try to find and click the LP option in an open dropdown
     const opts = document.querySelectorAll(
-      '[role="option"],[role="menuitem"],[role="listitem"],li,[tabindex="0"],[tabindex="-1"]'
+      '[role="option"],[role="menuitem"],[role="listitem"],li,[tabindex="0"],[tabindex="-1"],div,span'
     );
     for (var i = 0; i < opts.length; i++) {
       const opt = opts[i];
+      if (opt.childElementCount > 3) continue;
       const txt = (opt.textContent || '').trim();
-      if (txt.length < 3 || txt.length > 150) continue;
-      if (!/low(?:er)?.{0,6}priority/i.test(txt)) continue;
-      // Verify it's visible
+      if (txt.length < 3 || txt.length > 100) continue;
+      if (!LP_RE.test(txt)) continue;
+      if (/quality|fast/i.test(txt)) continue;
       const rect = opt.getBoundingClientRect();
-      if (rect.width < 2 && rect.height < 2) continue;
+      if (rect.width < 5 && rect.height < 5) continue;
 
-      // Found LP option — fire proper mouse event sequence
+      const target = opt.closest('[role="option"],[role="menuitem"],li,button') || opt;
       try {
-        opt.dispatchEvent(new MouseEvent('mouseover',  { bubbles: true, cancelable: true }));
-        opt.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true }));
-        opt.dispatchEvent(new MouseEvent('mousedown',  { bubbles: true, cancelable: true }));
-        opt.dispatchEvent(new PointerEvent('pointerup',   { bubbles: true, cancelable: true }));
-        opt.dispatchEvent(new MouseEvent('mouseup',    { bubbles: true, cancelable: true }));
-        opt.dispatchEvent(new MouseEvent('click',      { bubbles: true, cancelable: true }));
-        opt.click();
+        ['mouseover', 'pointerdown', 'mousedown', 'pointerup', 'mouseup', 'click'].forEach(function(evt) {
+          target.dispatchEvent(new MouseEvent(evt, { bubbles: true, cancelable: true, view: window }));
+        });
+        if (typeof target.click === 'function') target.click();
       } catch(e) {}
 
       _lpDone    = true;
       _lpOpening = false;
-      lpSwitchPending = true;
-      setTimeout(function() { lpSwitchPending = false; }, 2500);
       return true;
     }
     return false;
   }
 
   function _openModelDropdown() {
-    // Find the model selector button (currently showing a non-LP model name)
-    const btns = document.querySelectorAll('[role="button"],[role="combobox"],button');
+    const btns = document.querySelectorAll('button[aria-haspopup="menu"],button[aria-haspopup="listbox"],[role="combobox"],button');
     for (var i = 0; i < btns.length; i++) {
       const btn = btns[i];
       const txt = (btn.textContent || '').trim();
       if (txt.length < 3 || txt.length > 120) continue;
-      // Must look like a model name (Veo, Fast, Quality, etc.) and not be LP
-      if (!MODEL_BTN_RE.test(txt)) continue;
-      if (/low(?:er)?.{0,6}priority/i.test(txt)) continue;
-      // Must be visible
+      if (!/veo/i.test(txt)) continue;
+      if (LP_RE.test(txt) && !/quality|fast/i.test(txt)) continue; // already LP/Lite
       const rect = btn.getBoundingClientRect();
       if (rect.width < 10 || rect.height < 6) continue;
       try { btn.click(); } catch(e) {}
@@ -1587,20 +1614,17 @@
     return false;
   }
 
-  // MutationObserver: fires instantly when LP option appears in the DOM
-  // (when the dropdown opens). This is faster and more reliable than polling.
   var _lpObserver = null;
 
   function _startLPObserver() {
-    if (_lpObserver) return; // already watching
+    if (_lpObserver) return;
     _lpObserver = new MutationObserver(function() {
-      if (_lpDone || isHome()) return;
-      if (_clickLPInDropdown()) {
-        _stopLPObserver(); // LP clicked — stop observing
+      if (isHome()) return;
+      if (!_isLPSelected()) {
+        _clickLPInDropdown();
       }
     });
-    _lpObserver.observe(document.body || document.documentElement,
-      { childList: true, subtree: true });
+    _lpObserver.observe(document.body || document.documentElement, { childList: true, subtree: true });
   }
 
   function _stopLPObserver() {
@@ -1608,29 +1632,28 @@
   }
 
   function _trySelectLP(retries) {
-    if (_lpDone || isHome()) { _stopLPObserver(); return; }
-    // Already LP?
-    if (_isLPSelected()) { _lpDone = true; _lpOpening = false; _stopLPObserver(); return; }
-    // LP option visible in open dropdown? Click it now.
-    if (_clickLPInDropdown()) { _stopLPObserver(); return; }
-    // Not found yet — open the dropdown if retries left
+    if (isHome()) { _stopLPObserver(); _lpOpening = false; return; }
+    if (_isLPSelected()) { _lpOpening = false; _stopLPObserver(); return; }
+    if (_clickLPInDropdown()) {
+      setTimeout(function() {
+        if (_isLPSelected()) { _lpOpening = false; _stopLPObserver(); }
+        else { _openModelDropdown(); }
+      }, 300);
+      return;
+    }
     if (retries <= 0) { _lpOpening = false; _stopLPObserver(); return; }
     _openModelDropdown();
-    // Wait 400ms then try again
-    setTimeout(function() { _trySelectLP(retries - 1); }, 400);
+    setTimeout(function() { _trySelectLP(retries - 1); }, 350);
   }
 
   function autoSelectLP() {
-    return; /* BunnyFlow v3.10.36: auto model selection disabled */
-    if (isHome() || lpSwitchPending) return;
-    if (_lpDone && _isLPSelected()) return;
-    if (_isLPSelected()) { _lpDone = true; return; }
-    if (_lpOpening) return; // already in progress
-    // Start: watch the DOM for LP option + poll
-    _lpOpening = true;
-    _lpDone    = false;
-    _startLPObserver();           // instant reaction when dropdown opens
-    _trySelectLP(20);             // fallback: up to 20 retries × 400ms = 8 seconds
+    if (isHome()) return;
+    if (!_isLPSelected()) {
+      if (_lpOpening) return;
+      _lpOpening = true;
+      _startLPObserver();
+      _trySelectLP(15);
+    }
   }
 
   // ── ENFORCE LP MODEL: lock send button via HTML attribute + CSS ─────────────
@@ -1720,7 +1743,23 @@
     }
   }
 
-  // Find the send button: rightmost + bottommost SVG-only button in lower-right of screen
+  var _lastDeductTs = 0;
+  function _triggerGenerationDeduction(reason) {
+    var now = Date.now();
+    if (now - _lastDeductTs < 3500) return; // Cooldown 3.5s
+    _lastDeductTs = now;
+
+    var qty = 1;
+    try {
+      qty = _stableQty() || 1;
+    } catch(_) { qty = 1; }
+
+    var cost = 50 * qty;
+    console.log('[ToolsByDcx] 🎬 Deducting ' + cost + ' credits for ' + qty + ' video(s) [' + reason + ']');
+    callUseCredits('video', cost);
+  }
+
+  // Find the send button: rightmost + bottommost button in lower-right of screen
   function _findSendBtn() {
     var best = null, bestScore = -1;
     var wh = window.innerHeight, ww = window.innerWidth;
@@ -1729,15 +1768,24 @@
       var b = allBtns[i];
       if (!b.offsetParent && b.style.display === 'none') continue;
       var r = b.getBoundingClientRect();
-      if (r.width < 24 || r.width > 80) continue;   // small-ish button
-      if (r.height < 24 || r.height > 80) continue;
-      if (r.bottom < wh * 0.55) continue;            // lower 45% of screen
-      if (r.right < ww * 0.45) continue;             // right 55% of screen
-      if (!b.querySelector('svg,img')) continue;      // has icon
-      // reject text-heavy buttons (tabs, labels)
-      var txt = (b.textContent || '').replace(/\s+/g, '');
-      if (txt.length > 6) continue;
-      // score: prioritise rightmost, bottommost
+      if (r.width < 20 || r.width > 90) continue;
+      if (r.height < 20 || r.height > 90) continue;
+      if (r.bottom < wh * 0.45) continue;            // lower screen
+      if (r.right < ww * 0.35) continue;             // right side of screen
+
+      var txt = (b.textContent || '').trim();
+      var al = (b.getAttribute('aria-label') || '').toLowerCase();
+      var title = (b.getAttribute('title') || '').toLowerCase();
+      var html = (b.innerHTML || '').toLowerCase();
+
+      var isArrow = /arrow_forward|send|generate|create/i.test(txt) ||
+                    /arrow_forward|send|generate|create/i.test(al) ||
+                    /arrow_forward|send|generate|create/i.test(title) ||
+                    html.includes('arrow_forward') ||
+                    b.querySelector('svg,img,i.google-symbols,span.google-symbols') !== null;
+
+      if (!isArrow && txt.length > 20) continue;
+
       var score = (r.right / ww) * 2 + (r.bottom / wh);
       if (score > bestScore) { bestScore = score; best = b; }
     }
@@ -1782,7 +1830,6 @@
     if (_btnObserver) { _btnObserver.disconnect(); _btnObserver = null; }
     if (!btn) return;
     _btnObserver = new MutationObserver(function() {
-      // If React wiped our styles, reapply immediately
       if (document.documentElement.hasAttribute('data-bf-model-locked')) {
         _applyLockStyles(btn);
         _positionOverlay(btn);
@@ -1792,57 +1839,58 @@
   }
 
   function enforceLPModel() {
-    return; /* BunnyFlow v3.10.36: model enforcement disabled */
-    var ov = _getOrCreateOverlay();
-
-    if (isHome()) {
-      document.documentElement.removeAttribute('data-bf-model-locked');
-      if (_sendBtnCache) { _removeLockStyles(_sendBtnCache); _sendBtnCache = null; }
-      if (_btnObserver) { _btnObserver.disconnect(); _btnObserver = null; }
-      ov.style.display = 'none';
-      return;
-    }
-
-    var modelTxt = _getCurrentModelText();
-    if (!modelTxt) {
-      // Image tab or no model visible → unlock
-      document.documentElement.removeAttribute('data-bf-model-locked');
-      if (_sendBtnCache) { _removeLockStyles(_sendBtnCache); _sendBtnCache = null; }
-      if (_btnObserver) { _btnObserver.disconnect(); _btnObserver = null; }
-      ov.style.display = 'none';
-      return;
-    }
-
-    var isLP = /low(?:er)?.{0,6}priority/i.test(modelTxt);
-
-    if (isLP) {
-      // UNLOCK
-      document.documentElement.removeAttribute('data-bf-model-locked');
-      if (_sendBtnCache) { _removeLockStyles(_sendBtnCache); }
-      if (_btnObserver) { _btnObserver.disconnect(); _btnObserver = null; }
-      _sendBtnCache = null;
-      ov.style.display = 'none';
-    } else {
-      // LOCK
-      document.documentElement.setAttribute('data-bf-model-locked', '1');
-      var btn = _findSendBtn();
-      if (btn && btn !== _sendBtnCache) {
-        // New button found (React replaced it) → re-observe
-        if (_sendBtnCache) _removeLockStyles(_sendBtnCache);
-        _sendBtnCache = btn;
-        _observeBtn(btn);
-      }
-      if (_sendBtnCache) {
-        _applyLockStyles(_sendBtnCache);
-        _positionOverlay(_sendBtnCache);
-      } else {
-        ov.style.display = 'none';
-      }
+    if (isHome()) return;
+    if (!_isLPSelected()) {
+      autoSelectLP();
     }
   }
 
+  // Global capture click listener for generate buttons
+  document.addEventListener('click', function(e) {
+    try {
+      var target = e.target;
+      var btn = target.closest('button,[role="button"]');
+      if (!btn) return;
+      var txt = (btn.textContent || '').trim();
+      var al = (btn.getAttribute('aria-label') || '').toLowerCase();
+      var title = (btn.getAttribute('title') || '').toLowerCase();
+      var html = (btn.innerHTML || '').toLowerCase();
+
+      var isGen = /arrow_forward/i.test(txt) ||
+                  /send|generate|create\b/i.test(al) ||
+                  /send|generate|create\b/i.test(title) ||
+                  html.includes('arrow_forward');
+
+      if (!isGen) {
+        var sb = _findSendBtn();
+        if (sb && (btn === sb || sb.contains(btn))) isGen = true;
+      }
+      if (isGen) {
+        _triggerGenerationDeduction('Generate Button Click');
+      }
+    } catch(_) {}
+  }, true);
+
+  // Global capture keydown listener for Enter key in prompt
+  document.addEventListener('keydown', function(e) {
+    try {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        var act = document.activeElement;
+        if (act) {
+          var tag = (act.tagName || '').toLowerCase();
+          var isEdit = act.isContentEditable || tag === 'textarea' || (tag === 'input' && act.type === 'text');
+          if (isEdit) {
+            var val = (act.value || act.textContent || '').trim();
+            if (val.length > 0) {
+              _triggerGenerationDeduction('Enter Key Press');
+            }
+          }
+        }
+      }
+    } catch(_) {}
+  }, true);
+
   // hookSendButton: intercept the generate button to record a pending generation ID
-  // and deduct 50 credits per video generation upon click or Enter key.
   function hookSendButton() {
     if (isHome()) return;
     const BTN_SEL = '[aria-label*="send" i],[aria-label*="generat" i],[aria-label*="create" i],[title*="create" i],[title*="send" i]';
@@ -1854,33 +1902,7 @@
       if (btn.dataset.bfSendHooked) return;
       btn.dataset.bfSendHooked = '1';
       btn.addEventListener('click', function() {
-        _currGenId = _newGenId();
-        var _omC = isHeavyPlan() && _isOmniSelected();
-        _genMap[_currGenId] = { status: 'pending', deducted: true, omni: _omC };
-        _setIntent();
-        // Expire old records (keep last 10)
-        const keys = Object.keys(_genMap);
-        if (keys.length > 10) delete _genMap[keys[0]];
-
-        // Deduct 50 credits per video generation on Generate click
-        callUseCredits('video', 50);
-      }, { capture: true });
-    });
-
-    // Also hook any form submission (textarea + Enter)
-    document.querySelectorAll('textarea,input[type="text"]').forEach(function(inp) {
-      if (inp.dataset.bfKeyHooked) return;
-      inp.dataset.bfKeyHooked = '1';
-      inp.addEventListener('keydown', function(e) {
-        if (e.key === 'Enter' && !e.shiftKey) {
-          _currGenId = _newGenId();
-          var _omE = isHeavyPlan() && _isOmniSelected();
-          _genMap[_currGenId] = { status: 'pending', deducted: true, omni: _omE };
-          _setIntent();
-
-          // Deduct 50 credits per video generation on Enter key
-          callUseCredits('video', 50);
-        }
+        _triggerGenerationDeduction('Hooked Button Click');
       }, { capture: true });
     });
   }

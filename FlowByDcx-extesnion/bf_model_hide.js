@@ -27,17 +27,8 @@
   _injectCSS();
   new MutationObserver(_injectCSS).observe(document.documentElement, { childList: true });
 
-  // ── Plan helpers ──────────────────────────────────────────────────────────
-  function _getPlan() {
-    return (document.documentElement.getAttribute('data-bf-plan') || 'basic').toLowerCase();
-  }
-  function _isPro()   { var p = _getPlan(); return p === 'pro' || p === 'ultra'; }
-  function _isUltra() { return _getPlan() === 'ultra'; }
-  function _isHeavy() { return _getPlan() === 'heavy'; }
-  var OMNI_RE = /omni[\s._-]*flash/i;
-
-  // ── Patterns ──────────────────────────────────────────────────────────────
-  var LP_RE    = /lower[\s._-]*priority/i;
+  // ── Plan helpers ──────────────────────────────  // ── Patterns ──────────────────────────────────────────────────────────────
+  var LP_RE    = /low(?:er)?[\s._-]*priority|\blite\b|veo.*lite/i;
   var MODEL_RE = /\bveo\b|\bomni\b|\bflash\b/i;
   var DROP_SEL =
     '[role="listbox"],[role="menu"],[role="presentation"],' +
@@ -83,7 +74,7 @@
     try { wrap = el.closest('[role="option"],[role="menuitem"],li') || el; } catch(_) { wrap = el; }
     if (!wrap || wrap.hasAttribute('aria-haspopup') || wrap.hasAttribute('aria-expanded')) wrap = el;
 
-    if (LP_RE.test(txt) || (_isHeavy() && OMNI_RE.test(txt))) {
+    if (LP_RE.test(txt) && !/quality|fast/i.test(txt)) {
       wrap.removeAttribute('data-bf-mh-hide');
       el.removeAttribute('data-bf-mh-hide');
     } else {
@@ -106,33 +97,30 @@
   }
 
   // ── ② AUTO-LP SELECTION on page load ─────────────────────────────────────
-  // Uses Tool Wallet's proven approach:
-  //   button[aria-haspopup="menu"] → find current model text
-  //   if not LP → click trigger → wait → click LP li element
+  // Forcefully auto-selects Lower Priority / Lite model
   var _lpDone = false;
-  var _lpAttempts = 0;
-  var _lpMax = 20;
 
   function _isLPSelected() {
-    var btns = document.querySelectorAll('button[aria-haspopup="menu"],button[aria-haspopup="listbox"],[role="combobox"]');
+    var btns = document.querySelectorAll('button[aria-haspopup="menu"],button[aria-haspopup="listbox"],[role="combobox"],button');
     for (var i = 0; i < btns.length; i++) {
       var txt = (btns[i].textContent || '').trim();
       if (txt.length < 3 || txt.length > 150) continue;
-      if (!MODEL_RE.test(txt)) continue;
+      if (!/veo/i.test(txt)) continue;
       var r = btns[i].getBoundingClientRect();
       if (r.width < 10) continue;
-      // This is the model trigger — LP is always OK; Heavy plan may also keep Omni Flash
-      return LP_RE.test(txt) || (_isHeavy() && OMNI_RE.test(txt));
+      // If Veo model button is present, check if it's Lite / Lower Priority
+      return LP_RE.test(txt) && !/quality|fast/i.test(txt);
     }
-    return false; // no model UI found yet
+    return true; // no Veo model UI visible (e.g. image mode)
   }
 
   function _findModelTrigger() {
-    var btns = document.querySelectorAll('button[aria-haspopup="menu"],button[aria-haspopup="listbox"],[role="combobox"]');
+    var btns = document.querySelectorAll('button[aria-haspopup="menu"],button[aria-haspopup="listbox"],[role="combobox"],button');
     for (var i = 0; i < btns.length; i++) {
       var txt = (btns[i].textContent || '').trim();
       if (txt.length < 3 || txt.length > 150) continue;
-      if (!MODEL_RE.test(txt) && !/veo.*lite|lower.*priority/i.test(txt)) continue;
+      if (!/veo/i.test(txt)) continue;
+      if (LP_RE.test(txt) && !/quality|fast/i.test(txt)) continue; // already LP
       var r = btns[i].getBoundingClientRect();
       if (r.width < 10) continue;
       return btns[i];
@@ -141,74 +129,67 @@
   }
 
   function _findLPOption() {
-    var opts = document.querySelectorAll('[role="option"],[role="menuitem"],li,[tabindex="0"],[tabindex="-1"]');
+    var opts = document.querySelectorAll('[role="option"],[role="menuitem"],li,[tabindex="0"],[tabindex="-1"],div,span');
     for (var i = 0; i < opts.length; i++) {
       var txt = (opts[i].textContent || '').trim();
+      if (txt.length < 3 || txt.length > 100) continue;
       if (!LP_RE.test(txt)) continue;
+      if (/quality|fast/i.test(txt)) continue;
       var r = opts[i].getBoundingClientRect();
-      if (r.width < 2 && r.height < 2) continue;
-      return opts[i];
+      if (r.width < 5 || r.height < 5) continue;
+      var target = opts[i].closest('[role="option"],[role="menuitem"],li,button') || opts[i];
+      return target;
     }
     return null;
   }
 
   function _clickLP(opt) {
     try {
-      opt.dispatchEvent(new MouseEvent('mousedown', { bubbles:true, cancelable:true }));
-      opt.dispatchEvent(new MouseEvent('mouseup',   { bubbles:true, cancelable:true }));
-      opt.dispatchEvent(new MouseEvent('click',     { bubbles:true, cancelable:true }));
-      opt.click();
+      ['mouseover', 'pointerdown', 'mousedown', 'pointerup', 'mouseup', 'click'].forEach(function(ev) {
+        opt.dispatchEvent(new MouseEvent(ev, { bubbles: true, cancelable: true, view: window }));
+      });
+      if (typeof opt.click === 'function') opt.click();
     } catch(_) {}
   }
 
   function _tryAutoLP() {
-    if (_lpDone || _lpAttempts >= _lpMax) return;
-    _lpAttempts++;
-
-    if (_isLPSelected()) { _lpDone = true; return; }
+    if (_isLPSelected()) return;
 
     // Try to click LP option if dropdown is already open
     var lpOpt = _findLPOption();
     if (lpOpt) {
       _clickLP(lpOpt);
       setTimeout(function() {
-        if (_isLPSelected()) _lpDone = true;
-      }, 400);
+        if (!_isLPSelected()) {
+          try { document.body.click(); } catch(_) {}
+        }
+      }, 300);
       return;
     }
 
-    // Dropdown not open — open the trigger
+    // Dropdown not open → open the trigger
     var trigger = _findModelTrigger();
     if (trigger) {
       try { trigger.click(); } catch(_) {}
-      // After trigger click, dropdown should open — click LP
       setTimeout(function() {
         var opt2 = _findLPOption();
         if (opt2) {
           _clickLP(opt2);
-          setTimeout(function() {
-            if (_isLPSelected()) { _lpDone = true; }
-            else {
-              // Close dropdown if LP click failed, retry next cycle
-              try { document.body.click(); } catch(_) {}
-            }
-          }, 400);
         } else {
-          // Dropdown didn't open or LP not found — close and retry
           try { document.body.click(); } catch(_) {}
         }
       }, 250);
     }
-    // If no trigger found yet, next interval will retry
   }
 
-  // Start auto-LP loop: try every 800ms until done or max attempts reached
+  // Start continuous auto-LP loop: whenever not LP, forcefully switch back
   function _startAutoLP() {
     _tryAutoLP();
-    var iv = setInterval(function() {
-      if (_lpDone || _lpAttempts >= _lpMax) { clearInterval(iv); return; }
-      _tryAutoLP();
-    }, 800);
+    setInterval(function() {
+      if (!_isLPSelected()) {
+        _tryAutoLP();
+      }
+    }, 500);
   }
 
   if (document.body) _startAutoLP();
