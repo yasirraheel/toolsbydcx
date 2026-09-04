@@ -3,7 +3,6 @@ import '../Admin/admin.css';
 import UserDashboard from './UserDashboard';
 import UserResources from './UserResources';
 import UserSessions from './UserSessions';
-import UserSettings from './UserSettings';
 
 function UserLayout({ currentUser, onExitUserPanel, onSwitchPortal, onLogout }) {
   const getInitialTab = () => {
@@ -13,7 +12,6 @@ function UserLayout({ currentUser, onExitUserPanel, onSwitchPortal, onLogout }) 
     if (tabParam) return tabParam;
     if (path.includes('/user/resources') || path.includes('/tools')) return 'resources';
     if (path.includes('/user/sessions') || path.includes('/devices')) return 'sessions';
-    if (path.includes('/user/settings') || path.includes('/profile')) return 'settings';
     return 'dashboard';
   };
 
@@ -68,7 +66,6 @@ function UserLayout({ currentUser, onExitUserPanel, onSwitchPortal, onLogout }) 
       case 'dashboard': return '⚡ User Dashboard';
       case 'resources': return '🚀 Shared Tools & Accounts';
       case 'sessions': return '💻 Connected Devices';
-      case 'settings': return '👤 My Account Profile';
       default: return 'User Portal';
     }
   };
@@ -117,7 +114,7 @@ function UserLayout({ currentUser, onExitUserPanel, onSwitchPortal, onLogout }) 
             <span>Shared Tools</span>
           </button>
 
-          <div className="admin-nav-section-title">Account</div>
+          <div className="admin-nav-section-title">Devices</div>
           <button
             type="button"
             className={`admin-nav-item ${activeTab === 'sessions' ? 'active' : ''}`}
@@ -125,15 +122,6 @@ function UserLayout({ currentUser, onExitUserPanel, onSwitchPortal, onLogout }) 
           >
             <span className="admin-nav-icon">💻</span>
             <span>Connected Devices</span>
-          </button>
-
-          <button
-            type="button"
-            className={`admin-nav-item ${activeTab === 'settings' ? 'active' : ''}`}
-            onClick={() => switchTab('settings')}
-          >
-            <span className="admin-nav-icon">👤</span>
-            <span>My Profile</span>
           </button>
         </nav>
 
@@ -260,15 +248,6 @@ function UserLayout({ currentUser, onExitUserPanel, onSwitchPortal, onLogout }) 
           {activeTab === 'resources' && <UserResources />}
 
           {activeTab === 'sessions' && <UserSessions />}
-
-          {activeTab === 'settings' && (
-            <UserSettings
-              currentUser={currentUser}
-              onProfileUpdated={() => {
-                fetchDashboard();
-              }}
-            />
-          )}
         </div>
       </main>
     </div>

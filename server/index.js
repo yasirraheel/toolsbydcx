@@ -1383,6 +1383,10 @@ app.put('/api/user/profile', async (req, res) => {
       return res.status(401).json({ error: 'Authentication required. Please log in.' });
     }
 
+    if (user.role !== 'admin') {
+      return res.status(403).json({ error: 'Profile modification is disabled for user accounts. Please contact an administrator.' });
+    }
+
     const { name, currentPassword, newPassword } = req.body;
     const pool = getPool();
     const updates = [];
