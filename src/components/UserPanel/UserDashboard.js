@@ -6,9 +6,6 @@ function UserDashboard({ dashboardData, onNavigate, onLaunchResource }) {
   const recentAccounts = dashboardData?.recentAccounts || [];
   const sharedAccountsCount = dashboardData?.sharedAccountsCount || 0;
   const activeSessionsCount = dashboardData?.activeSessionsCount || 1;
-  const userCredits = dashboardData?.user?.credits ?? dashboardData?.credits ?? null;
-  const isUnlimitedCredits = dashboardData?.user?.isUnlimitedCredits || dashboardData?.isUnlimitedCredits || userCredits === -1;
-  const creditsDisplay = isUnlimitedCredits ? 'Unlimited' : (userCredits !== null ? `${userCredits}` : 'Active');
 
   const formatDaysText = (days) => {
     if (days === null || days === undefined) return 'Unlimited';
@@ -47,14 +44,7 @@ function UserDashboard({ dashboardData, onNavigate, onLaunchResource }) {
           <div className="admin-kpi-icon icon-amber">💻</div>
         </div>
 
-        <div className="admin-kpi-card">
-          <div className="admin-kpi-info">
-            <span className="admin-kpi-label">AI Generation Credits</span>
-            <span className="admin-kpi-val" style={{ color: '#c084fc', fontSize: '24px' }}>⚡ {creditsDisplay}</span>
-            <span className="admin-kpi-sub">{isUnlimitedCredits ? 'Unlimited Generations' : 'Available Generation Balance'}</span>
-          </div>
-          <div className="admin-kpi-icon icon-purple">⚡</div>
-        </div>
+
       </div>
 
       {/* QUICK ACTIONS BANNER */}

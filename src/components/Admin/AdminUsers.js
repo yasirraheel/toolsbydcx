@@ -345,7 +345,6 @@ function AdminUsers({ currentUser, isCreateOpen, onCloseCreate }) {
                 <th>User</th>
                 <th>Role</th>
                 <th>Current Plan</th>
-                <th>Credits</th>
                 <th>Status</th>
                 <th>Joined Date</th>
                 <th>Actions</th>
@@ -354,7 +353,7 @@ function AdminUsers({ currentUser, isCreateOpen, onCloseCreate }) {
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan="7" style={{ textAlign: 'center', padding: '40px', color: '#94a3b8' }}>
+                  <td colSpan="6" style={{ textAlign: 'center', padding: '40px', color: '#94a3b8' }}>
                     Loading users database...
                   </td>
                 </tr>
@@ -412,11 +411,6 @@ function AdminUsers({ currentUser, isCreateOpen, onCloseCreate }) {
                           </span>
                         );
                       })()}
-                    </td>
-                    <td>
-                      <span className="badge-pill badge-pro" style={{ fontWeight: 700 }}>
-                        ⚡ {u.credits === -1 ? 'Unlimited' : `${u.credits ?? 100}`}
-                      </span>
                     </td>
                     <td>
                       <button
@@ -536,21 +530,6 @@ function AdminUsers({ currentUser, isCreateOpen, onCloseCreate }) {
                       )}
                     </select>
                   </div>
-                </div>
-
-                <div className="admin-form-group">
-                  <label className="admin-form-label">AI Generation Credits (-1 for Unlimited)</label>
-                  <input
-                    type="number"
-                    className="admin-form-input"
-                    value={editingUser.credits !== undefined && editingUser.credits !== null ? editingUser.credits : 100}
-                    onChange={(e) => setEditingUser({ ...editingUser, credits: parseInt(e.target.value, 10) })}
-                    placeholder="e.g. 200 or -1"
-                    required
-                  />
-                  <span style={{ fontSize: '12px', color: '#94a3b8', marginTop: '4px', display: 'block' }}>
-                    Set remaining credits for this user. Enter <b>-1</b> for unlimited generations.
-                  </span>
                 </div>
 
                 <div className="admin-form-group">
@@ -679,17 +658,6 @@ function AdminUsers({ currentUser, isCreateOpen, onCloseCreate }) {
                         </>
                       )}
                     </select>
-                  </div>
-
-                  <div className="admin-form-group">
-                    <label className="admin-form-label">Initial Credits</label>
-                    <input
-                      type="number"
-                      className="admin-form-input"
-                      value={newUserData.credits !== undefined && newUserData.credits !== null ? newUserData.credits : ''}
-                      onChange={(e) => setNewUserData({ ...newUserData, credits: e.target.value === '' ? '' : parseInt(e.target.value, 10) })}
-                      placeholder="Default from plan"
-                    />
                   </div>
                 </div>
 

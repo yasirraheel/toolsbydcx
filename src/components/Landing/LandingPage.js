@@ -30,8 +30,8 @@ export default function LandingPage({ currentUser, onOpenAuth, onNavigate, onLog
           name: "Tools Basic",
           price: 0,
           billing_cycle: "monthly",
-          description: "Starter plan with essential credits for AI video creation.",
-          features: ["200 AI Video Generation Credits", "Standard Generation Speed", "ToolsByDcx Extension Access", "720p / HD Video Output", "Email Support"]
+          description: "Starter plan for essential AI video creation.",
+          features: ["Standard AI Video Generation", "Standard Generation Speed", "ToolsByDcx Extension Access", "720p / HD Video Output", "Email Support"]
         },
         {
           id: "plan_pro",
@@ -39,15 +39,15 @@ export default function LandingPage({ currentUser, onOpenAuth, onNavigate, onLog
           price: 9.99,
           billing_cycle: "monthly",
           description: "Complete access with high-speed rendering for creators and professionals.",
-          features: ["1,000 AI Video Generation Credits", "Priority High-Speed Rendering", "Full ToolsByDcx Suite Access", "1080p Full HD Video Quality", "Priority Support"]
+          features: ["Full AI Video Generation Access", "Priority High-Speed Rendering", "Full ToolsByDcx Suite Access", "1080p Full HD Video Quality", "Priority Support"]
         },
         {
           id: "plan_unlimited",
           name: "Tools Max",
           price: 29.99,
           billing_cycle: "monthly",
-          description: "All-inclusive VIP plan for unlimited video generation and top priority processing.",
-          features: ["Unlimited AI Generation Credits", "Instant High-Speed Rendering", "VIP Priority Processing Queue", "4K Ultra HD Video Quality", "24/7 Dedicated VIP Support"]
+          description: "All-inclusive VIP plan for video generation and top priority processing.",
+          features: ["Unlimited Video Generations", "Instant High-Speed Rendering", "VIP Priority Processing Queue", "4K Ultra HD Video Quality", "24/7 Dedicated VIP Support"]
         }
       ]);
     } finally {
@@ -426,7 +426,7 @@ export default function LandingPage({ currentUser, onOpenAuth, onNavigate, onLog
             </div>
             <h2 className="landing-ext-title">Power Your Browser with ToolsByDcx</h2>
             <p className="landing-ext-desc">
-              The ToolsByDcx Chrome extension coordinates directly with your web session. Features automatic tool detection, instant 1-click launch, and real-time generation credit sync.
+              The ToolsByDcx Chrome extension coordinates directly with your web session. Features automatic tool detection, instant 1-click launch, and seamless browser integration.
             </p>
             <div style={{ display: "flex", gap: "12px", flexWrap: "wrap" }}>
               <button

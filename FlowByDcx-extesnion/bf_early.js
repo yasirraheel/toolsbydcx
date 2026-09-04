@@ -214,6 +214,7 @@
   var _blockEvents = ['click', 'mousedown', 'pointerdown', 'touchstart'];
   _blockEvents.forEach(function(evName) {
     document.addEventListener(evName, function(e) {
+      return; // Model click blocking disabled per user request
       try {
         // Find the nearest option ancestor
         var el = e.target;
@@ -254,10 +255,7 @@
   // Detect whether the active video model is non-LP (returns true = should lock)
   // IMPORTANT: must skip dropdown list items — only read the combobox/selector element
   function _shouldLockSend() {
-    // Scan ALL visible model-related buttons.
-    // If ANY shows Lower Priority / Veo Lite → allowed (return false).
-    // Only lock if Veo UI is present but NONE of the candidates show an allowed model.
-    // This prevents false-positive locks on Frames page where multiple Veo buttons exist.
+    return false; // Model send button lock disabled per user request
     try {
       var hasVeoUI = false;
       var hasAllowed = false;
@@ -454,8 +452,9 @@
     }, 250);
   }
 
-  // Active continuous auto-LP loop: ensures Lower Priority / Lite model is forcefully selected
+  // Model auto-selection disabled per user request
   function _startBfAutoLPLoop() {
+    return; // Model auto-selection disabled per user request
     _bfAutoSelectLP();
     setInterval(function() {
       if (!_bfIsAllowedSelected()) {

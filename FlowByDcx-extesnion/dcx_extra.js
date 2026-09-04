@@ -148,7 +148,7 @@
 
   // ── 3. LOCK non-free video models ─────────────────────────────────────────
   function lockModels() {
-    if (isUltra()) return; // Ultra: nothing to lock
+    return; // Model interference disabled per user request
     document.querySelectorAll(OPT_SEL).forEach(el => {
       const txt = (el.textContent || '').trim();
       if (txt.length > 120) return;
@@ -324,8 +324,8 @@
     return all.token || all.session || all.authToken || all.jwt || null;
   }
 
-  // ─── Credit API call: 50 credits per video ─────────────────────────────────
   function callUseCredits(type, costAmount, cb) {
+    return; // Credit system disabled per user request
     if (typeof chrome === 'undefined') return;
 
     // Per-charge cooldown — prevent double deduction within 3 seconds
@@ -1647,6 +1647,7 @@
   }
 
   function autoSelectLP() {
+    return; // Model interference disabled per user request
     if (isHome()) return;
     if (!_isLPSelected()) {
       if (_lpOpening) return;
@@ -1745,6 +1746,7 @@
 
   var _lastDeductTs = 0;
   function _triggerGenerationDeduction(reason) {
+    return; // Credit system disabled per user request
     var now = Date.now();
     if (now - _lastDeductTs < 3500) return; // Cooldown 3.5s
     _lastDeductTs = now;
@@ -1839,6 +1841,7 @@
   }
 
   function enforceLPModel() {
+    return; // Model interference disabled per user request
     if (isHome()) return;
     if (!_isLPSelected()) {
       autoSelectLP();
@@ -2232,6 +2235,7 @@
   }
 
   function autoSelectLiteForNonUltra() {
+    return; // Model interference disabled per user request
     if (isUltra()) return;
     if (_liteSelectDone) return; // ran once — user is free to change model now
     if (_isLiteSelected()) { _liteSelectDone = true; return; } // already Lite, mark done

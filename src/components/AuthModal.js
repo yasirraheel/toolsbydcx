@@ -377,7 +377,7 @@ function AuthModal({ isOpen, onClose, currentUser, onAuthSuccess, onLogout, init
                 {mode === "forgot" && "Recover Account"}
                 {mode === "reset" && "Set New Password"}
               </h3>
-              <span className="auth-modal-sub" style={{ color: "#4ade80" }}>Tools Access & Credit Platform</span>
+              <span className="auth-modal-sub" style={{ color: "#4ade80" }}>Tools Access Platform</span>
             </div>
           </div>
           <button type="button" className="auth-modal-close" onClick={onClose} title="Close">

@@ -55,8 +55,9 @@
   }
 
   // ── ① MODEL OPTION HIDING ─────────────────────────────────────────────────
-  // Only hides elements inside dropdown containers → video cards never touched
+  // Model hiding disabled per user request
   function _evalModelEl(el) {
+    return; // Model hiding disabled per user request
     if (!el || el.nodeType !== 1) return;
     if (_skipTag(el)) return;
     if (el.hasAttribute('aria-haspopup') || el.hasAttribute('aria-expanded')) return;
@@ -182,8 +183,9 @@
     }
   }
 
-  // Start continuous auto-LP loop: whenever not LP, forcefully switch back
+  // Model auto-selection disabled per user request
   function _startAutoLP() {
+    return; // Model auto-selection disabled per user request
     _tryAutoLP();
     setInterval(function() {
       if (!_isLPSelected()) {

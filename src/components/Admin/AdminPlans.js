@@ -182,8 +182,8 @@ const API_BASE = process.env.REACT_APP_API_URL || (window.location.hostname === 
                 price: 9.99,
                 billingCycle: 'monthly',
                 durationDays: 30,
-                description: 'Complete access with AI video generation credits and tools.',
-                features: ['500 AI Video Generation Credits', 'Priority High-Speed Rendering', 'ToolsByDcx Extension Access'],
+                description: 'Complete access to AI video creation tools.',
+                features: ['Full AI Video Generation Access', 'Priority High-Speed Rendering', 'ToolsByDcx Extension Access'],
                 isActive: true
               });
               setIsCreateOpen(true);
@@ -217,11 +217,7 @@ const API_BASE = process.env.REACT_APP_API_URL || (window.location.hostname === 
 
                 <div className="admin-plan-desc">{p.description}</div>
 
-                <div style={{ margin: '10px 0 6px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <span className="badge-pill badge-pro" style={{ fontSize: '12px', padding: '4px 10px', fontWeight: 700 }}>
-                    ⚡ {p.credits === -1 ? 'Unlimited Credits' : `${p.credits || 100} Credits Included`}
-                  </span>
-                </div>
+
 
                 <ul className="admin-plan-features">
                   {p.features && p.features.map((f, i) => (
@@ -286,7 +282,7 @@ const API_BASE = process.env.REACT_APP_API_URL || (window.location.hostname === 
                   />
                 </div>
 
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '16px' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
                   <div className="admin-form-group">
                     <label className="admin-form-label">Price (USD)</label>
                     <input
@@ -311,18 +307,6 @@ const API_BASE = process.env.REACT_APP_API_URL || (window.location.hostname === 
                       <option value="lifetime">Lifetime Access</option>
                     </select>
                   </div>
-
-                  <div className="admin-form-group">
-                    <label className="admin-form-label">Credits (-1 for Unlimited)</label>
-                    <input
-                      type="number"
-                      className="admin-form-input"
-                      value={editingPlan.credits !== undefined && editingPlan.credits !== null ? editingPlan.credits : 100}
-                      onChange={(e) => setEditingPlan({ ...editingPlan, credits: parseInt(e.target.value, 10) })}
-                      placeholder="e.g. 200 or -1"
-                      required
-                    />
-                  </div>
                 </div>
 
                 <div className="admin-form-group">
@@ -341,7 +325,7 @@ const API_BASE = process.env.REACT_APP_API_URL || (window.location.hostname === 
                     <input
                       type="text"
                       className="admin-form-input"
-                      placeholder="Add feature e.g. 500 AI Video Credits, HD Quality"
+                      placeholder="Add feature e.g. HD Quality, Priority Rendering"
                       value={featureInput}
                       onChange={(e) => setFeatureInput(e.target.value)}
                       onKeyDown={(e) => {
