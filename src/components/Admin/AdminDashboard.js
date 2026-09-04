@@ -74,7 +74,6 @@ function AdminDashboard({ stats, recentUsers, onNavigate, onOpenCreateUser }) {
               type="button"
               className="btn-admin-primary"
               onClick={() => onNavigate('accounts')}
-              style={{ background: '#6366f1' }}
             >
               🔑 Manage Accounts
             </button>
@@ -91,13 +90,6 @@ function AdminDashboard({ stats, recentUsers, onNavigate, onOpenCreateUser }) {
               onClick={() => onNavigate('plans')}
             >
               💳 Plans
-            </button>
-            <button
-              type="button"
-              className="btn-admin-secondary"
-              onClick={() => onNavigate('settings')}
-            >
-              ✉️ SMTP
             </button>
           </div>
         </div>
@@ -122,40 +114,62 @@ function AdminDashboard({ stats, recentUsers, onNavigate, onOpenCreateUser }) {
           </div>
 
           <div className="admin-table-container">
-            <table className="admin-table">
+            <table className="admin-table admin-table-compact" style={{ width: '100%', tableLayout: 'auto' }}>
               <thead>
                 <tr>
                   <th>User</th>
-                  <th>Role</th>
-                  <th>Plan</th>
-                  <th>Status</th>
+                  <th style={{ textAlign: 'center' }}>Role</th>
+                  <th style={{ textAlign: 'center' }}>Plan</th>
+                  <th style={{ textAlign: 'center' }}>Status</th>
                 </tr>
               </thead>
               <tbody>
                 {recentUsers && recentUsers.length > 0 ? (
-                  recentUsers.map((u, idx) => (
-                    <tr key={u.id || idx}>
-                      <td>
-                        <div style={{ fontWeight: 600, color: '#f8fafc', fontSize: '15px' }}>{u.name}</div>
-                        <div style={{ fontSize: '13px', color: '#64748b' }}>{u.email}</div>
-                      </td>
-                      <td>
-                        <span className={`badge-pill ${u.role === 'admin' ? 'badge-admin' : 'badge-user'}`}>
-                          {u.role || 'user'}
-                        </span>
-                      </td>
-                      <td>
-                        <span className="badge-pill badge-pro">
-                          {u.plan ? u.plan.toUpperCase() : 'FREE'}
-                        </span>
-                      </td>
-                      <td>
-                        <span className={`badge-pill ${u.is_verified ? 'badge-verified' : 'badge-unverified'}`}>
-                          {u.is_verified ? 'Verified' : 'Pending'}
-                        </span>
-                      </td>
-                    </tr>
-                  ))
+                  recentUsers.map((u, idx) => {
+                    const cleanPlan = (u.plan || 'Free')
+                      .replace(/^plan_/i, '')
+                      .replace(/_/g, ' ')
+                      .toUpperCase();
+                    const isUltra = cleanPlan.includes('PRO') || cleanPlan.includes('ULTRA');
+                    const isMax = cleanPlan.includes('UNLIMITED') || cleanPlan.includes('MAX');
+
+                    return (
+                      <tr key={u.id || idx}>
+                        <td style={{ minWidth: 0, maxWidth: '180px' }}>
+                          <div style={{ fontWeight: 600, color: '#f8fafc', fontSize: '14px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={u.name}>
+                            {u.name}
+                          </div>
+                          <div style={{ fontSize: '12px', color: '#64748b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={u.email}>
+                            {u.email}
+                          </div>
+                        </td>
+                        <td style={{ textAlign: 'center' }}>
+                          <span className={`badge-pill ${u.role === 'admin' ? 'badge-admin' : 'badge-user'}`} style={{ padding: '3px 8px', fontSize: '11px' }}>
+                            {u.role || 'user'}
+                          </span>
+                        </td>
+                        <td style={{ textAlign: 'center' }}>
+                          <span
+                            className="badge-pill badge-pro"
+                            style={{
+                              padding: '3px 8px',
+                              fontSize: '11px',
+                              background: isMax ? '#4c1d95' : isUltra ? '#065f46' : 'rgba(56, 189, 248, 0.12)',
+                              color: isMax ? '#c4b5fd' : isUltra ? '#6ee7b7' : '#38bdf8',
+                              border: 'none'
+                            }}
+                          >
+                            {isMax ? 'MAX' : isUltra ? 'ULTRA' : cleanPlan}
+                          </span>
+                        </td>
+                        <td style={{ textAlign: 'center' }}>
+                          <span className={`badge-pill ${u.is_verified ? 'badge-verified' : 'badge-unverified'}`} style={{ padding: '3px 8px', fontSize: '11px' }}>
+                            {u.is_verified ? 'Verified' : 'Pending'}
+                          </span>
+                        </td>
+                      </tr>
+                    );
+                  })
                 ) : (
                   <tr>
                     <td colSpan="4" style={{ textAlign: 'center', color: '#64748b', padding: '30px' }}>

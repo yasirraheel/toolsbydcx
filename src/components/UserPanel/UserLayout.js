@@ -3,6 +3,7 @@ import '../Admin/admin.css';
 import UserDashboard from './UserDashboard';
 import UserResources from './UserResources';
 import UserSessions from './UserSessions';
+import UserProjects from './UserProjects';
 
 function UserLayout({ currentUser, onExitUserPanel, onSwitchPortal, onLogout }) {
   const getInitialTab = () => {
@@ -10,6 +11,7 @@ function UserLayout({ currentUser, onExitUserPanel, onSwitchPortal, onLogout }) 
     const search = new URLSearchParams(window.location.search);
     const tabParam = search.get('tab');
     if (tabParam) return tabParam;
+    if (path.includes('/user/projects') || path.includes('/projects')) return 'projects';
     if (path.includes('/user/resources') || path.includes('/tools')) return 'resources';
     if (path.includes('/user/sessions') || path.includes('/devices')) return 'sessions';
     return 'dashboard';
@@ -64,6 +66,7 @@ function UserLayout({ currentUser, onExitUserPanel, onSwitchPortal, onLogout }) 
   const getPageTitle = () => {
     switch (activeTab) {
       case 'dashboard': return '⚡ User Dashboard';
+      case 'projects': return '🎬 My Saved Projects';
       case 'resources': return '🚀 Shared Tools & Accounts';
       case 'sessions': return '💻 Connected Devices';
       default: return 'User Portal';
@@ -76,10 +79,20 @@ function UserLayout({ currentUser, onExitUserPanel, onSwitchPortal, onLogout }) 
       <aside className={`admin-sidebar ${mobileOpen ? 'open' : ''}`}>
         <div className="admin-sidebar-header">
           <div className="admin-brand-block">
-            <div className="admin-brand-icon">⚡</div>
+            <div className="admin-brand-icon">
+              <img
+                src="/logo.png"
+                alt="Logo"
+                onError={(e) => {
+                  e.currentTarget.style.display = 'none';
+                  if (e.currentTarget.nextElementSibling) e.currentTarget.nextElementSibling.style.display = 'block';
+                }}
+              />
+              <span style={{ display: 'none', fontSize: '18px', color: '#22c55e' }}>⚡</span>
+            </div>
             <div>
-              <div className="admin-brand-title">ToolsByDcx</div>
-              <div className="admin-brand-subtitle">User Portal</div>
+              <div className="admin-brand-title">ToolsBy<span>Dcx</span></div>
+              <div className="admin-brand-subtitle">User Panel</div>
             </div>
           </div>
           {mobileOpen && (
@@ -102,6 +115,21 @@ function UserLayout({ currentUser, onExitUserPanel, onSwitchPortal, onLogout }) 
           >
             <span className="admin-nav-icon">📊</span>
             <span>Dashboard</span>
+          </button>
+
+          <div className="admin-nav-section-title">Projects</div>
+          <button
+            type="button"
+            className={`admin-nav-item ${activeTab === 'projects' ? 'active' : ''}`}
+            onClick={() => switchTab('projects')}
+          >
+            <span className="admin-nav-icon">🎬</span>
+            <span>My Projects</span>
+            {dashboardData?.projectsCount > 0 && (
+              <span style={{ marginLeft: 'auto', background: 'rgba(56, 189, 248, 0.15)', color: '#38bdf8', padding: '2px 8px', borderRadius: '10px', fontSize: '11px', fontWeight: 700 }}>
+                {dashboardData.projectsCount}
+              </span>
+            )}
           </button>
 
           <div className="admin-nav-section-title">Resources</div>
@@ -244,6 +272,8 @@ function UserLayout({ currentUser, onExitUserPanel, onSwitchPortal, onLogout }) 
               }}
             />
           )}
+
+          {activeTab === 'projects' && <UserProjects />}
 
           {activeTab === 'resources' && <UserResources />}
 

@@ -2,6 +2,9 @@
   RewriteEngine On
   RewriteBase /
 
+  # Ensure Authorization header reaches PHP
+  RewriteRule .* - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization}]
+
   # API requests route to PHP API router
   RewriteCond %{REQUEST_URI} ^/api/(.*)$
   RewriteRule ^api/(.*)$ api.php [QSA,L]

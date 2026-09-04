@@ -28,6 +28,9 @@ function ResellerUsers({ currentUser, isCreateOpen, onCloseCreate }) {
   });
 
   const API_BASE = process.env.REACT_APP_API_URL || (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' ? 'http://localhost:5000/api' : '/api');
+  const currentDomain = (typeof window !== 'undefined' && window.location.hostname && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1')
+    ? window.location.hostname.replace(/^www\./, '')
+    : 'flowbydcx.com';
 
   const getAuthHeaders = () => {
     const token = localStorage.getItem('ccna_auth_token');
@@ -55,6 +58,8 @@ function ResellerUsers({ currentUser, isCreateOpen, onCloseCreate }) {
     }
   };
 
+  const [quota, setQuota] = useState(null);
+
   const fetchUsers = async () => {
     try {
       setLoading(true);
@@ -69,6 +74,9 @@ function ResellerUsers({ currentUser, isCreateOpen, onCloseCreate }) {
       const data = await res.json();
       if (data.users) {
         setUsers(data.users);
+      }
+      if (data.quota) {
+        setQuota(data.quota);
       }
     } catch (e) {
       console.error('Error fetching reseller users:', e);
@@ -93,10 +101,36 @@ function ResellerUsers({ currentUser, isCreateOpen, onCloseCreate }) {
   const handleCreateCustomer = async (e) => {
     e.preventDefault();
     try {
+      let finalEmail = (newUserData.email || '').trim().toLowerCase();
+      if (!finalEmail && newUserData.emailPrefix) {
+        finalEmail = newUserData.emailPrefix.trim().toLowerCase();
+      }
+      if (finalEmail) {
+        if (finalEmail.includes('@')) {
+          finalEmail = finalEmail.split('@')[0] + '@' + currentDomain;
+        } else {
+          finalEmail = finalEmail + '@' + currentDomain;
+        }
+      }
+
+      if (!finalEmail) {
+        await showCustomAlert({
+          title: 'Email Required',
+          message: 'Please provide an email prefix.',
+          type: 'warning'
+        });
+        return;
+      }
+
+      const payload = {
+        ...newUserData,
+        email: finalEmail
+      };
+
       const res = await fetch(`${API_BASE}/reseller/users`, {
         method: 'POST',
         headers: getAuthHeaders(),
-        body: JSON.stringify(newUserData)
+        body: JSON.stringify(payload)
       });
       const data = await res.json();
       if (res.ok) {
@@ -104,6 +138,7 @@ function ResellerUsers({ currentUser, isCreateOpen, onCloseCreate }) {
         onCloseCreate();
         setNewUserData({
           name: '',
+          emailPrefix: '',
           email: '',
           password: 'Password123!',
           plan: availablePlans[0]?.id || 'pro',
@@ -113,7 +148,7 @@ function ResellerUsers({ currentUser, isCreateOpen, onCloseCreate }) {
       } else {
         await showCustomAlert({
           title: 'Error Creating Customer',
-          message: data.message || 'Could not create customer account.',
+          message: data.error || data.message || 'Could not create customer account.',
           type: 'danger'
         });
       }
@@ -263,6 +298,50 @@ function ResellerUsers({ currentUser, isCreateOpen, onCloseCreate }) {
     }
   };
 
+  const handleToggleBan = async (user) => {
+    const isBanning = !user.is_banned;
+    const confirmed = await confirm({
+      title: isBanning ? `Ban Customer "${user.name}"?` : `Unban Customer "${user.name}"?`,
+      message: isBanning
+        ? `Are you sure you want to ban customer "${user.name}" (${user.email})? The customer will be immediately blocked from logging in, their extension access will be revoked, and all active sessions will be terminated.`
+        : `Restore access for customer "${user.name}" (${user.email})? They will be permitted to log in and use the services again.`,
+      note: isBanning ? 'You can unban this customer at any time.' : '',
+      confirmText: isBanning ? 'Ban Customer' : 'Unban Customer',
+      cancelText: 'Cancel',
+      type: isBanning ? 'danger' : 'info'
+    });
+
+    if (!confirmed) return;
+
+    try {
+      const res = await fetch(`${API_BASE}/reseller/users/${user.id}/ban`, {
+        method: 'POST',
+        headers: getAuthHeaders(),
+        body: JSON.stringify({ banned: isBanning })
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setActionFeedback({
+          type: 'success',
+          message: data.message || `Customer ${user.name} ban status updated.`
+        });
+        fetchUsers();
+      } else {
+        await showCustomAlert({
+          title: 'Action Failed',
+          message: data.error || 'Failed to update customer ban status.',
+          type: 'danger'
+        });
+      }
+    } catch (e) {
+      await showCustomAlert({
+        title: 'Error',
+        message: 'Could not communicate with server.',
+        type: 'danger'
+      });
+    }
+  };
+
   const formatExpiryBadge = (expiresAt) => {
     if (!expiresAt) return <span className="badge-pill badge-unlimited">Lifetime</span>;
     const exp = new Date(expiresAt);
@@ -308,8 +387,20 @@ function ResellerUsers({ currentUser, isCreateOpen, onCloseCreate }) {
       {/* FILTER & SEARCH TOOLBAR */}
       <div className="admin-card">
         <div className="admin-card-header">
-          <h3 className="admin-card-title">
-            <span>👥</span> Customer Users ({users.length})
+          <h3 className="admin-card-title" style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+            <span>👥 Customers ({users.length})</span>
+            {quota && quota.max !== undefined && (
+              <span className="badge-pill" style={{
+                fontSize: '12px',
+                padding: '4px 10px',
+                textTransform: 'none',
+                background: quota.remaining <= 0 ? 'rgba(239, 68, 68, 0.15)' : 'rgba(56, 189, 248, 0.15)',
+                color: quota.remaining <= 0 ? '#f87171' : '#38bdf8',
+                border: `1px solid ${quota.remaining <= 0 ? 'rgba(239, 68, 68, 0.35)' : 'rgba(56, 189, 248, 0.35)'}`
+              }}>
+                Quota: {quota.total} / {quota.max} Used {quota.remaining <= 0 ? '(Limit Reached)' : `(${quota.remaining} Left)`}
+              </span>
+            )}
           </h3>
 
           <div className="admin-card-actions">
@@ -327,8 +418,9 @@ function ResellerUsers({ currentUser, isCreateOpen, onCloseCreate }) {
               onChange={(e) => setStatusFilter(e.target.value)}
             >
               <option value="">All Statuses</option>
-              <option value="active">Active</option>
-              <option value="inactive">Inactive</option>
+              <option value="active">Active Only</option>
+              <option value="banned">Banned Only</option>
+              <option value="inactive">Inactive / Suspended</option>
               <option value="expired">Expired</option>
             </select>
 
@@ -346,7 +438,17 @@ function ResellerUsers({ currentUser, isCreateOpen, onCloseCreate }) {
             <button
               type="button"
               className="btn-admin-primary"
-              onClick={() => onCloseCreate(true)}
+              onClick={() => {
+                if (quota && quota.remaining <= 0) {
+                  showCustomAlert({
+                    title: 'Customer Quota Limit Reached',
+                    message: `You have reached your limit of ${quota.max} customers. Please contact the administrator to increase your customer allocation.`,
+                    type: 'warning'
+                  });
+                  return;
+                }
+                onCloseCreate(true);
+              }}
             >
               + Add Customer
             </button>
@@ -360,8 +462,8 @@ function ResellerUsers({ currentUser, isCreateOpen, onCloseCreate }) {
               <tr>
                 <th>Customer</th>
                 <th>Assigned Plan</th>
-                <th>Status</th>
-                <th>Expiration / Days</th>
+                <th style={{ minWidth: '110px' }}>Status</th>
+                <th style={{ minWidth: '130px' }}>Expiration / Days</th>
                 <th>Created</th>
                 <th style={{ textAlign: 'right' }}>Actions</th>
               </tr>
@@ -400,16 +502,27 @@ function ResellerUsers({ currentUser, isCreateOpen, onCloseCreate }) {
                       </span>
                     </td>
                     <td>
-                      <button
-                        type="button"
-                        onClick={() => handleToggleStatus(user)}
-                        title="Click to toggle status"
-                        style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
-                      >
-                        <span className={`badge-pill ${user.is_verified === 0 || user.status === 'inactive' ? 'badge-pending' : 'badge-green'}`}>
+                      {user.is_banned ? (
+                        <button
+                          type="button"
+                          onClick={() => handleToggleBan(user)}
+                          title="Customer is Banned. Click to unban."
+                          className="badge-pill badge-failed"
+                          style={{ cursor: 'pointer', border: '1px solid currentColor' }}
+                        >
+                          🚫 Banned
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => handleToggleStatus(user)}
+                          title="Click to toggle active status"
+                          className={`badge-pill ${user.is_verified === 0 || user.status === 'inactive' ? 'badge-pending' : 'badge-green'}`}
+                          style={{ cursor: 'pointer', border: '1px solid currentColor' }}
+                        >
                           {user.is_verified === 0 || user.status === 'inactive' ? 'Inactive' : 'Active'}
-                        </span>
-                      </button>
+                        </button>
+                      )}
                     </td>
                     <td>
                       {formatExpiryBadge(user.expires_at)}
@@ -420,7 +533,7 @@ function ResellerUsers({ currentUser, isCreateOpen, onCloseCreate }) {
                       </span>
                     </td>
                     <td style={{ textAlign: 'right' }}>
-                      <div className="table-actions" style={{ justifyContent: 'flex-end', gap: '6px' }}>
+                      <div className="table-actions" style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'flex-end', gap: '10px' }}>
                         <button
                           type="button"
                           className="btn-action"
@@ -444,6 +557,27 @@ function ResellerUsers({ currentUser, isCreateOpen, onCloseCreate }) {
                         >
                           💳 Plan
                         </button>
+                        {user.is_banned ? (
+                          <button
+                            type="button"
+                            className="btn-action"
+                            style={{ color: '#4ade80', borderColor: 'rgba(74, 222, 128, 0.35)', background: 'rgba(74, 222, 128, 0.1)' }}
+                            title="Unban Customer"
+                            onClick={() => handleToggleBan(user)}
+                          >
+                            ✅ Unban
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            className="btn-action"
+                            style={{ color: '#f87171', borderColor: 'rgba(239, 68, 68, 0.35)', background: 'rgba(239, 68, 68, 0.1)' }}
+                            title="Ban Customer"
+                            onClick={() => handleToggleBan(user)}
+                          >
+                            🚫 Ban
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>
@@ -474,6 +608,7 @@ function ResellerUsers({ currentUser, isCreateOpen, onCloseCreate }) {
                   <button
                     type="button"
                     className="btn-admin-secondary"
+                    style={{ padding: '10px 4px', fontSize: '13px', whiteSpace: 'nowrap', justifyContent: 'center' }}
                     onClick={() => handleQuickAdjustExpiry(expiryModalUser, 7)}
                   >
                     +7 Days
@@ -481,6 +616,7 @@ function ResellerUsers({ currentUser, isCreateOpen, onCloseCreate }) {
                   <button
                     type="button"
                     className="btn-admin-primary"
+                    style={{ padding: '10px 4px', fontSize: '13px', whiteSpace: 'nowrap', justifyContent: 'center' }}
                     onClick={() => handleQuickAdjustExpiry(expiryModalUser, 30)}
                   >
                     +30 Days
@@ -488,6 +624,7 @@ function ResellerUsers({ currentUser, isCreateOpen, onCloseCreate }) {
                   <button
                     type="button"
                     className="btn-admin-secondary"
+                    style={{ padding: '10px 4px', fontSize: '13px', whiteSpace: 'nowrap', justifyContent: 'center' }}
                     onClick={() => handleQuickAdjustExpiry(expiryModalUser, 90)}
                   >
                     +90 Days
@@ -495,6 +632,7 @@ function ResellerUsers({ currentUser, isCreateOpen, onCloseCreate }) {
                   <button
                     type="button"
                     className="btn-admin-danger"
+                    style={{ padding: '10px 4px', fontSize: '13px', whiteSpace: 'nowrap', justifyContent: 'center' }}
                     onClick={() => handleQuickAdjustExpiry(expiryModalUser, -30)}
                   >
                     -30 Days
@@ -509,7 +647,7 @@ function ResellerUsers({ currentUser, isCreateOpen, onCloseCreate }) {
                   <input
                     type="number"
                     className="admin-form-input"
-                    style={{ width: '120px' }}
+                    style={{ width: '110px' }}
                     value={customDays}
                     onChange={(e) => setCustomDays(Number(e.target.value))}
                     placeholder="Days"
@@ -517,6 +655,7 @@ function ResellerUsers({ currentUser, isCreateOpen, onCloseCreate }) {
                   <button
                     type="button"
                     className="btn-admin-secondary"
+                    style={{ whiteSpace: 'nowrap', justifyContent: 'center' }}
                     onClick={() => handleQuickAdjustExpiry(expiryModalUser, customDays)}
                   >
                     Add {customDays}d
@@ -524,6 +663,7 @@ function ResellerUsers({ currentUser, isCreateOpen, onCloseCreate }) {
                   <button
                     type="button"
                     className="btn-admin-danger"
+                    style={{ whiteSpace: 'nowrap', justifyContent: 'center' }}
                     onClick={() => handleQuickAdjustExpiry(expiryModalUser, -Math.abs(customDays))}
                   >
                     Subtract {customDays}d
@@ -544,6 +684,7 @@ function ResellerUsers({ currentUser, isCreateOpen, onCloseCreate }) {
                   <button
                     type="button"
                     className="btn-admin-primary"
+                    style={{ whiteSpace: 'nowrap', justifyContent: 'center' }}
                     onClick={() => handleSetCustomDate(expiryModalUser)}
                   >
                     Set Date
@@ -621,15 +762,61 @@ function ResellerUsers({ currentUser, isCreateOpen, onCloseCreate }) {
                 </div>
 
                 <div className="admin-form-group">
-                  <label className="admin-form-label">Email Address</label>
-                  <input
-                    type="email"
-                    required
-                    className="admin-form-input"
-                    placeholder="customer@domain.com"
-                    value={newUserData.email}
-                    onChange={(e) => setNewUserData({ ...newUserData, email: e.target.value })}
-                  />
+                  <label className="admin-form-label">
+                    Email Address
+                    <span style={{ fontSize: '12px', color: '#94a3b8', fontWeight: 400, marginLeft: '6px' }}>
+                      (domain auto-set to @{currentDomain})
+                    </span>
+                  </label>
+                  <div style={{ display: 'flex', alignItems: 'center' }}>
+                    <input
+                      type="text"
+                      required
+                      className="admin-form-input"
+                      style={{
+                        borderTopRightRadius: 0,
+                        borderBottomRightRadius: 0,
+                        borderRight: 'none',
+                        flex: 1
+                      }}
+                      placeholder="prefix or username"
+                      value={newUserData.emailPrefix !== undefined ? newUserData.emailPrefix : (newUserData.email ? newUserData.email.split('@')[0] : '')}
+                      onChange={(e) => {
+                        let val = e.target.value.trim().toLowerCase();
+                        if (val.includes('@')) {
+                          val = val.split('@')[0];
+                        }
+                        setNewUserData({
+                          ...newUserData,
+                          emailPrefix: val,
+                          email: val ? `${val}@${currentDomain}` : ''
+                        });
+                      }}
+                    />
+                    <div
+                      style={{
+                        background: '#1e293b',
+                        border: '1px solid #334155',
+                        borderLeft: 'none',
+                        padding: '11px 16px',
+                        borderTopRightRadius: '10px',
+                        borderBottomRightRadius: '10px',
+                        color: '#38bdf8',
+                        fontSize: '14px',
+                        fontWeight: 700,
+                        userSelect: 'none',
+                        whiteSpace: 'nowrap'
+                      }}
+                    >
+                      @{currentDomain}
+                    </div>
+                  </div>
+                  <div style={{ fontSize: '12px', color: '#64748b', marginTop: '4px' }}>
+                    Full address will be:{' '}
+                    <span style={{ color: '#4ade80', fontWeight: 600 }}>
+                      {newUserData.emailPrefix ? `${newUserData.emailPrefix}@${currentDomain}` : `client@${currentDomain}`}
+                    </span>
+                  </div>
                 </div>
 
                 <div className="admin-form-group">

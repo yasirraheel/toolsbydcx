@@ -40,8 +40,7 @@ function AuthView({
   currentUser,
   onLogout,
 }) {
-  const [mode, setMode] = useState(initialMode);
-  const [name, setName] = useState("");
+  const [mode, setMode] = useState(initialMode === "signup" ? "login" : initialMode);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -104,39 +103,6 @@ function AuthView({
     }
   };
 
-  /* ---------- Register ---------- */
-  const handleRegister = async (e) => {
-    e.preventDefault();
-    clearMessages();
-    if (!name.trim()) return setErrorMsg("Please enter your full name.");
-    if (!email.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))
-      return setErrorMsg("Please enter a valid email address.");
-    if (password.length < 6)
-      return setErrorMsg("Password must be at least 6 characters long.");
-    if (password !== confirmPassword)
-      return setErrorMsg("Passwords do not match.");
-
-    setLoading(true);
-    try {
-      const res = await fetch(`${API_AUTH_BASE}/register`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: name.trim(), email: email.trim(), password }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to create account.");
-      setPendingEmail(data.email || email.trim());
-      if (data.devOtp) setDevOtpHint(data.devOtp);
-      setSuccessMsg(data.message || "Verification code sent to your email!");
-      setResendCooldown(60);
-      setOtpCode(["", "", "", "", "", ""]);
-      setMode("verify");
-    } catch (err) {
-      setErrorMsg(err.message);
-    } finally {
-      setLoading(false);
-    }
-  };
 
   /* ---------- Verify OTP ---------- */
   const handleVerifyEmail = async (e) => {
@@ -365,44 +331,14 @@ function AuthView({
           <div className="auth-card-header">
             <h2 className="auth-page-title">{pageTitle}</h2>
             <p className="auth-page-desc">
-              {mode === "login" && "Sign in to access your AI video tools."}
-              {mode === "signup" && "Create an account to start accessing high-tier AI services."}
+              {mode === "login" && "Sign in to access your premium tools."}
+              {mode === "signup" && "Create an account to start accessing your tools."}
               {mode === "verify" && "Enter verification code to activate your account."}
               {mode === "forgot" && "Enter your email to receive a password reset code."}
               {mode === "reset" && "Set a new password for your ToolsByDcx account."}
             </p>
           </div>
 
-          {/* Tab switcher */}
-          {(mode === "login" || mode === "signup") && (
-            <div className="auth-tab-group">
-              <button
-                type="button"
-                className={`auth-tab-btn ${mode === "login" ? "active" : ""}`}
-                onClick={() => { setMode("login"); clearMessages(); }}
-              >
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4" />
-                  <polyline points="10 17 15 12 10 7" />
-                  <line x1="15" y1="12" x2="3" y2="12" />
-                </svg>
-                Log In
-              </button>
-              <button
-                type="button"
-                className={`auth-tab-btn ${mode === "signup" ? "active" : ""}`}
-                onClick={() => { setMode("signup"); clearMessages(); }}
-              >
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
-                  <circle cx="8.5" cy="7" r="4" />
-                  <line x1="20" y1="8" x2="20" y2="14" />
-                  <line x1="23" y1="11" x2="17" y2="11" />
-                </svg>
-                Sign Up
-              </button>
-            </div>
-          )}
 
           {/* Alerts */}
           {errorMsg && (
@@ -470,57 +406,8 @@ function AuthView({
                 {loading ? "Authenticating..." : "Sign In to ToolsByDcx →"}
               </button>
 
-              <div className="auth-footer-prompt">
-                <span>Don't have an account yet?</span>
-                <button type="button" className="link-auth-switch" onClick={() => { setMode("signup"); clearMessages(); }}>
-                  Create one now
-                </button>
-              </div>
-            </form>
-          )}
-
-          {/* ===== SIGNUP FORM ===== */}
-          {mode === "signup" && (
-            <form onSubmit={handleRegister} className="auth-form">
-              <div className="auth-field-group">
-                <label className="auth-label">Full Name</label>
-                <div className="auth-input-wrapper">
-                  <input type="text" className="auth-input" placeholder="e.g. Alex Johnson" value={name} onChange={(e) => setName(e.target.value)} required />
-                </div>
-              </div>
-
-              <div className="auth-field-group">
-                <label className="auth-label">Email Address</label>
-                <div className="auth-input-wrapper">
-                  <input type="email" className="auth-input" placeholder="user@toolsbydcx.com" value={email} onChange={(e) => setEmail(e.target.value)} required />
-                </div>
-              </div>
-
-              <div className="auth-field-group">
-                <label className="auth-label">Password</label>
-                <div className="auth-input-wrapper">
-                  <input type={showPassword ? "text" : "password"} className="auth-input auth-input-with-eye" placeholder="Min. 6 characters" value={password} onChange={(e) => setPassword(e.target.value)} required />
-                  <EyeToggleBtn show={showPassword} onToggle={() => setShowPassword(p => !p)} />
-                </div>
-              </div>
-
-              <div className="auth-field-group">
-                <label className="auth-label">Confirm Password</label>
-                <div className="auth-input-wrapper">
-                  <input type={showConfirmPassword ? "text" : "password"} className="auth-input auth-input-with-eye" placeholder="Repeat password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} required />
-                  <EyeToggleBtn show={showConfirmPassword} onToggle={() => setShowConfirmPassword(p => !p)} />
-                </div>
-              </div>
-
-              <button type="submit" className="btn-auth-primary" disabled={loading}>
-                {loading ? "Creating Account..." : "Create ToolsByDcx Account →"}
-              </button>
-
-              <div className="auth-footer-prompt">
-                <span>Already have an account?</span>
-                <button type="button" className="link-auth-switch" onClick={() => { setMode("login"); clearMessages(); }}>
-                  Sign in
-                </button>
+              <div className="auth-footer-prompt" style={{ color: '#94a3b8', fontSize: '13px', lineHeight: '1.5', textAlign: 'center', marginTop: '16px' }}>
+                <span>Registration is managed by administrators and authorized resellers.</span>
               </div>
             </form>
           )}

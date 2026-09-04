@@ -187,3 +187,26 @@ window.addEventListener('message', function (e) {
     window.postMessage({ type: '__bf_ext_pong__', alive: false, ts: Date.now() }, '*');
   }
 });
+
+// ── Sync any stored projects on platform load ──
+try {
+  chrome.storage.local.get(['__flow_my_projects'], function(res) {
+    if (chrome.runtime.lastError) return;
+    var list = res && res.__flow_my_projects;
+    if (Array.isArray(list) && list.length > 0) {
+      list.forEach(function(item) {
+        if (!item || typeof item !== 'string') return;
+        var m = item.match(/project\/([a-zA-Z0-9_-]{4,})/i);
+        if (m && m[1]) {
+          chrome.runtime.sendMessage({
+            type: 'SAVE_PROJECT',
+            projectId: m[1],
+            projectUrl: 'https://labs.google/fx/tools/flow/project/' + m[1],
+            title: 'Flow Project'
+          }, function() { if (chrome.runtime.lastError) {} });
+        }
+      });
+    }
+  });
+} catch(e) {}
+

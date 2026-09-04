@@ -19,40 +19,60 @@ function ResellerDashboard({ stats, recentUsers, onNavigate, onOpenCreateUser })
     <div className="admin-dashboard-view">
       {/* KPI METRIC CARDS */}
       <div className="admin-kpi-grid">
-        <div className="admin-kpi-card">
+        <div className="admin-kpi-card" onClick={() => onNavigate('users')} style={{ cursor: 'pointer' }}>
           <div className="admin-kpi-info">
-            <span className="admin-kpi-label">Total Customers</span>
-            <span className="admin-kpi-val">{stats?.totalUsers ?? 0}</span>
-            <span className="admin-kpi-sub">Customers under your account</span>
+            <span className="admin-kpi-label">Customer Quota</span>
+            <span className="admin-kpi-val" style={{ display: 'flex', alignItems: 'baseline', gap: '4px' }}>
+              {stats?.totalUsers ?? 0}
+              <span style={{ fontSize: '18px', color: '#94a3b8', fontWeight: 600 }}>/ {stats?.maxCustomers ?? 10}</span>
+            </span>
+            <span className="admin-kpi-sub">
+              {stats?.remainingSlots ?? 0} slots remaining
+            </span>
           </div>
-          <div className="admin-kpi-icon icon-green">👥</div>
+          <div className="admin-kpi-icon icon-blue">👥</div>
         </div>
 
-        <div className="admin-kpi-card">
+        <div className="admin-kpi-card" onClick={() => onNavigate('users')} style={{ cursor: 'pointer' }}>
           <div className="admin-kpi-info">
-            <span className="admin-kpi-label">Active Subscriptions</span>
+            <span className="admin-kpi-label">Active Customers</span>
             <span className="admin-kpi-val" style={{ color: '#22c55e' }}>{stats?.activeUsers ?? 0}</span>
-            <span className="admin-kpi-sub">Customers with valid access</span>
+            <span className="admin-kpi-sub">
+              {stats?.expiredUsers || stats?.bannedUsers
+                ? `${stats?.expiredUsers || 0} expired • ${stats?.bannedUsers || 0} banned`
+                : 'Customers with valid access'}
+            </span>
           </div>
-          <div className="admin-kpi-icon icon-blue">✅</div>
+          <div className="admin-kpi-icon icon-green">✅</div>
+        </div>
+
+        <div className="admin-kpi-card" onClick={() => onNavigate('users')} style={{ cursor: 'pointer' }}>
+          <div className="admin-kpi-info">
+            <span className="admin-kpi-label">Available Slots</span>
+            <span
+              className="admin-kpi-val"
+              style={{ color: (stats?.remainingSlots !== undefined && stats?.remainingSlots <= 0) ? '#f87171' : '#38bdf8' }}
+            >
+              {stats?.remainingSlots ?? 0}
+            </span>
+            <span className="admin-kpi-sub">
+              {(stats?.remainingSlots !== undefined && stats?.remainingSlots <= 0) ? 'Quota limit reached' : 'Ready for onboarding'}
+            </span>
+          </div>
+          <div className="admin-kpi-icon icon-amber">⚡</div>
         </div>
 
         <div className="admin-kpi-card">
           <div className="admin-kpi-info">
-            <span className="admin-kpi-label">Expiring Soon</span>
-            <span className="admin-kpi-val" style={{ color: '#fbbf24' }}>{stats?.expiringSoon ?? 0}</span>
-            <span className="admin-kpi-sub">Under 7 days remaining</span>
+            <span className="admin-kpi-label">Reseller Plan</span>
+            <span className="admin-kpi-val" style={{ color: '#c084fc', fontSize: '24px' }}>
+              {stats?.resellerPlanName || 'Unlimited'}
+            </span>
+            <span className="admin-kpi-sub">
+              ⏱ {stats?.isLifetime ? 'Lifetime Access' : `${stats?.resellerDaysRemaining !== null && stats?.resellerDaysRemaining !== undefined ? stats?.resellerDaysRemaining : 30} days remaining`}
+            </span>
           </div>
-          <div className="admin-kpi-icon icon-amber">⏳</div>
-        </div>
-
-        <div className="admin-kpi-card">
-          <div className="admin-kpi-info">
-            <span className="admin-kpi-label">Expired Customers</span>
-            <span className="admin-kpi-val" style={{ color: '#f87171' }}>{stats?.expiredUsers ?? 0}</span>
-            <span className="admin-kpi-sub">Requires renewal</span>
-          </div>
-          <div className="admin-kpi-icon icon-purple">⚠️</div>
+          <div className="admin-kpi-icon icon-purple">🤝</div>
         </div>
       </div>
 
@@ -128,12 +148,15 @@ function ResellerDashboard({ stats, recentUsers, onNavigate, onOpenCreateUser })
                       <div style={{ fontSize: '13px', color: '#64748b' }}>{user.email}</div>
                     </td>
                     <td>
-                      <span className="badge-pill badge-pro">
+                      <span className="badge-pill badge-pro" style={{ padding: '3px 10px', fontSize: '12px', textTransform: 'uppercase', fontWeight: 600 }}>
                         {user.plan ? user.plan.toUpperCase().replace('PLAN_', '') : 'STANDARD'}
                       </span>
                     </td>
                     <td>
-                      <span className={`badge-pill ${user.status === 'inactive' || user.is_verified === 0 ? 'badge-pending' : 'badge-green'}`}>
+                      <span
+                        className={`badge-pill ${user.status === 'inactive' || user.is_verified === 0 ? 'badge-pending' : 'badge-green'}`}
+                        style={{ padding: '3px 10px', fontSize: '12px', fontWeight: 600, textTransform: 'none' }}
+                      >
                         {user.status === 'inactive' || user.is_verified === 0 ? 'Inactive' : 'Active'}
                       </span>
                     </td>

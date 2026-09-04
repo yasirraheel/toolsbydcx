@@ -1,10 +1,8 @@
 import React, { useState, useEffect, useRef } from "react";
 
 const API_AUTH_BASE = process.env.REACT_APP_API_URL ? `${process.env.REACT_APP_API_URL}/auth` : (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1" ? "http://localhost:5000/api/auth" : "/api/auth");
-
 function AuthModal({ isOpen, onClose, currentUser, onAuthSuccess, onLogout, initialMode = "login" }) {
-  const [mode, setMode] = useState(initialMode); // "login", "signup", "verify", "forgot", "reset"
-  const [name, setName] = useState("");
+  const [mode, setMode] = useState(initialMode === "signup" ? "login" : initialMode);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -73,54 +71,7 @@ function AuthModal({ isOpen, onClose, currentUser, onAuthSuccess, onLogout, init
     }
   };
 
-  // 1. Submit Registration (Signup)
-  const handleRegister = async (e) => {
-    e.preventDefault();
-    setErrorMsg("");
-    setSuccessMsg("");
 
-    if (!name.trim()) {
-      setErrorMsg("Please enter your full name.");
-      return;
-    }
-    if (!email.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      setErrorMsg("Please enter a valid email address.");
-      return;
-    }
-    if (password.length < 6) {
-      setErrorMsg("Password must be at least 6 characters long.");
-      return;
-    }
-    if (password !== confirmPassword) {
-      setErrorMsg("Passwords do not match.");
-      return;
-    }
-
-    setLoading(true);
-    try {
-      const res = await fetch(`${API_AUTH_BASE}/register`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: name.trim(), email: email.trim(), password }),
-      });
-      const data = await res.json();
-
-      if (!res.ok) {
-        throw new Error(data.error || "Failed to create account.");
-      }
-
-      setPendingEmail(data.email || email.trim());
-      if (data.devOtp) setDevOtpHint(data.devOtp);
-      setSuccessMsg(data.message || "Verification code sent to your email!");
-      setResendCooldown(60);
-      setOtpCode(["", "", "", "", "", ""]);
-      setMode("verify");
-    } catch (err) {
-      setErrorMsg(err.message);
-    } finally {
-      setLoading(false);
-    }
-  };
 
   // 2. Submit Email Verification (OTP)
   const handleVerifyEmail = async (e) => {
@@ -388,44 +339,7 @@ function AuthModal({ isOpen, onClose, currentUser, onAuthSuccess, onLogout, init
           </button>
         </div>
 
-        {/* Tab Switcher (Login vs Sign Up) */}
-        {(mode === "login" || mode === "signup") && (
-          <div className="auth-tab-group">
-            <button
-              type="button"
-              className={`auth-tab-btn ${mode === "login" ? "active" : ""}`}
-              onClick={() => {
-                setMode("login");
-                setErrorMsg("");
-                setSuccessMsg("");
-              }}
-            >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4" />
-                <polyline points="10 17 15 12 10 7" />
-                <line x1="15" y1="12" x2="3" y2="12" />
-              </svg>
-              Log In
-            </button>
-            <button
-              type="button"
-              className={`auth-tab-btn ${mode === "signup" ? "active" : ""}`}
-              onClick={() => {
-                setMode("signup");
-                setErrorMsg("");
-                setSuccessMsg("");
-              }}
-            >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
-                <circle cx="8.5" cy="7" r="4" />
-                <line x1="20" y1="8" x2="20" y2="14" />
-                <line x1="23" y1="11" x2="17" y2="11" />
-              </svg>
-              Sign Up
-            </button>
-          </div>
-        )}
+
 
         {/* Error and Success Alerts */}
         {errorMsg && (
@@ -498,109 +412,8 @@ function AuthModal({ isOpen, onClose, currentUser, onAuthSuccess, onLogout, init
                 {loading ? "Authenticating..." : "Sign In to ToolsByDcx ➜"}
               </button>
 
-              <div className="auth-footer-prompt">
-                <span>Don't have an account yet?</span>
-                <button
-                  type="button"
-                  className="link-auth-switch"
-                  onClick={() => {
-                    setMode("signup");
-                    setErrorMsg("");
-                    setSuccessMsg("");
-                  }}
-                >
-                  Create one now
-                </button>
-              </div>
-            </form>
-          )}
-
-          {/* 2. SIGN UP FORM */}
-          {mode === "signup" && (
-            <form onSubmit={handleRegister} className="auth-form">
-              <div className="auth-field-group">
-                <label className="auth-label">Full Name</label>
-                <div className="auth-input-wrapper">
-                  <input
-                    type="text"
-                    className="auth-input"
-                    placeholder="e.g. Alex Johnson"
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                    required
-                  />
-                </div>
-              </div>
-
-              <div className="auth-field-group">
-                <label className="auth-label">Email Address (For Verification Code)</label>
-                <div className="auth-input-wrapper">
-                  <input
-                    type="email"
-                    className="auth-input"
-                    placeholder="user@toolsbydcx.com"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    required
-                  />
-                </div>
-              </div>
-
-              <div className="auth-grid-2col">
-                <div className="auth-field-group">
-                  <label className="auth-label">Password (6+ chars)</label>
-                  <div className="auth-input-wrapper">
-                    <input
-                      type="password"
-                      className="auth-input"
-                      placeholder="••••••••"
-                      value={password}
-                      onChange={(e) => setPassword(e.target.value)}
-                      required
-                    />
-                  </div>
-                </div>
-
-                <div className="auth-field-group">
-                  <label className="auth-label">Confirm Password</label>
-                  <div className="auth-input-wrapper">
-                    <input
-                      type="password"
-                      className="auth-input"
-                      placeholder="••••••••"
-                      value={confirmPassword}
-                      onChange={(e) => setConfirmPassword(e.target.value)}
-                      required
-                    />
-                  </div>
-                </div>
-              </div>
-
-              <div className="auth-security-notice">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#22c55e" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
-                  <path d="M7 11V7a5 5 0 0 1 10 0v4" />
-                </svg>
-                <span>A 6-digit verification code will be sent to your email to verify and activate your account.</span>
-              </div>
-
-              <button type="submit" className="btn-auth-primary" disabled={loading}>
-                {loading ? "Creating Account..." : "Sign Up & Verify Email ➜"}
-              </button>
-
-              <div className="auth-footer-prompt">
-                <span>Already registered?</span>
-                <button
-                  type="button"
-                  className="link-auth-switch"
-                  onClick={() => {
-                    setMode("login");
-                    setErrorMsg("");
-                    setSuccessMsg("");
-                  }}
-                >
-                  Sign In
-                </button>
+              <div className="auth-footer-prompt" style={{ color: '#94a3b8', fontSize: '13px', lineHeight: '1.5', textAlign: 'center', marginTop: '16px' }}>
+                <span>Registration is managed by administrators and authorized resellers.</span>
               </div>
             </form>
           )}

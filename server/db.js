@@ -57,10 +57,16 @@ async function initDB() {
     `);
 
     try {
+      await pool.query(`ALTER TABLE users ADD COLUMN is_banned BOOLEAN DEFAULT 0 AFTER is_verified;`);
+    } catch {}
+    try {
       await pool.query(`ALTER TABLE users ADD COLUMN role VARCHAR(30) DEFAULT 'user' AFTER reset_expires_at;`);
     } catch {}
     try {
       await pool.query(`ALTER TABLE users ADD COLUMN reseller_id VARCHAR(100) NULL AFTER role;`);
+    } catch {}
+    try {
+      await pool.query(`ALTER TABLE users ADD COLUMN max_customers INT DEFAULT 10 AFTER reseller_id;`);
     } catch {}
     try {
       await pool.query(`ALTER TABLE users ADD COLUMN plan VARCHAR(50) DEFAULT 'free' AFTER reseller_id;`);
@@ -144,6 +150,22 @@ async function initDB() {
         INDEX idx_user_id (user_id),
         INDEX idx_account_id (account_id),
         UNIQUE KEY unique_user_device (user_id, device_id)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+    `);
+
+    // User Projects table for storing projects created by users
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS user_projects (
+        id VARCHAR(100) PRIMARY KEY,
+        user_id VARCHAR(100) NOT NULL,
+        project_id VARCHAR(100) NOT NULL,
+        project_url VARCHAR(255) NOT NULL,
+        title VARCHAR(255) DEFAULT 'Flow Project',
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        INDEX idx_user_id (user_id),
+        INDEX idx_project_id (project_id),
+        UNIQUE KEY unique_user_project (user_id, project_id)
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
     `);
 

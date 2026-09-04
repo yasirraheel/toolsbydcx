@@ -30,24 +30,24 @@ export default function LandingPage({ currentUser, onOpenAuth, onNavigate, onLog
           name: "Tools Basic",
           price: 0,
           billing_cycle: "monthly",
-          description: "Starter plan for essential AI video creation.",
-          features: ["Standard AI Video Generation", "Standard Generation Speed", "ToolsByDcx Extension Access", "720p / HD Video Output", "Email Support"]
+          description: "Essential starter plan for basic tool access.",
+          features: ["Standard Tool Access", "1 Active Device Session", "ToolsByDcx Extension Access", "Standard Server Speed", "Email Support"]
         },
         {
           id: "plan_pro",
           name: "Tools Ultra",
           price: 9.99,
           billing_cycle: "monthly",
-          description: "Complete access with high-speed rendering for creators and professionals.",
-          features: ["Full AI Video Generation Access", "Priority High-Speed Rendering", "Full ToolsByDcx Suite Access", "1080p Full HD Video Quality", "Priority Support"]
+          description: "Complete access with high-speed rotation for creators and professionals.",
+          features: ["Full Platform Access", "Priority High-Speed Connection", "Full ToolsByDcx Suite Access", "Multi-Account Standby Pools", "Priority Support"]
         },
         {
           id: "plan_unlimited",
           name: "Tools Max",
           price: 29.99,
           billing_cycle: "monthly",
-          description: "All-inclusive VIP plan for video generation and top priority processing.",
-          features: ["Unlimited Video Generations", "Instant High-Speed Rendering", "VIP Priority Processing Queue", "4K Ultra HD Video Quality", "24/7 Dedicated VIP Support"]
+          description: "All-inclusive VIP plan for unlimited tool access and top priority routing.",
+          features: ["Unlimited Tool Access", "Instant 1-Click Launch", "VIP Dedicated Server Pools", "Unlimited Active Sessions", "24/7 Dedicated VIP Support"]
         }
       ]);
     } finally {
@@ -62,7 +62,7 @@ export default function LandingPage({ currentUser, onOpenAuth, onNavigate, onLog
 
   const handleSelectPlan = (plan) => {
     if (!currentUser) {
-      onOpenAuth("signup");
+      onOpenAuth("login");
     } else {
       // If already logged in, navigate to appropriate panel
       if (currentUser.role === "admin") onNavigate("admin");
@@ -137,14 +137,9 @@ export default function LandingPage({ currentUser, onOpenAuth, onNavigate, onLog
                 </button>
               </>
             ) : (
-              <>
-                <button type="button" className="landing-btn-ghost" onClick={() => onOpenAuth("login")}>
-                  Sign In
-                </button>
-                <button type="button" className="landing-btn-primary" onClick={() => onOpenAuth("signup")}>
-                  Get Started
-                </button>
-              </>
+              <button type="button" className="landing-btn-primary" onClick={() => onOpenAuth("login")}>
+                Sign In
+              </button>
             )}
           </div>
         </div>
@@ -157,15 +152,15 @@ export default function LandingPage({ currentUser, onOpenAuth, onNavigate, onLog
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
               <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
             </svg>
-            <span>Next-Gen AI Creation Platform</span>
+            <span>All-In-One Tool Access Platform</span>
           </div>
 
           <h1 className="landing-hero-title">
-            Unlock High-Tier AI Video Tools in <span className="landing-hero-gradient">One Click</span>
+            Unlock Premium Cloud Tools in <span className="landing-hero-gradient">One Click</span>
           </h1>
 
           <p className="landing-hero-subtitle">
-            Experience seamless AI creation without complicated setups. ToolsByDcx connects verified access directly to your browser with 1-click launch, dedicated rendering, and high-uptime performance.
+            Experience seamless tool access without complicated setups. ToolsByDcx connects verified accounts directly to your browser with instant 1-click launch, automated session sync, and high-uptime performance.
           </p>
 
           <div className="landing-hero-actions">
@@ -303,7 +298,7 @@ export default function LandingPage({ currentUser, onOpenAuth, onNavigate, onLog
                     className={`landing-plan-btn ${isPopular ? "primary" : "secondary"}`}
                     onClick={() => handleSelectPlan(plan)}
                   >
-                    {currentUser ? "Select Plan ➜" : "Get Started Now ➜"}
+                    {currentUser ? "Go to Dashboard ➜" : "Sign In to Access ➜"}
                   </button>
                 </div>
               );
@@ -357,7 +352,7 @@ export default function LandingPage({ currentUser, onOpenAuth, onNavigate, onLog
               </div>
               <h3 className="landing-feature-title">Secure & Instant Access</h3>
               <p className="landing-feature-desc">
-                Your personal credentials are safe and secure. Access premium AI video tools instantly through our secure browser companion without manual configuration.
+                Your personal credentials are safe and secure. Access premium accounts and creative tools instantly through our secure browser companion without manual configuration.
               </p>
             </div>
 
@@ -495,9 +490,6 @@ export default function LandingPage({ currentUser, onOpenAuth, onNavigate, onLog
               </button>
               <button type="button" className="landing-nav-link" onClick={() => onOpenAuth("login")}>
                 Sign In
-              </button>
-              <button type="button" className="landing-nav-link" onClick={() => onOpenAuth("signup")}>
-                Register
               </button>
             </div>
           </div>

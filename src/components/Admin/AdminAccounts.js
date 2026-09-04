@@ -341,11 +341,11 @@ function AdminAccounts() {
         </div>
 
         <button
-          className="admin-btn primary"
+          type="button"
+          className="btn-admin-primary"
           onClick={openCreateModal}
-          style={{ background: '#6366f1', color: '#fff', border: 'none', padding: '10px 18px', borderRadius: '8px', fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px' }}
         >
-          <span>➕</span> Add Shared Account
+          + Add Shared Account
         </button>
       </div>
 
@@ -359,8 +359,8 @@ function AdminAccounts() {
           <p style={{ fontSize: '13px', marginTop: '6px', maxWidth: '400px', margin: '6px auto 16px' }}>
             {searchQuery ? 'No accounts matched your search criteria.' : 'Create your first shared account to enable cookie injection for extension users.'}
           </p>
-          <button className="admin-btn primary" onClick={openCreateModal} style={{ background: '#6366f1', color: '#fff', border: 'none', padding: '8px 16px', borderRadius: '8px', fontWeight: 600, cursor: 'pointer' }}>
-            Add Shared Account
+          <button type="button" className="btn-admin-primary" onClick={openCreateModal}>
+            + Add Shared Account
           </button>
         </div>
       ) : (
@@ -370,8 +370,6 @@ function AdminAccounts() {
               <tr style={{ background: '#1c2030', borderBottom: '1px solid #2e344d', color: '#9ca3af', fontSize: '12px', textTransform: 'uppercase' }}>
                 <th style={{ padding: '14px 16px' }}>Service / Account</th>
                 <th style={{ padding: '14px 16px' }}>Target URL</th>
-                <th style={{ padding: '14px 16px' }}>Cookies</th>
-                <th style={{ padding: '14px 16px' }}>Version</th>
                 <th style={{ padding: '14px 16px' }}>Allowed Plans</th>
                 <th style={{ padding: '14px 16px' }}>Status</th>
                 <th style={{ padding: '14px 16px', textAlign: 'right' }}>Actions</th>
@@ -397,58 +395,51 @@ function AdminAccounts() {
                     </a>
                   </td>
                   <td style={{ padding: '14px 16px' }}>
-                    <span style={{
-                      background: '#1e293b',
-                      border: '1px solid #334155',
-                      padding: '4px 8px',
-                      borderRadius: '6px',
-                      fontSize: '12px',
-                      fontWeight: 700,
-                      color: '#f8fafc'
-                    }}>
-                      🍪 {acc.cookieCount || 0} cookies
-                    </span>
-                  </td>
-                  <td style={{ padding: '14px 16px' }}>
-                    <span style={{
-                      background: '#312e81',
-                      border: '1px solid #4338ca',
-                      padding: '3px 8px',
-                      borderRadius: '6px',
-                      fontSize: '11px',
-                      fontWeight: 700,
-                      color: '#c7d2fe'
-                    }}>
-                      v{acc.cookie_version || 1}
-                    </span>
-                  </td>
-                  <td style={{ padding: '14px 16px' }}>
-                    <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
-                      {(acc.allowed_plans || ['plan_pro', 'plan_unlimited']).map((p) => {
-                        const matched = availablePlans.find(
-                          (plan) => plan.id.toLowerCase() === p.toLowerCase() ||
-                                    plan.id.replace('plan_', '').toLowerCase() === p.toLowerCase()
-                        );
-                        const label = matched ? matched.name : p.replace('plan_', '').toUpperCase();
-                        const isUnlimited = p.includes('unlimited') || label.toLowerCase().includes('max');
-                        const isPro = p.includes('pro') || label.toLowerCase().includes('ultra');
+                    <div style={{ display: 'inline-flex', gap: '6px', flexWrap: 'wrap', alignItems: 'center' }}>
+                      {(() => {
+                        const raw = Array.isArray(acc.allowed_plans)
+                          ? acc.allowed_plans
+                          : typeof acc.allowed_plans === 'string'
+                            ? (() => { try { return JSON.parse(acc.allowed_plans); } catch { return ['plan_pro', 'plan_unlimited']; } })()
+                            : ['plan_pro', 'plan_unlimited'];
 
-                        return (
+                        const uniqueList = [];
+                        const seen = new Set();
+                        raw.forEach((p) => {
+                          if (!p) return;
+                          const normKey = p.toString().replace(/^plan_/, '').trim().toLowerCase();
+                          const matched = availablePlans.find(
+                            (plan) => plan.id.toLowerCase() === p.toLowerCase() ||
+                                      plan.id.replace('plan_', '').toLowerCase() === normKey ||
+                                      plan.name.toLowerCase() === p.toLowerCase()
+                          );
+                          const label = matched ? matched.name : (normKey === 'pro' ? 'Tools Ultra' : normKey === 'unlimited' ? 'Tools Max' : normKey.toUpperCase());
+                          const labelKey = label.toLowerCase();
+                          if (!seen.has(labelKey)) {
+                            seen.add(labelKey);
+                            const isUnlimited = normKey.includes('unlimited') || normKey.includes('max') || labelKey.includes('max') || labelKey.includes('unlimited');
+                            const isPro = normKey.includes('pro') || normKey.includes('ultra') || labelKey.includes('ultra') || labelKey.includes('pro');
+                            uniqueList.push({ label, isUnlimited, isPro });
+                          }
+                        });
+
+                        return uniqueList.map((item) => (
                           <span
-                            key={p}
+                            key={item.label}
                             style={{
-                              background: isUnlimited ? '#4c1d95' : isPro ? '#065f46' : '#374151',
+                              background: item.isUnlimited ? '#4c1d95' : item.isPro ? '#065f46' : '#374151',
                               color: '#fff',
                               fontSize: '11px',
                               fontWeight: 700,
-                              padding: '2px 8px',
-                              borderRadius: '4px'
+                              padding: '3px 8px',
+                              borderRadius: '6px',
+                              whiteSpace: 'nowrap'
                             }}
                           >
-                            {label}
+                            {item.label}
                           </span>
-                        );
-                      })}
+                        ));
+                      })()}
                     </div>
                   </td>
                   <td style={{ padding: '14px 16px' }}>
@@ -688,14 +679,14 @@ function AdminAccounts() {
               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '20px' }}>
                 <button
                   type="button"
+                  className="btn-admin-secondary"
                   onClick={() => setEditingAccount(null)}
-                  style={{ padding: '10px 18px', borderRadius: '8px', background: '#1f2937', border: '1px solid #374151', color: '#d1d5db', cursor: 'pointer', fontWeight: 600 }}
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  style={{ padding: '10px 22px', borderRadius: '8px', background: '#6366f1', border: 'none', color: '#fff', cursor: 'pointer', fontWeight: 700 }}
+                  className="btn-admin-primary"
                 >
                   {isCreateOpen ? 'Create Shared Account' : 'Save Changes'}
                 </button>
@@ -764,8 +755,9 @@ function AdminAccounts() {
 
             <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '16px' }}>
               <button
+                type="button"
+                className="btn-admin-secondary"
                 onClick={() => setInspectAccount(null)}
-                style={{ padding: '8px 18px', borderRadius: '8px', background: '#6366f1', border: 'none', color: '#fff', cursor: 'pointer', fontWeight: 600 }}
               >
                 Close
               </button>

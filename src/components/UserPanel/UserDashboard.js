@@ -43,31 +43,6 @@ function UserDashboard({ dashboardData, onNavigate, onLaunchResource }) {
           </div>
           <div className="admin-kpi-icon icon-amber">💻</div>
         </div>
-
-
-      </div>
-
-      {/* QUICK ACTIONS BANNER */}
-      <div className="admin-card" style={{ padding: '24px 28px', background: 'linear-gradient(135deg, #101726, #162032)' }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '16px' }}>
-          <div>
-            <h4 style={{ margin: '0 0 8px 0', fontSize: '18px', fontWeight: 800, color: '#f8fafc' }}>
-              ⚡ ToolsByDcx Tool Access Hub
-            </h4>
-            <p style={{ margin: 0, fontSize: '15px', color: '#94a3b8' }}>
-              Access your assigned AI tools and premium services directly in your browser with 1-click launch.
-            </p>
-          </div>
-          <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
-            <button
-              type="button"
-              className="btn-admin-secondary"
-              onClick={() => onNavigate('sessions')}
-            >
-              💻 Active Devices
-            </button>
-          </div>
-        </div>
       </div>
 
       {/* RECENT ACCOUNTS TABLE */}

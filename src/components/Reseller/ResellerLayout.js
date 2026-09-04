@@ -74,10 +74,20 @@ function ResellerLayout({ currentUser, onExitReseller, onSwitchPortal, onLogout 
       <aside className={`admin-sidebar ${mobileOpen ? 'open' : ''}`}>
         <div className="admin-sidebar-header">
           <div className="admin-brand-block">
-            <div className="admin-brand-icon">⚡</div>
+            <div className="admin-brand-icon">
+              <img
+                src="/logo.png"
+                alt="Logo"
+                onError={(e) => {
+                  e.currentTarget.style.display = 'none';
+                  if (e.currentTarget.nextElementSibling) e.currentTarget.nextElementSibling.style.display = 'block';
+                }}
+              />
+              <span style={{ display: 'none', fontSize: '18px', color: '#22c55e' }}>⚡</span>
+            </div>
             <div>
-              <div className="admin-brand-title">FlowByDcx</div>
-              <div className="admin-brand-subtitle">Reseller Portal</div>
+              <div className="admin-brand-title">ToolsBy<span>Dcx</span></div>
+              <div className="admin-brand-subtitle">Reseller Panel</div>
             </div>
           </div>
           {mobileOpen && (
@@ -109,7 +119,7 @@ function ResellerLayout({ currentUser, onExitReseller, onSwitchPortal, onLogout 
             onClick={() => switchTab('users')}
           >
             <span className="admin-nav-icon">👥</span>
-            <span>Customer Users</span>
+            <span>Customer</span>
           </button>
         </nav>
 

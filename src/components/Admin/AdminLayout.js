@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import './admin.css';
 import AdminDashboard from './AdminDashboard';
 import AdminUsers from './AdminUsers';
+import AdminResellers from './AdminResellers';
 import AdminPlans from './AdminPlans';
 import AdminAccounts from './AdminAccounts';
 import AdminSettings from './AdminSettings';
@@ -14,6 +15,7 @@ function AdminLayout({ currentUser, onExitAdmin, onSwitchPortal, onLogout }) {
     if (tabParam) return tabParam;
     if (path.includes("/admin/accounts")) return "accounts";
     if (path.includes("/admin/users")) return "users";
+    if (path.includes("/admin/resellers")) return "resellers";
     if (path.includes("/admin/plans")) return "plans";
     if (path.includes("/admin/settings")) return "settings";
     return "dashboard";
@@ -23,6 +25,7 @@ function AdminLayout({ currentUser, onExitAdmin, onSwitchPortal, onLogout }) {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [statsData, setStatsData] = useState(null);
   const [isCreateUserOpen, setIsCreateUserOpen] = useState(false);
+  const [resellerFilter, setResellerFilter] = useState(null);
 
   const switchTab = (tab) => {
     setActiveTab(tab);
@@ -31,6 +34,11 @@ function AdminLayout({ currentUser, onExitAdmin, onSwitchPortal, onLogout }) {
     if (window.location.pathname !== targetUrl) {
       window.history.pushState({ adminTab: tab }, "", targetUrl);
     }
+  };
+
+  const handleViewResellerClients = (reseller) => {
+    setResellerFilter(reseller);
+    switchTab('users');
   };
 
   useEffect(() => {
@@ -89,7 +97,8 @@ function AdminLayout({ currentUser, onExitAdmin, onSwitchPortal, onLogout }) {
     switch (activeTab) {
       case 'dashboard': return '📊 Admin Dashboard';
       case 'accounts': return '🔑 Accounts';
-      case 'users': return '👥 Users';
+      case 'users': return '👥 Customers';
+      case 'resellers': return '🤝 Resellers';
       case 'plans': return '💳 Plans';
       case 'settings': return '⚙️ Settings & SMTP';
       default: return 'Admin Portal';
@@ -102,10 +111,20 @@ function AdminLayout({ currentUser, onExitAdmin, onSwitchPortal, onLogout }) {
       <aside className={`admin-sidebar ${mobileOpen ? 'open' : ''}`}>
         <div className="admin-sidebar-header">
           <div className="admin-brand-block">
-            <div className="admin-brand-icon">⚡</div>
+            <div className="admin-brand-icon">
+              <img
+                src="/logo.png"
+                alt="Logo"
+                onError={(e) => {
+                  e.currentTarget.style.display = 'none';
+                  if (e.currentTarget.nextElementSibling) e.currentTarget.nextElementSibling.style.display = 'block';
+                }}
+              />
+              <span style={{ display: 'none', fontSize: '18px', color: '#22c55e' }}>⚡</span>
+            </div>
             <div>
-              <div className="admin-brand-title">ToolsByDcx</div>
-              <div className="admin-brand-subtitle">Admin Portal</div>
+              <div className="admin-brand-title">ToolsBy<span>Dcx</span></div>
+              <div className="admin-brand-subtitle">Admin Panel</div>
             </div>
           </div>
           {mobileOpen && (
@@ -146,7 +165,16 @@ function AdminLayout({ currentUser, onExitAdmin, onSwitchPortal, onLogout }) {
             onClick={() => switchTab('users')}
           >
             <span className="admin-nav-icon">👥</span>
-            <span>Users</span>
+            <span>Customer</span>
+          </button>
+
+          <button
+            type="button"
+            className={`admin-nav-item ${activeTab === 'resellers' ? 'active' : ''}`}
+            onClick={() => switchTab('resellers')}
+          >
+            <span className="admin-nav-icon">🤝</span>
+            <span>Resellers</span>
           </button>
 
           <button
@@ -158,15 +186,20 @@ function AdminLayout({ currentUser, onExitAdmin, onSwitchPortal, onLogout }) {
             <span>Plans</span>
           </button>
 
-          <div className="admin-nav-section-title">Configuration</div>
-          <button
-            type="button"
-            className={`admin-nav-item ${activeTab === 'settings' ? 'active' : ''}`}
-            onClick={() => switchTab('settings')}
-          >
-            <span className="admin-nav-icon">⚙️</span>
-            <span>Settings & SMTP</span>
-          </button>
+          {/* CONFIGURATION - Hidden from sidebar UI, code and page fully preserved */}
+          {false && (
+            <>
+              <div className="admin-nav-section-title">Configuration</div>
+              <button
+                type="button"
+                className={`admin-nav-item ${activeTab === 'settings' ? 'active' : ''}`}
+                onClick={() => switchTab('settings')}
+              >
+                <span className="admin-nav-icon">⚙️</span>
+                <span>Settings & SMTP</span>
+              </button>
+            </>
+          )}
         </nav>
 
         <div className="admin-sidebar-footer">
@@ -263,6 +296,15 @@ function AdminLayout({ currentUser, onExitAdmin, onSwitchPortal, onLogout }) {
               currentUser={currentUser}
               isCreateOpen={isCreateUserOpen}
               onCloseCreate={(val) => setIsCreateUserOpen(Boolean(val))}
+              resellerFilter={resellerFilter}
+              onClearResellerFilter={() => setResellerFilter(null)}
+            />
+          )}
+
+          {activeTab === 'resellers' && (
+            <AdminResellers
+              currentUser={currentUser}
+              onViewClients={handleViewResellerClients}
             />
           )}
 

@@ -29,102 +29,13 @@ function generateOTP() {
   return Math.floor(100000 + Math.random() * 900000).toString();
 }
 
-// 1. User Registration (Signup)
-app.post('/api/auth/register', async (req, res) => {
-  try {
-    const { name, email, password } = req.body;
-
-    if (!name || !email || !password) {
-      return res.status(400).json({ error: 'Name, email, and password are required.' });
-    }
-
-    const cleanEmail = email.trim().toLowerCase();
-    const cleanName = name.trim();
-
-    if (password.length < 6) {
-      return res.status(400).json({ error: 'Password must be at least 6 characters long.' });
-    }
-
-    const pool = getPool();
-
-    // Check if user already exists
-    const [existing] = await pool.query('SELECT * FROM users WHERE email = ?', [cleanEmail]);
-    if (existing.length > 0) {
-      if (existing[0].is_verified) {
-        return res.status(409).json({ error: 'An account with this email already exists. Please log in.' });
-      }
-      // If user exists but not verified, generate new OTP and update
-      const otp = generateOTP();
-      const expiresAt = Date.now() + 15 * 60 * 1000; // 15 mins
-      const salt = await bcrypt.genSalt(10);
-      const hash = await bcrypt.hash(password, salt);
-
-      await pool.query(
-        `UPDATE users SET name = ?, password_hash = ?, verification_code = ?, verification_expires_at = ? WHERE email = ?`,
-        [cleanName, hash, otp, expiresAt, cleanEmail]
-      );
-
-      // Dispatch real email via Hostinger SMTP
-      try {
-        await sendVerificationEmail(cleanEmail, cleanName, otp);
-        console.log(`✉️ [HOSTINGER SMTP] Verification email dispatched to ${cleanEmail}`);
-      } catch (mailErr) {
-        console.warn(`⚠️ [HOSTINGER SMTP] Failed to send email to ${cleanEmail}:`, mailErr.message);
-      }
-
-      console.log(`\n======================================================`);
-      console.log(`✉️ [EMAIL VERIFICATION CODE] Sent to: ${cleanEmail}`);
-      console.log(`🔑 Verification OTP Code: ${otp}`);
-      console.log(`⏳ Valid for: 15 minutes`);
-      console.log(`======================================================\n`);
-
-      return res.status(200).json({
-        success: true,
-        message: `Verification code sent to ${cleanEmail}. Please check your inbox or spam folder.`,
-        email: cleanEmail,
-        isVerified: false,
-        devOtp: otp, // helpful in dev preview
-      });
-    }
-
-    // New user
-    const userId = `usr_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
-    const otp = generateOTP();
-    const expiresAt = Date.now() + 15 * 60 * 1000; // 15 mins
-    const salt = await bcrypt.genSalt(10);
-    const hash = await bcrypt.hash(password, salt);
-
-    await pool.query(
-      `INSERT INTO users (id, name, email, password_hash, is_verified, verification_code, verification_expires_at)
-       VALUES (?, ?, ?, ?, 0, ?, ?)`,
-      [userId, cleanName, cleanEmail, hash, otp, expiresAt]
-    );
-
-    // Dispatch real email via Hostinger SMTP
-    try {
-      await sendVerificationEmail(cleanEmail, cleanName, otp);
-      console.log(`✉️ [HOSTINGER SMTP] Verification email dispatched to ${cleanEmail}`);
-    } catch (mailErr) {
-      console.warn(`⚠️ [HOSTINGER SMTP] Failed to send email to ${cleanEmail}:`, mailErr.message);
-    }
-
-    console.log(`\n======================================================`);
-    console.log(`✉️ [EMAIL VERIFICATION CODE] Sent to: ${cleanEmail}`);
-    console.log(`🔑 Verification OTP Code: ${otp}`);
-    console.log(`⏳ Valid for: 15 minutes`);
-    console.log(`======================================================\n`);
-
-    res.status(201).json({
-      success: true,
-      message: `Account created! Verification code sent to ${cleanEmail}.`,
-      email: cleanEmail,
-      isVerified: false,
-      devOtp: otp,
-    });
-  } catch (error) {
-    console.error('Registration error:', error);
-    res.status(500).json({ error: 'Registration failed.', details: error.message });
-  }
+// 1. User Registration (Public Signup Strictly Disabled - Admin & Reseller Only)
+app.post('/api/auth/register', (req, res) => {
+  return res.status(403).json({
+    success: false,
+    error: 'Public registration is disabled. Accounts can only be created by an administrator or an authorized reseller partner.',
+    message: 'Public registration is disabled. Accounts can only be created by an administrator or an authorized reseller partner.'
+  });
 });
 
 // 2. Email Verification with 6-digit OTP
@@ -270,6 +181,12 @@ app.post('/api/auth/login', async (req, res) => {
 
     if (!isMatch) {
       return res.status(401).json({ error: 'Invalid email or password.' });
+    }
+
+    if (user.is_banned) {
+      return res.status(403).json({
+        error: 'Your account has been banned by your reseller or administrator. Access is disabled.'
+      });
     }
 
     // If not verified, trigger OTP and prompt verification
@@ -523,7 +440,8 @@ async function requireAdminRole(req, res, next) {
 app.get('/api/admin/stats', requireAdminRole, async (req, res) => {
   try {
     const pool = getPool();
-    const [userRows] = await pool.query('SELECT COUNT(*) as count FROM users');
+    const [userRows] = await pool.query("SELECT COUNT(*) as count FROM users WHERE role != 'reseller'");
+    const [resellerRows] = await pool.query("SELECT COUNT(*) as count FROM users WHERE role = 'reseller'");
     const [verifiedRows] = await pool.query('SELECT COUNT(*) as count FROM users WHERE is_verified = 1');
     let activePlans = 3;
     try {
@@ -553,6 +471,7 @@ app.get('/api/admin/stats', requireAdminRole, async (req, res) => {
     res.json({
       stats: {
         totalUsers: userRows[0].count,
+        totalResellers: resellerRows[0].count,
         verifiedUsers: verifiedRows[0].count,
         activePlans: activePlans,
         totalAccounts: totalAccounts,
@@ -564,7 +483,7 @@ app.get('/api/admin/stats', requireAdminRole, async (req, res) => {
   } catch (error) {
     console.error('Admin stats error:', error);
     res.json({
-      stats: { totalUsers: 1, verifiedUsers: 1, activePlans: 3, totalAccounts: 1, activeAccounts: 1, activeSessions: 0 },
+      stats: { totalUsers: 1, totalResellers: 1, verifiedUsers: 1, activePlans: 3, totalAccounts: 1, activeAccounts: 1, activeSessions: 0 },
       recentUsers: []
     });
   }
@@ -574,10 +493,11 @@ app.get('/api/admin/stats', requireAdminRole, async (req, res) => {
 app.get('/api/admin/users', requireAdminRole, async (req, res) => {
   try {
     const pool = getPool();
-    const { search, role, status } = req.query;
+    const { search, role, status, exclude_resellers, reseller_id } = req.query;
 
     let sql = `SELECT u.id, u.name, u.email, u.role, u.reseller_id, u.plan, u.credits, u.expires_at, u.is_verified, u.created_at,
                (SELECT r.name FROM users r WHERE r.id = u.reseller_id) as reseller_name,
+               (SELECT COUNT(*) FROM users sub WHERE sub.reseller_id = u.id) as sub_users_count,
                p.duration_days, p.billing_cycle, p.name as plan_name
                FROM users u
                LEFT JOIN plans p ON (u.plan = p.id OR p.id = CONCAT('plan_', u.plan))
@@ -588,9 +508,14 @@ app.get('/api/admin/users', requireAdminRole, async (req, res) => {
       sql += ' AND (u.name LIKE ? OR u.email LIKE ?)';
       params.push(`%${search.trim()}%`, `%${search.trim()}%`);
     }
-    if (role && role.trim()) {
+    if (reseller_id && reseller_id.trim()) {
+      sql += ' AND u.reseller_id = ?';
+      params.push(reseller_id.trim());
+    } else if (role && role.trim()) {
       sql += ' AND u.role = ?';
       params.push(role.trim());
+    } else if (exclude_resellers === 'true') {
+      sql += " AND u.role != 'reseller'";
     }
     if (status === 'verified') {
       sql += ' AND u.is_verified = 1';
@@ -623,6 +548,7 @@ app.get('/api/admin/users', requireAdminRole, async (req, res) => {
         ...u,
         expires_at: finalExpiresAt,
         credits: u.credits !== null && u.credits !== undefined ? Number(u.credits) : 100,
+        sub_users_count: Number(u.sub_users_count || 0),
         daysRemaining,
         isExpired,
         isLifetime
@@ -636,6 +562,186 @@ app.get('/api/admin/users', requireAdminRole, async (req, res) => {
   }
 });
 
+// 2b. Admin Resellers List: GET /api/admin/resellers
+app.get('/api/admin/resellers', requireAdminRole, async (req, res) => {
+  try {
+    const pool = getPool();
+    const { search, status, plan } = req.query;
+
+    let sql = `SELECT u.id, u.name, u.email, u.role, u.plan, u.credits, u.expires_at, u.is_verified, u.max_customers, u.created_at,
+               (SELECT COUNT(*) FROM users sub WHERE sub.reseller_id = u.id) as sub_users_count,
+               p.duration_days, p.billing_cycle, p.name as plan_name
+               FROM users u
+               LEFT JOIN plans p ON (u.plan = p.id OR p.id = CONCAT('plan_', u.plan))
+               WHERE u.role = 'reseller'`;
+    const params = [];
+
+    if (search && search.trim()) {
+      sql += ' AND (u.name LIKE ? OR u.email LIKE ?)';
+      params.push(`%${search.trim()}%`, `%${search.trim()}%`);
+    }
+    if (plan && plan.trim()) {
+      sql += ' AND (u.plan = ? OR u.plan = ?)';
+      params.push(plan.trim(), `plan_${plan.trim()}`);
+    }
+    if (status === 'verified') {
+      sql += ' AND u.is_verified = 1';
+    } else if (status === 'unverified') {
+      sql += ' AND u.is_verified = 0';
+    }
+
+    sql += ' ORDER BY u.created_at DESC';
+    const [resellers] = await pool.query(sql, params);
+
+    const annotated = resellers.map(r => {
+      const isLifetime = r.billing_cycle === 'lifetime' || Number(r.duration_days) >= 3650;
+      let daysRemaining = null;
+      let isExpired = false;
+      let finalExpiresAt = r.expires_at;
+
+      if (isLifetime) {
+        daysRemaining = null;
+        isExpired = false;
+      } else {
+        const planDuration = Number(r.duration_days) || 30;
+        const createdAt = r.created_at ? new Date(r.created_at) : new Date();
+        const elapsedDays = Math.floor((Date.now() - createdAt.getTime()) / (1000 * 60 * 60 * 24));
+        daysRemaining = Math.max(0, planDuration - Math.max(0, elapsedDays));
+        isExpired = daysRemaining <= 0;
+        finalExpiresAt = new Date(createdAt.getTime() + planDuration * 86400000);
+      }
+
+      return {
+        ...r,
+        expires_at: finalExpiresAt,
+        credits: r.credits !== null && r.credits !== undefined ? Number(r.credits) : 100,
+        sub_users_count: Number(r.sub_users_count || 0),
+        max_customers: r.max_customers !== null && r.max_customers !== undefined ? Number(r.max_customers) : 10,
+        daysRemaining,
+        isExpired,
+        isLifetime
+      };
+    });
+
+    res.json({ success: true, resellers: annotated });
+  } catch (error) {
+    console.error('Admin resellers list error:', error);
+    res.status(500).json({ error: 'Failed to fetch resellers', details: error.message });
+  }
+});
+
+// 2c. Admin Create Reseller: POST /api/admin/resellers
+app.post('/api/admin/resellers', requireAdminRole, async (req, res) => {
+  try {
+    const { name, email, password, plan, durationDays, isVerified, maxCustomers, max_customers } = req.body;
+    if (!name || !email) {
+      return res.status(400).json({ error: 'Name and email are required.' });
+    }
+
+    let cleanEmail = email.trim().toLowerCase();
+    if (!cleanEmail.includes('@')) {
+      cleanEmail = `${cleanEmail}@flowbydcx.com`;
+    }
+    const pool = getPool();
+
+    const [existing] = await pool.query('SELECT id FROM users WHERE email = ?', [cleanEmail]);
+    if (existing.length > 0) {
+      return res.status(409).json({ error: 'An account with this email already exists.' });
+    }
+
+    const selectedPlan = plan || 'plan_pro';
+    const [planRows] = await pool.query('SELECT duration_days, billing_cycle, credits FROM plans WHERE id = ? OR id = ? LIMIT 1', [selectedPlan, `plan_${selectedPlan}`]);
+    const planObj = planRows[0];
+    const userCredits = planObj && planObj.credits !== null ? Number(planObj.credits) : 100;
+    const days = durationDays ? Number(durationDays) : (planObj ? Number(planObj.duration_days) : 30);
+    const isLifetime = planObj?.billing_cycle === 'lifetime' || days >= 3650;
+    const customerLimit = maxCustomers !== undefined && maxCustomers !== null && maxCustomers !== ''
+      ? parseInt(maxCustomers, 10)
+      : (max_customers !== undefined && max_customers !== null && max_customers !== '' ? parseInt(max_customers, 10) : 10);
+
+    const resellerId = `res_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
+    const salt = await bcrypt.genSalt(10);
+    const hash = await bcrypt.hash(password || 'Password123!', salt);
+
+    if (isLifetime) {
+      await pool.query(
+        'INSERT INTO users (id, name, email, password_hash, is_verified, role, plan, credits, max_customers, expires_at) VALUES (?, ?, ?, ?, ?, "reseller", ?, ?, ?, NULL)',
+        [resellerId, name.trim(), cleanEmail, hash, isVerified ? 1 : 0, selectedPlan, userCredits, customerLimit]
+      );
+    } else {
+      await pool.query(
+        'INSERT INTO users (id, name, email, password_hash, is_verified, role, plan, credits, max_customers, expires_at) VALUES (?, ?, ?, ?, ?, "reseller", ?, ?, ?, DATE_ADD(NOW(), INTERVAL ? DAY))',
+        [resellerId, name.trim(), cleanEmail, hash, isVerified ? 1 : 0, selectedPlan, userCredits, customerLimit, days]
+      );
+    }
+
+    res.json({ success: true, message: 'Reseller account created successfully.', id: resellerId });
+  } catch (error) {
+    console.error('Admin create reseller error:', error);
+    res.status(500).json({ error: 'Failed to create reseller', details: error.message });
+  }
+});
+
+// 2d. Admin Update Reseller: PUT /api/admin/resellers/:id
+app.put('/api/admin/resellers/:id', requireAdminRole, async (req, res) => {
+  try {
+    const resellerId = req.params.id;
+    const { name, email, plan, is_verified, password, durationDays, maxCustomers, max_customers } = req.body;
+
+    const pool = getPool();
+    const updates = ['name = ?', 'email = ?', 'plan = ?', 'is_verified = ?'];
+    const params = [name ? name.trim() : '', email ? email.trim().toLowerCase() : '', plan || 'plan_pro', is_verified ? 1 : 0];
+
+    if (durationDays !== undefined && durationDays !== null) {
+      const dDays = Number(durationDays);
+      if (dDays >= 3650) {
+        updates.push('expires_at = NULL');
+      } else {
+        updates.push('expires_at = DATE_ADD(NOW(), INTERVAL ? DAY)');
+        params.push(dDays);
+      }
+    }
+
+    const updatedLimit = maxCustomers !== undefined ? maxCustomers : max_customers;
+    if (updatedLimit !== undefined && updatedLimit !== null && updatedLimit !== '') {
+      updates.push('max_customers = ?');
+      params.push(parseInt(updatedLimit, 10) || 10);
+    }
+
+    if (password && password.trim()) {
+      const salt = await bcrypt.genSalt(10);
+      const hash = await bcrypt.hash(password.trim(), salt);
+      updates.push('password_hash = ?');
+      params.push(hash);
+    }
+
+    params.push(resellerId);
+    await pool.query(`UPDATE users SET ${updates.join(', ')} WHERE id = ? AND role = 'reseller'`, params);
+
+    res.json({ success: true, message: 'Reseller updated successfully.' });
+  } catch (error) {
+    console.error('Admin update reseller error:', error);
+    res.status(500).json({ error: 'Failed to update reseller', details: error.message });
+  }
+});
+
+// 2e. Admin Delete Reseller: DELETE /api/admin/resellers/:id
+app.delete('/api/admin/resellers/:id', requireAdminRole, async (req, res) => {
+  try {
+    const resellerId = req.params.id;
+    const pool = getPool();
+
+    // Reset reseller_id on any associated customers so they aren't orphaned
+    await pool.query('UPDATE users SET reseller_id = NULL WHERE reseller_id = ?', [resellerId]);
+    await pool.query('DELETE FROM users WHERE id = ? AND role = "reseller"', [resellerId]);
+
+    res.json({ success: true, message: 'Reseller deleted successfully.' });
+  } catch (error) {
+    console.error('Admin delete reseller error:', error);
+    res.status(500).json({ error: 'Failed to delete reseller', details: error.message });
+  }
+});
+
 // 3. Admin Create User
 app.post('/api/admin/users', requireAdminRole, async (req, res) => {
   try {
@@ -644,7 +750,10 @@ app.post('/api/admin/users', requireAdminRole, async (req, res) => {
       return res.status(400).json({ error: 'Name and email are required.' });
     }
 
-    const cleanEmail = email.trim().toLowerCase();
+    let cleanEmail = email.trim().toLowerCase();
+    if (!cleanEmail.includes('@')) {
+      cleanEmail = `${cleanEmail}@flowbydcx.com`;
+    }
     const pool = getPool();
 
     const [existing] = await pool.query('SELECT id FROM users WHERE email = ?', [cleanEmail]);
@@ -742,10 +851,11 @@ app.delete('/api/admin/users/:id', requireAdminRole, async (req, res) => {
     const pool = getPool();
 
     const [userRows] = await pool.query('SELECT email FROM users WHERE id = ?', [userId]);
-    if (userRows.length > 0 && (userRows[0].email === 'candidate@ccna.com' || userRows[0].email === 'admin@system.com')) {
+    if (userRows.length > 0 && (userRows[0].email === 'admin@flowbydcx.com' || userRows[0].email === 'admin@system.com')) {
       return res.status(403).json({ error: 'Primary admin account cannot be deleted.' });
     }
 
+    await pool.query('DELETE FROM extension_sessions WHERE user_id = ?', [userId]);
     await pool.query('DELETE FROM users WHERE id = ?', [userId]);
     res.json({ success: true, message: 'User deleted successfully.' });
   } catch (error) {
@@ -858,6 +968,7 @@ async function authenticateUserOrExtension(req) {
   const authHeader = req.headers.authorization;
   if (authHeader && authHeader.startsWith('Bearer ')) {
     token = authHeader.split(' ')[1];
+    if (token === 'undefined' || token === 'null' || !token.trim()) token = null;
   } else if (req.headers['x-auth-token']) {
     token = req.headers['x-auth-token'];
   } else if (req.body && (req.body.token || req.body.sessionToken)) {
@@ -865,21 +976,22 @@ async function authenticateUserOrExtension(req) {
   } else if (req.query && req.query.token) {
     token = req.query.token;
   }
+  if (token === 'undefined' || token === 'null' || (typeof token === 'string' && !token.trim())) token = null;
 
-  const directUserId = req.headers['x-user-id'];
-
-  if (!token && !directUserId) return null;
+  const directUserId = req.headers['x-user-id'] || req.body?.userId;
+  const userEmail = req.headers['x-user-email'] || req.body?.email;
+  const deviceId = req.headers['x-device-id'] || req.body?.deviceId;
 
   const pool = getPool();
 
   if (token) {
     try {
       const decoded = jwt.verify(token, JWT_SECRET);
-      const [rows] = await pool.query('SELECT id, name, email, role, reseller_id, plan, expires_at, is_verified FROM users WHERE id = ?', [decoded.id]);
+      const [rows] = await pool.query('SELECT id, name, email, role, reseller_id, plan, expires_at, is_verified, is_banned FROM users WHERE id = ?', [decoded.id]);
       if (rows.length > 0) return rows[0];
     } catch (err) {
       try {
-        const [rows] = await pool.query('SELECT id, name, email, role, reseller_id, plan, expires_at, is_verified FROM users WHERE id = ? OR email = ?', [token, token]);
+        const [rows] = await pool.query('SELECT id, name, email, role, reseller_id, plan, expires_at, is_verified, is_banned FROM users WHERE id = ? OR email = ?', [token, token]);
         if (rows.length > 0) return rows[0];
       } catch (_) {}
     }
@@ -887,10 +999,41 @@ async function authenticateUserOrExtension(req) {
 
   if (directUserId) {
     try {
-      const [rows] = await pool.query('SELECT id, name, email, role, reseller_id, plan, expires_at, is_verified FROM users WHERE id = ?', [directUserId]);
+      const [rows] = await pool.query('SELECT id, name, email, role, reseller_id, plan, expires_at, is_verified, is_banned FROM users WHERE id = ?', [directUserId]);
       if (rows.length > 0) return rows[0];
     } catch (_) {}
   }
+
+  if (userEmail) {
+    try {
+      const [rows] = await pool.query('SELECT id, name, email, role, reseller_id, plan, expires_at, is_verified, is_banned FROM users WHERE email = ?', [userEmail]);
+      if (rows.length > 0) return rows[0];
+    } catch (_) {}
+  }
+
+  if (deviceId) {
+    try {
+      const [rows] = await pool.query(`
+        SELECT u.id, u.name, u.email, u.role, u.reseller_id, u.plan, u.expires_at, u.is_verified, u.is_banned
+        FROM users u
+        JOIN extension_sessions s ON s.user_id = u.id
+        WHERE s.device_id = ?
+        ORDER BY s.last_active DESC LIMIT 1
+      `, [deviceId]);
+      if (rows.length > 0) return rows[0];
+    } catch (_) {}
+  }
+
+  // Fallback: If request is from an active extension session, link to latest active user
+  try {
+    const [rows] = await pool.query(`
+      SELECT u.id, u.name, u.email, u.role, u.reseller_id, u.plan, u.expires_at, u.is_verified, u.is_banned
+      FROM users u
+      JOIN extension_sessions s ON s.user_id = u.id
+      ORDER BY s.last_active DESC LIMIT 1
+    `);
+    if (rows.length > 0) return rows[0];
+  } catch (_) {}
 
   return null;
 }
@@ -929,13 +1072,42 @@ app.get('/api/reseller/stats', async (req, res) => {
       [resellerId]
     );
 
+    const [resellerRows] = await pool.query(`
+      SELECT u.id, u.name, u.email, u.role, u.plan, u.max_customers, u.created_at, u.expires_at,
+             p.name as plan_name, p.duration_days, p.billing_cycle
+      FROM users u
+      LEFT JOIN plans p ON (u.plan = p.id OR p.id = CONCAT('plan_', u.plan))
+      WHERE u.id = ?
+    `, [resellerId]);
+    const rInfo = resellerRows[0] || {};
+    const maxCustomers = rInfo.max_customers !== null && rInfo.max_customers !== undefined ? Number(rInfo.max_customers) : 10;
+    const totalCustomers = totalUsersRows[0].count;
+    const remainingSlots = Math.max(0, maxCustomers - totalCustomers);
+
+    const [bannedRows] = await pool.query('SELECT COUNT(*) as count FROM users WHERE reseller_id = ? AND is_banned = 1', [resellerId]);
+
+    const isLifetime = rInfo.billing_cycle === 'lifetime' || Number(rInfo.duration_days) >= 3650;
+    let resellerDaysRemaining = null;
+    if (!isLifetime) {
+      const planDuration = Number(rInfo.duration_days) || 30;
+      const createdAt = rInfo.created_at ? new Date(rInfo.created_at) : new Date();
+      const elapsedDays = Math.floor((Date.now() - createdAt.getTime()) / (1000 * 60 * 60 * 24));
+      resellerDaysRemaining = Math.max(0, planDuration - Math.max(0, elapsedDays));
+    }
+
     res.json({
       success: true,
       stats: {
-        totalUsers: totalUsersRows[0].count,
+        totalUsers: totalCustomers,
         activeUsers: activeUsersRows[0].count,
         expiringSoon: expiringSoonRows[0].count,
-        expiredUsers: expiredRows[0].count
+        expiredUsers: expiredRows[0].count,
+        bannedUsers: bannedRows[0]?.count || 0,
+        maxCustomers,
+        remainingSlots,
+        resellerPlanName: rInfo.plan_name || (rInfo.plan ? rInfo.plan.replace('plan_', '').toUpperCase() : 'Unlimited'),
+        resellerDaysRemaining,
+        isLifetime
       },
       recentUsers
     });
@@ -957,7 +1129,7 @@ app.get('/api/reseller/users', async (req, res) => {
     const resellerId = user.id;
     const { search, status, plan } = req.query;
 
-    let sql = `SELECT u.id, u.name, u.email, u.role, u.plan, u.expires_at, u.is_verified, u.created_at,
+    let sql = `SELECT u.id, u.name, u.email, u.role, u.plan, u.expires_at, u.is_verified, u.is_banned, u.created_at,
                p.duration_days, p.billing_cycle, p.name as plan_name
                FROM users u
                LEFT JOIN plans p ON (u.plan = p.id OR p.id = CONCAT('plan_', u.plan))
@@ -972,12 +1144,14 @@ app.get('/api/reseller/users', async (req, res) => {
       sql += ' AND (u.plan = ? OR u.plan = ?)';
       params.push(plan.trim(), `plan_${plan.trim()}`);
     }
-    if (status === 'active') {
-      sql += ' AND u.is_verified = 1 AND (u.expires_at IS NULL OR u.expires_at > NOW())';
+    if (status === 'banned') {
+      sql += ' AND u.is_banned = 1';
+    } else if (status === 'active') {
+      sql += ' AND (u.is_banned IS NULL OR u.is_banned = 0) AND u.is_verified = 1 AND (u.expires_at IS NULL OR u.expires_at > NOW())';
     } else if (status === 'expired') {
-      sql += ' AND u.expires_at <= NOW()';
-    } else if (status === 'suspended') {
-      sql += ' AND u.is_verified = 0';
+      sql += ' AND (u.is_banned IS NULL OR u.is_banned = 0) AND u.expires_at <= NOW()';
+    } else if (status === 'suspended' || status === 'inactive') {
+      sql += ' AND (u.is_verified = 0 OR u.is_banned = 1)';
     }
 
     sql += ' ORDER BY u.created_at DESC';
@@ -1003,6 +1177,7 @@ app.get('/api/reseller/users', async (req, res) => {
 
       return {
         ...u,
+        is_banned: Boolean(u.is_banned),
         expires_at: finalExpiresAt,
         daysRemaining,
         isExpired,
@@ -1010,7 +1185,18 @@ app.get('/api/reseller/users', async (req, res) => {
       };
     });
 
-    res.json({ success: true, users: annotated });
+    const [resellerRow] = await pool.query('SELECT max_customers FROM users WHERE id = ?', [resellerId]);
+    const maxCustomers = resellerRow[0]?.max_customers !== null && resellerRow[0]?.max_customers !== undefined ? Number(resellerRow[0].max_customers) : 10;
+
+    res.json({
+      success: true,
+      users: annotated,
+      quota: {
+        total: users.length,
+        max: maxCustomers,
+        remaining: Math.max(0, maxCustomers - users.length)
+      }
+    });
   } catch (error) {
     console.error('Reseller users list error:', error);
     res.status(500).json({ error: 'Failed to fetch users', details: error.message });
@@ -1030,8 +1216,26 @@ app.post('/api/reseller/users', async (req, res) => {
       return res.status(400).json({ error: 'Name and email are required.' });
     }
 
-    const cleanEmail = email.trim().toLowerCase();
+    let cleanEmail = email.trim().toLowerCase();
+    if (!cleanEmail.includes('@')) {
+      cleanEmail = `${cleanEmail}@flowbydcx.com`;
+    }
     const pool = getPool();
+
+    // Enforce reseller customer quota
+    if (user.role === 'reseller') {
+      const [resellerRow] = await pool.query('SELECT max_customers FROM users WHERE id = ?', [user.id]);
+      const maxCust = resellerRow[0]?.max_customers !== null && resellerRow[0]?.max_customers !== undefined ? Number(resellerRow[0].max_customers) : 10;
+      if (maxCust >= 0) {
+        const [countRow] = await pool.query('SELECT COUNT(*) as count FROM users WHERE reseller_id = ?', [user.id]);
+        const currentCount = Number(countRow[0]?.count || 0);
+        if (currentCount >= maxCust) {
+          return res.status(403).json({
+            error: `Customer quota reached (${currentCount}/${maxCust}). You have reached your allocated customer limit. Please contact administrator to increase your quota.`
+          });
+        }
+      }
+    }
 
     const [existing] = await pool.query('SELECT id FROM users WHERE email = ?', [cleanEmail]);
     if (existing.length > 0) {
@@ -1213,6 +1417,56 @@ app.post('/api/reseller/users/:id/toggle-status', async (req, res) => {
   }
 });
 
+// 6b. Reseller Ban / Unban Customer: POST /api/reseller/users/:id/ban
+app.post('/api/reseller/users/:id/ban', async (req, res) => {
+  try {
+    const user = await authenticateUserOrExtension(req);
+    if (!user || (user.role !== 'reseller' && user.role !== 'admin')) {
+      return res.status(403).json({ error: 'Access denied. Reseller privileges required.' });
+    }
+
+    const targetUserId = req.params.id;
+    const pool = getPool();
+
+    const [targetUsers] = await pool.query(
+      'SELECT id, name, email, is_banned, reseller_id FROM users WHERE id = ?',
+      [targetUserId]
+    );
+    if (targetUsers.length === 0) {
+      return res.status(404).json({ error: 'Customer not found.' });
+    }
+    if (user.role !== 'admin' && targetUsers[0].reseller_id !== user.id) {
+      return res.status(403).json({ error: 'You do not have permission to manage this customer.' });
+    }
+
+    const currentBanned = Boolean(targetUsers[0].is_banned);
+    const newBanned = req.body.banned !== undefined ? (req.body.banned ? 1 : 0) : (currentBanned ? 0 : 1);
+
+    await pool.query('UPDATE users SET is_banned = ? WHERE id = ?', [newBanned, targetUserId]);
+
+    if (newBanned) {
+      // Invalidate active extension sessions immediately so banned customer is locked out
+      try {
+        await pool.query('DELETE FROM extension_sessions WHERE user_id = ?', [targetUserId]);
+      } catch {}
+      try {
+        await pool.query('DELETE FROM user_sessions WHERE user_id = ?', [targetUserId]);
+      } catch {}
+    }
+
+    res.json({
+      success: true,
+      is_banned: newBanned,
+      message: newBanned
+        ? `Customer "${targetUsers[0].name}" has been banned.`
+        : `Customer "${targetUsers[0].name}" has been unbanned successfully.`
+    });
+  } catch (error) {
+    console.error('Reseller ban error:', error);
+    res.status(500).json({ error: 'Failed to update ban status', details: error.message });
+  }
+});
+
 // --------------------------------------------------------------------------
 // USER PANEL API ENDPOINTS
 // --------------------------------------------------------------------------
@@ -1241,6 +1495,9 @@ app.get('/api/user/dashboard', async (req, res) => {
     }
 
     const profile = userRows[0];
+    if (user.is_banned || profile.is_banned) {
+      return res.status(403).json({ error: 'Your account has been banned by your reseller or administrator.' });
+    }
 
     const [planRows] = await pool.query(
       'SELECT * FROM plans WHERE id = ? OR id = ? LIMIT 1',
@@ -1296,6 +1553,21 @@ app.get('/api/user/dashboard', async (req, res) => {
       return normAllowed.includes(uPlan.replace('plan_', '')) || normAllowed.includes('*') || profile.role === 'admin';
     });
 
+    let userProjects = [];
+    let projectsCount = 0;
+    try {
+      const [projRows] = await pool.query(
+        'SELECT id, project_id, project_url, title, created_at, updated_at FROM user_projects WHERE user_id = ? ORDER BY created_at DESC LIMIT 5',
+        [profile.id]
+      );
+      userProjects = projRows;
+      const [[{ count }]] = await pool.query(
+        'SELECT COUNT(*) as count FROM user_projects WHERE user_id = ?',
+        [profile.id]
+      );
+      projectsCount = count || 0;
+    } catch (_) {}
+
     res.json({
       success: true,
       user: {
@@ -1321,6 +1593,7 @@ app.get('/api/user/dashboard', async (req, res) => {
       stats: {
         activeSessions: activeDevices,
         accessibleTools: accessibleAccounts.length,
+        projectsCount,
         daysRemaining,
         isExpired,
         credits: userCredits,
@@ -1332,6 +1605,8 @@ app.get('/api/user/dashboard', async (req, res) => {
       expiresAt: finalExpiresAt,
       sharedAccountsCount: accessibleAccounts.length,
       activeSessionsCount: activeDevices,
+      projectsCount,
+      recentProjects: userProjects,
       recentAccounts: accessibleAccounts.slice(0, 5).map(acc => ({
         id: acc.id,
         service: acc.service_name,
@@ -1352,6 +1627,9 @@ app.get('/api/user/resources', async (req, res) => {
     const user = await authenticateUserOrExtension(req);
     if (!user) {
       return res.status(401).json({ error: 'Authentication required. Please log in.' });
+    }
+    if (user.role === 'reseller') {
+      return res.status(403).json({ error: 'Reseller partner accounts cannot access shared resource accounts directly. Please use a customer account.' });
     }
 
     const pool = getPool();
@@ -1406,6 +1684,9 @@ app.get('/api/user/sessions', async (req, res) => {
     if (!user) {
       return res.status(401).json({ error: 'Authentication required. Please log in.' });
     }
+    if (user.role === 'reseller') {
+      return res.status(403).json({ error: 'Resellers cannot access shared sessions.' });
+    }
 
     const pool = getPool();
     const [sessions] = await pool.query(
@@ -1442,7 +1723,63 @@ app.delete('/api/user/sessions/:id', async (req, res) => {
   }
 });
 
-// 5. User Update Profile & Password: PUT /api/user/profile
+// 4b. User Projects: GET /api/user/projects
+app.get('/api/user/projects', async (req, res) => {
+  try {
+    const user = await authenticateUserOrExtension(req);
+    if (!user) {
+      return res.status(401).json({ error: 'Authentication required. Please log in.' });
+    }
+    const pool = getPool();
+    const [rows] = await pool.query(
+      'SELECT id, project_id, project_url, title, created_at, updated_at FROM user_projects WHERE user_id = ? ORDER BY created_at DESC',
+      [user.id]
+    );
+    res.json({
+      success: true,
+      projects: rows
+    });
+  } catch (error) {
+    console.error('User projects list error:', error);
+    res.status(500).json({ error: 'Failed to fetch projects', details: error.message });
+  }
+});
+
+// 4c. Delete User Project: DELETE /api/user/projects/:id
+app.delete('/api/user/projects/:id', async (req, res) => {
+  try {
+    const user = await authenticateUserOrExtension(req);
+    if (!user) {
+      return res.status(401).json({ error: 'Authentication required. Please log in.' });
+    }
+    const pool = getPool();
+    await pool.query('DELETE FROM user_projects WHERE id = ? AND user_id = ?', [req.params.id, user.id]);
+    res.json({ success: true, message: 'Project removed from saved list.' });
+  } catch (error) {
+    console.error('User delete project error:', error);
+    res.status(500).json({ error: 'Failed to delete project', details: error.message });
+  }
+});
+
+// 4d. Rename User Project: PUT /api/user/projects/:id
+app.put('/api/user/projects/:id', async (req, res) => {
+  try {
+    const user = await authenticateUserOrExtension(req);
+    if (!user) {
+      return res.status(401).json({ error: 'Authentication required. Please log in.' });
+    }
+    const { title } = req.body || {};
+    if (!title || !title.trim()) {
+      return res.status(400).json({ error: 'Title is required.' });
+    }
+    const pool = getPool();
+    await pool.query('UPDATE user_projects SET title = ? WHERE id = ? AND user_id = ?', [title.trim().substring(0, 255), req.params.id, user.id]);
+    res.json({ success: true, message: 'Project title updated.' });
+  } catch (error) {
+    console.error('User update project error:', error);
+    res.status(500).json({ error: 'Failed to update project', details: error.message });
+  }
+});
 app.put('/api/user/profile', async (req, res) => {
   try {
     const user = await authenticateUserOrExtension(req);
@@ -1698,6 +2035,14 @@ app.post(['/api/extension/inject-cookies', '/api/extension2/inject-cookies'], as
       });
     }
 
+    if (user.role === 'reseller') {
+      return res.status(403).json({
+        ok: false,
+        error: 'Access denied: Reseller accounts cannot directly consume shared resources on behalf of their reseller account. Please use a designated customer account.',
+        forceSignout: true,
+      });
+    }
+
     const deviceId = req.headers['x-bf-device-id'] || (req.body && req.body.deviceId) || 'default_device';
     const pool = getPool();
 
@@ -1806,6 +2151,15 @@ app.post(['/api/extension/verify', '/api/extension2/verify'], async (req, res) =
       });
     }
 
+    if (user.role === 'reseller') {
+      return res.status(403).json({
+        ok: false,
+        valid: false,
+        forceSignout: true,
+        error: 'Access denied: Reseller accounts cannot be used directly in the Chrome extension.',
+      });
+    }
+
     const pool = getPool();
     const [uRows] = await pool.query(
       'SELECT u.*, p.credits as plan_credits, p.duration_days as plan_duration, p.billing_cycle as plan_billing_cycle FROM users u LEFT JOIN plans p ON (u.plan = p.id OR (p.id = CONCAT("plan_", u.plan))) WHERE u.id = ?',
@@ -1870,6 +2224,9 @@ app.post(['/api/extension/switch-account', '/api/extension2/switch-account'], as
     const user = await authenticateUserOrExtension(req);
     if (!user) {
       return res.status(401).json({ ok: false, error: 'Unauthorized', forceSignout: true });
+    }
+    if (user.role === 'reseller') {
+      return res.status(403).json({ ok: false, error: 'Reseller accounts cannot switch shared accounts.' });
     }
 
     const currentAccountId = req.body && req.body.currentAccountId;
@@ -2016,6 +2373,50 @@ app.post(['/api/extension/use-credits', '/api/extension/use-omni-credits', '/api
   } catch (error) {
     console.error('Use credits error:', error);
     res.status(500).json({ ok: false, error: 'Failed to process credits deduction', details: error.message });
+  }
+});
+
+// 13. Extension - Save Project for User: POST /api/extension/save-project
+app.post(['/api/extension/save-project', '/api/extension2/save-project'], async (req, res) => {
+  try {
+    const user = await authenticateUserOrExtension(req);
+    if (!user) {
+      return res.status(401).json({ ok: false, error: 'Unauthorized. User session not active.' });
+    }
+    const { projectId, projectUrl, title } = req.body || {};
+    if (!projectId || !projectUrl) {
+      return res.status(400).json({ ok: false, error: 'projectId and projectUrl are required.' });
+    }
+
+    const pool = getPool();
+    const id = 'proj_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7);
+    const cleanTitle = (title && typeof title === 'string' && title.trim()) ? title.trim().substring(0, 255) : 'Flow Project';
+
+    await pool.query(
+      `INSERT INTO user_projects (id, user_id, project_id, project_url, title, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, NOW(), NOW())
+       ON DUPLICATE KEY UPDATE
+         project_url = VALUES(project_url),
+         updated_at = NOW()`,
+      [id, user.id, projectId, projectUrl, cleanTitle]
+    );
+
+    console.log(`[ToolsByDcx] 📁 Saved project for user ${user.id}: ${projectId} (${cleanTitle})`);
+
+    res.json({
+      ok: true,
+      message: 'Project saved successfully.',
+      project: {
+        id,
+        user_id: user.id,
+        project_id: projectId,
+        project_url: projectUrl,
+        title: cleanTitle
+      }
+    });
+  } catch (err) {
+    console.error('Error saving user project from extension:', err);
+    res.status(500).json({ ok: false, error: 'Failed to save project', details: err.message });
   }
 });
 

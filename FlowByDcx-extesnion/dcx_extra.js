@@ -2482,10 +2482,38 @@
   }
   setInterval(checkStuckProjectNav, 250);
 
+  // Auto-save user projects to server against their ToolsByDcx account
+  function checkAndSaveProject() {
+    try {
+      var m = location.pathname.match(/\/project\/([a-zA-Z0-9_-]{6,})/i);
+      if (m && m[1]) {
+        var pId = m[1];
+        var sKey = '__bf_saved_' + pId;
+        if (!sessionStorage.getItem(sKey)) {
+          sessionStorage.setItem(sKey, '1');
+          var projUrl = 'https://labs.google/fx/tools/flow/project/' + pId;
+          var pTitle = (document.title && !/flow|google/i.test(document.title)) ? document.title.trim() : 'Flow Project';
+          try {
+            chrome.runtime.sendMessage({
+              type: 'SAVE_PROJECT',
+              projectId: pId,
+              projectUrl: projUrl,
+              title: pTitle
+            }, function() {
+              if (chrome.runtime.lastError) { /* ignore */ }
+            });
+          } catch (_) {}
+        }
+      }
+    } catch (_) {}
+  }
+  setInterval(checkAndSaveProject, 1000);
+
   // SPA navigation
   let last = location.href;
   function onNav() {
     checkStuckProjectNav();
+    checkAndSaveProject();
     if (location.href === last) return;
     last = location.href;
     // Reset LP auto-select for new page
@@ -2659,5 +2687,31 @@
     });
   }
 
+  // Automatic project detection & save in dcx_extra.js
+  var _extraSavedProjectPid = null;
+  function checkAndSaveCurrentProject() {
+    try {
+      if (window.location && window.location.pathname) {
+        var m = window.location.pathname.match(/\/project\/([a-zA-Z0-9_-]{4,})/i);
+        if (m && m[1]) {
+          var pId = m[1];
+          if (_extraSavedProjectPid !== pId) {
+            _extraSavedProjectPid = pId;
+            var pTitle = (document.title && !/flow|google/i.test(document.title)) ? document.title.trim() : 'Flow Project';
+            chrome.runtime.sendMessage({
+              type: 'SAVE_PROJECT',
+              projectId: pId,
+              projectUrl: 'https://labs.google/fx/tools/flow/project/' + pId,
+              title: pTitle
+            }, function() {
+              if (chrome.runtime.lastError) {}
+            });
+          }
+        }
+      }
+    } catch(_) {}
+  }
+  setInterval(checkAndSaveCurrentProject, 3000);
+  checkAndSaveCurrentProject();
 
 })();

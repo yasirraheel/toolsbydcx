@@ -9,6 +9,8 @@ function AdminPlans() {
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [featureInput, setFeatureInput] = useState('');
   const [actionFeedback, setActionFeedback] = useState(null);
+  const [editingFeatureIdx, setEditingFeatureIdx] = useState(null);
+  const [editingFeatureText, setEditingFeatureText] = useState('');
 
 const API_BASE = process.env.REACT_APP_API_URL || (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' ? 'http://localhost:5000/api' : '/api');
 
@@ -122,6 +124,29 @@ const API_BASE = process.env.REACT_APP_API_URL || (window.location.hostname === 
     const updated = [...(editingPlan.features || [])];
     updated.splice(index, 1);
     setEditingPlan({ ...editingPlan, features: updated });
+    if (editingFeatureIdx === index) {
+      setEditingFeatureIdx(null);
+      setEditingFeatureText('');
+    }
+  };
+
+  const handleStartEditFeature = (index, text) => {
+    setEditingFeatureIdx(index);
+    setEditingFeatureText(text);
+  };
+
+  const handleSaveFeatureEdit = (index) => {
+    if (!editingFeatureText.trim()) return;
+    const updated = [...(editingPlan.features || [])];
+    updated[index] = editingFeatureText.trim();
+    setEditingPlan({ ...editingPlan, features: updated });
+    setEditingFeatureIdx(null);
+    setEditingFeatureText('');
+  };
+
+  const handleCancelFeatureEdit = () => {
+    setEditingFeatureIdx(null);
+    setEditingFeatureText('');
   };
 
   return (
@@ -173,8 +198,8 @@ const API_BASE = process.env.REACT_APP_API_URL || (window.location.hostname === 
                 price: 9.99,
                 billingCycle: 'monthly',
                 durationDays: 30,
-                description: 'Complete access to AI video creation tools.',
-                features: ['Full AI Video Generation Access', 'Priority High-Speed Rendering', 'ToolsByDcx Extension Access'],
+                description: 'Complete access to premium tools and services.',
+                features: ['Full Tool Access', 'Priority Fast Routing', 'ToolsByDcx Extension Access'],
                 isActive: true
               });
               setIsCreateOpen(true);
@@ -342,7 +367,7 @@ const API_BASE = process.env.REACT_APP_API_URL || (window.location.hostname === 
                     <input
                       type="text"
                       className="admin-form-input"
-                      placeholder="Add feature e.g. HD Quality, Priority Rendering"
+                      placeholder="Add feature e.g. Multi-Account Pool, Fast Rotation"
                       value={featureInput}
                       onChange={(e) => setFeatureInput(e.target.value)}
                       onKeyDown={(e) => {
@@ -362,29 +387,104 @@ const API_BASE = process.env.REACT_APP_API_URL || (window.location.hostname === 
                   </div>
 
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                    {editingPlan.features && editingPlan.features.map((feat, idx) => (
-                      <div
-                        key={idx}
-                        style={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'space-between',
-                          background: '#090d16',
-                          padding: '6px 12px',
-                          borderRadius: '6px',
-                          fontSize: '13px'
-                        }}
-                      >
-                        <span>✓ {feat}</span>
-                        <button
-                          type="button"
-                          onClick={() => handleRemoveFeature(idx)}
-                          style={{ background: 'transparent', border: 'none', color: '#f87171', cursor: 'pointer', fontWeight: 800 }}
+                    {editingPlan.features && editingPlan.features.map((feat, idx) => {
+                      const isEditing = editingFeatureIdx === idx;
+                      return (
+                        <div
+                          key={idx}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            gap: '8px',
+                            background: '#090d16',
+                            padding: '6px 12px',
+                            borderRadius: '6px',
+                            fontSize: '13px',
+                            border: isEditing ? '1px solid #38bdf8' : '1px solid transparent'
+                          }}
                         >
-                          ✕
-                        </button>
-                      </div>
-                    ))}
+                          {isEditing ? (
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', width: '100%' }}>
+                              <input
+                                type="text"
+                                className="admin-form-input"
+                                style={{ padding: '4px 8px', fontSize: '13px', flex: 1 }}
+                                value={editingFeatureText}
+                                onChange={(e) => setEditingFeatureText(e.target.value)}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') {
+                                    e.preventDefault();
+                                    handleSaveFeatureEdit(idx);
+                                  } else if (e.key === 'Escape') {
+                                    handleCancelFeatureEdit();
+                                  }
+                                }}
+                                autoFocus
+                              />
+                              <button
+                                type="button"
+                                className="btn-admin-primary"
+                                style={{ padding: '4px 10px', fontSize: '12px' }}
+                                onClick={() => handleSaveFeatureEdit(idx)}
+                                title="Save changes"
+                              >
+                                Save
+                              </button>
+                              <button
+                                type="button"
+                                className="btn-admin-secondary"
+                                style={{ padding: '4px 10px', fontSize: '12px' }}
+                                onClick={handleCancelFeatureEdit}
+                                title="Cancel edit"
+                              >
+                                Cancel
+                              </button>
+                            </div>
+                          ) : (
+                            <>
+                              <span style={{ flex: 1, color: '#f1f5f9' }}>✓ {feat}</span>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                <button
+                                  type="button"
+                                  onClick={() => handleStartEditFeature(idx, feat)}
+                                  style={{
+                                    background: 'rgba(56, 189, 248, 0.15)',
+                                    border: '1px solid rgba(56, 189, 248, 0.3)',
+                                    color: '#38bdf8',
+                                    borderRadius: '4px',
+                                    padding: '3px 8px',
+                                    fontSize: '12px',
+                                    cursor: 'pointer',
+                                    fontWeight: 600
+                                  }}
+                                  title="Edit feature text"
+                                >
+                                  ✏️ Edit
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleRemoveFeature(idx)}
+                                  style={{
+                                    background: 'rgba(239, 68, 68, 0.15)',
+                                    border: '1px solid rgba(239, 68, 68, 0.3)',
+                                    color: '#f87171',
+                                    borderRadius: '4px',
+                                    padding: '3px 8px',
+                                    fontSize: '12px',
+                                    cursor: 'pointer',
+                                    fontWeight: 700
+                                  }}
+                                  title="Delete feature"
+                                >
+                                  ✕
+                                </button>
+                              </div>
+                            </>
+                          )}
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
               </div>

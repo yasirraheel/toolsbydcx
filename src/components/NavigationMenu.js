@@ -167,16 +167,6 @@ function NavigationMenu({
                   </span>
                   <span>Sign In</span>
                 </button>
-                <button
-                  type="button"
-                  className="nav-menu-item nav-menu-auth-item nav-menu-signup-item"
-                  onClick={() => { onOpenAuth && onOpenAuth("signup"); setIsOpen(false); }}
-                >
-                  <span className="nav-menu-icon">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="8.5" cy="7" r="4"/><line x1="20" y1="8" x2="20" y2="14"/><line x1="23" y1="11" x2="17" y2="11"/></svg>
-                  </span>
-                  <span>Create Account</span>
-                </button>
               </>
             )}
           </div>
@@ -184,7 +174,7 @@ function NavigationMenu({
       </div>
 
       <div className="nav-header-right" ref={userMenuRef}>
-        {currentUser && (currentUser.role === 'admin' || currentUser.email === 'candidate@ccna.com') && (
+        {currentUser && currentUser.role === 'admin' && (
           <button
             type="button"
             className="btn-admin-nav-trigger"
@@ -352,19 +342,6 @@ function NavigationMenu({
                 <line x1="15" y1="12" x2="3" y2="12" />
               </svg>
               Log In
-            </button>
-            <button
-              type="button"
-              className="btn-nav-signup"
-              onClick={() => onOpenAuth && onOpenAuth("signup")}
-            >
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
-                <circle cx="8.5" cy="7" r="4" />
-                <line x1="20" y1="8" x2="20" y2="14" />
-                <line x1="23" y1="11" x2="17" y2="11" />
-              </svg>
-              Sign Up
             </button>
           </div>
         )}

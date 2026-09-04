@@ -407,6 +407,157 @@
       return true; // async
     }
 
+  // Helper to reliably save project to server against user
+  var _bfSavedProjectsCache = new Set();
+  function bfSaveProjectToServer(projectId, projectUrl, title, callback) {
+    if (!projectId) {
+      if (callback) callback({ ok: false, error: 'No projectId' });
+      return;
+    }
+    try {
+      chrome.storage.local.get(['token', 'sessionToken', 'userId', 'email', 'deviceId', 'apiBase', 'serverUrl'], function(st) {
+        var token = st && st.token;
+        var userId = st && st.userId;
+        var email = st && st.email;
+        var deviceId = st && st.deviceId;
+
+        if (!token && st && st.sessionToken) {
+          if (st.sessionToken.includes(':')) {
+            var parts = st.sessionToken.split(':');
+            if (!userId) userId = parts[0];
+            if (!email) email = parts[1];
+            token = parts[1];
+          } else {
+            token = st.sessionToken;
+          }
+        }
+
+        var api = (st && (st.apiBase || st.serverUrl) || BF_DEFAULT_SERVER || 'http://localhost:5000').replace(/\/+$/, '');
+        if (api.includes(':3000')) api = api.replace(':3000', ':5000');
+        if (api.includes('flowbydcx.com') || api.includes('labs.google')) api = 'http://localhost:5000';
+
+        var cleanTitle = (title && typeof title === 'string' && !/flow|google/i.test(title)) ? title.trim() : 'Flow Project';
+        var cleanUrl = projectUrl || ('https://labs.google/fx/tools/flow/project/' + projectId);
+
+        var headers = {
+          'Content-Type': 'application/json',
+          'X-Ext-Version': '1.4'
+        };
+        if (token) headers['Authorization'] = 'Bearer ' + token;
+        if (userId) headers['X-User-Id'] = String(userId);
+        if (email) headers['X-User-Email'] = String(email);
+        if (deviceId) headers['X-Device-Id'] = String(deviceId);
+
+        var reqBody = {
+          projectId: projectId,
+          projectUrl: cleanUrl,
+          title: cleanTitle,
+          userId: userId,
+          email: email,
+          deviceId: deviceId,
+          token: token,
+          sessionToken: st && st.sessionToken
+        };
+
+        function sendToHost(targetHost, next) {
+          fetch(targetHost + '/api/extension/save-project', {
+            method: 'POST',
+            headers: headers,
+            body: JSON.stringify(reqBody)
+          })
+          .then(function(r) { return r.json(); })
+          .then(function(data) {
+            if (data && data.ok) {
+              _bfSavedProjectsCache.add(projectId);
+              console.log('[ToolsByDcx] 📁 Project saved to DB:', projectId, data);
+              if (callback) callback({ ok: true, data: data });
+            } else {
+              if (next) next(data);
+              else if (callback) callback({ ok: false, error: data ? data.error : 'Failed to save' });
+            }
+          })
+          .catch(function(err) {
+            if (next) next(err);
+            else if (callback) callback({ ok: false, error: err.message });
+          });
+        }
+
+        sendToHost(api, function(_err) {
+          if (api !== 'http://localhost:5000') {
+            sendToHost('http://localhost:5000', null);
+          } else if (callback) {
+            callback({ ok: false, error: _err ? _err.message : 'Save failed' });
+          }
+        });
+      });
+    } catch(e) {
+      if (callback) callback({ ok: false, error: e.message });
+    }
+  }
+
+  // Layer 2: Automatic Tab URL Navigation Monitor for Projects
+  try {
+    chrome.tabs.onUpdated.addListener(function(tabId, changeInfo, tab) {
+      try {
+        var url = changeInfo.url || (tab && tab.url);
+        if (!url) return;
+        var m = url.match(/labs\.google\/fx\/tools\/flow\/project\/([a-zA-Z0-9_-]{4,})/i);
+        if (m && m[1]) {
+          var pId = m[1];
+          var pUrl = 'https://labs.google/fx/tools/flow/project/' + pId;
+          var title = (tab && tab.title && !/flow|google/i.test(tab.title)) ? tab.title.trim() : 'Flow Project';
+          bfSaveProjectToServer(pId, pUrl, title);
+        }
+      } catch(_) {}
+    });
+  } catch(_) {}
+
+  // Layer 3: Storage Watcher for __flow_my_projects
+  try {
+    chrome.storage.onChanged.addListener(function(changes, area) {
+      if (area === 'local' && changes.__flow_my_projects && changes.__flow_my_projects.newValue) {
+        var list = changes.__flow_my_projects.newValue;
+        if (Array.isArray(list)) {
+          list.forEach(function(item) {
+            if (!item || typeof item !== 'string') return;
+            var m = item.match(/project\/([a-zA-Z0-9_-]{4,})/i);
+            if (m && m[1]) {
+              bfSaveProjectToServer(m[1], 'https://labs.google/fx/tools/flow/project/' + m[1], 'Flow Project');
+            }
+          });
+        }
+      }
+    });
+  } catch(_) {}
+
+  // Layer 4: Initial & Periodic Storage Sync
+  function bfSyncAllStoredProjects() {
+    try {
+      chrome.storage.local.get(['__flow_my_projects'], function(res) {
+        var list = res && res.__flow_my_projects;
+        if (Array.isArray(list)) {
+          list.forEach(function(item) {
+            if (!item || typeof item !== 'string') return;
+            var m = item.match(/project\/([a-zA-Z0-9_-]{4,})/i);
+            if (m && m[1]) {
+              bfSaveProjectToServer(m[1], 'https://labs.google/fx/tools/flow/project/' + m[1], 'Flow Project');
+            }
+          });
+        }
+      });
+    } catch(_) {}
+  }
+  setTimeout(bfSyncAllStoredProjects, 2000);
+  setInterval(bfSyncAllStoredProjects, 30000);
+
+    // SAVE_PROJECT — saves project url and id to server against the current user
+    if (msg.type === 'SAVE_PROJECT') {
+      bfSaveProjectToServer(msg.projectId, msg.projectUrl, msg.title, function(res) {
+        try { sendResponse(res); } catch(_) {}
+      });
+      return true; // async
+    }
+
     return false;
   });
 })();
@@ -439,6 +590,7 @@
                      url.includes('/api/extension/use-credits') ||
                      url.includes('/api/extension/inject-cookies') ||
                      url.includes('/api/extension/switch-account') ||
+                     url.includes('/api/extension/save-project') ||
                      url.includes('/api/extension2/');
       var isVerify = url.includes('/api/extension/verify') || url.includes('/api/extension2/verify');
 

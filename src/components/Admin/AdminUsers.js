@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useDialog } from '../../context/DialogContext';
 
-function AdminUsers({ currentUser, isCreateOpen, onCloseCreate }) {
+function AdminUsers({ currentUser, isCreateOpen, onCloseCreate, resellerFilter, onClearResellerFilter }) {
   const { confirm, alert: showCustomAlert } = useDialog();
   const [users, setUsers] = useState([]);
   const [availablePlans, setAvailablePlans] = useState([]);
@@ -24,6 +24,9 @@ function AdminUsers({ currentUser, isCreateOpen, onCloseCreate }) {
   });
 
   const API_BASE = process.env.REACT_APP_API_URL || (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' ? 'http://localhost:5000/api' : '/api');
+  const currentDomain = (typeof window !== 'undefined' && window.location.hostname && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1')
+    ? window.location.hostname.replace(/^www\./, '')
+    : 'flowbydcx.com';
 
   const getAuthHeaders = () => {
     const token = localStorage.getItem('ccna_auth_token') || localStorage.getItem('flow_token') || currentUser?.token;
@@ -58,7 +61,13 @@ function AdminUsers({ currentUser, isCreateOpen, onCloseCreate }) {
       setLoading(true);
       const query = new URLSearchParams();
       if (search) query.append('search', search);
-      if (roleFilter) query.append('role', roleFilter);
+      if (resellerFilter && resellerFilter.id) {
+        query.append('reseller_id', resellerFilter.id);
+      } else if (roleFilter) {
+        query.append('role', roleFilter);
+      } else {
+        query.append('exclude_resellers', 'true');
+      }
       if (statusFilter) query.append('status', statusFilter);
       if (planFilter) query.append('plan', planFilter);
 
@@ -91,15 +100,41 @@ function AdminUsers({ currentUser, isCreateOpen, onCloseCreate }) {
     }, 250);
     return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [search, roleFilter, statusFilter, planFilter]);
+  }, [search, roleFilter, statusFilter, planFilter, resellerFilter]);
 
   const handleCreateUser = async (e) => {
     e.preventDefault();
     try {
+      let finalEmail = (newUserData.email || '').trim().toLowerCase();
+      if (!finalEmail && newUserData.emailPrefix) {
+        finalEmail = newUserData.emailPrefix.trim().toLowerCase();
+      }
+      if (finalEmail) {
+        if (finalEmail.includes('@')) {
+          finalEmail = finalEmail.split('@')[0] + '@' + currentDomain;
+        } else {
+          finalEmail = finalEmail + '@' + currentDomain;
+        }
+      }
+
+      if (!finalEmail) {
+        await showCustomAlert({
+          title: 'Email Required',
+          message: 'Please provide an email prefix.',
+          type: 'warning'
+        });
+        return;
+      }
+
+      const payload = {
+        ...newUserData,
+        email: finalEmail
+      };
+
       const res = await fetch(`${API_BASE}/admin/users`, {
         method: 'POST',
         headers: getAuthHeaders(),
-        body: JSON.stringify(newUserData)
+        body: JSON.stringify(payload)
       });
       const data = await res.json();
       if (res.ok) {
@@ -107,6 +142,7 @@ function AdminUsers({ currentUser, isCreateOpen, onCloseCreate }) {
         onCloseCreate();
         setNewUserData({
           name: '',
+          emailPrefix: '',
           email: '',
           password: 'Password123!',
           role: 'user',
@@ -161,7 +197,7 @@ function AdminUsers({ currentUser, isCreateOpen, onCloseCreate }) {
   };
 
   const handleDeleteUser = async (user) => {
-    if (user.email === 'candidate@ccna.com' || user.email === 'admin@flowbydcx.com' || user.email === 'admin@system.com') {
+    if (user.email === 'admin@flowbydcx.com' || user.email === 'admin@system.com') {
       await showCustomAlert({
         title: 'Action Prohibited',
         message: `Cannot delete primary administrator account "${user.name}" (${user.email}).`,
@@ -269,17 +305,53 @@ function AdminUsers({ currentUser, isCreateOpen, onCloseCreate }) {
       )}
 
       {/* FILTER & SEARCH TOOLBAR */}
+      {resellerFilter && (
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            padding: '12px 18px',
+            marginBottom: '20px',
+            borderRadius: '10px',
+            background: 'rgba(168, 85, 247, 0.12)',
+            border: '1px solid rgba(168, 85, 247, 0.35)',
+            color: '#d8b4fe'
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <span style={{ fontSize: '18px' }}>🤝</span>
+            <div>
+              <div style={{ fontSize: '14px', fontWeight: 700, color: '#f8fafc' }}>
+                Showing Customers of Reseller: <span style={{ color: '#c084fc' }}>{resellerFilter.name}</span>
+              </div>
+              <div style={{ fontSize: '12px', color: '#94a3b8' }}>
+                {resellerFilter.email} • Filtering only customer accounts created by this partner.
+              </div>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={onClearResellerFilter}
+            className="btn-admin-secondary"
+            style={{ padding: '6px 14px', fontSize: '13px', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+          >
+            ✕ View All Customers
+          </button>
+        </div>
+      )}
+
       <div className="admin-card">
         <div className="admin-card-header">
           <h3 className="admin-card-title">
-            <span>👥</span> Users ({users.length})
+            <span>👥</span> Customers ({users.length})
           </h3>
 
           <div className="admin-card-actions">
             <input
               type="text"
               className="admin-search-input"
-              placeholder="Search user by name or email..."
+              placeholder="Search customer by name or email..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
             />
@@ -289,9 +361,9 @@ function AdminUsers({ currentUser, isCreateOpen, onCloseCreate }) {
               value={roleFilter}
               onChange={(e) => setRoleFilter(e.target.value)}
             >
-              <option value="">All Roles</option>
-              <option value="admin">Admins</option>
-              <option value="user">Standard Users</option>
+              <option value="">All (Admins & Customers)</option>
+              <option value="user">Customers Only</option>
+              <option value="admin">Administrators Only</option>
             </select>
 
             <select
@@ -332,7 +404,7 @@ function AdminUsers({ currentUser, isCreateOpen, onCloseCreate }) {
                 onCloseCreate(true);
               }}
             >
-              + New User
+              + Add Customer
             </button>
           </div>
         </div>
@@ -342,7 +414,7 @@ function AdminUsers({ currentUser, isCreateOpen, onCloseCreate }) {
           <table className="admin-table">
             <thead>
               <tr>
-                <th>User</th>
+                <th>Customer</th>
                 <th>Role</th>
                 <th>Current Plan</th>
                 <th>Status</th>
@@ -394,24 +466,36 @@ function AdminUsers({ currentUser, isCreateOpen, onCloseCreate }) {
                         <div>
                           <div style={{ fontWeight: 700, color: '#f8fafc', fontSize: '15px' }}>{u.name}</div>
                           <div style={{ fontSize: '13px', color: '#94a3b8' }}>{u.email}</div>
+                          {u.reseller_name && (
+                            <div style={{ fontSize: '11px', color: '#c084fc', marginTop: '2px', fontWeight: 600 }}>
+                              🤝 Reseller: {u.reseller_name}
+                            </div>
+                          )}
                         </div>
                       </div>
                     </td>
                     <td>
-                      <span className={`badge-pill ${u.role === 'admin' ? 'badge-admin' : 'badge-user'}`}>
-                        {u.role === 'admin' ? '🛡️ Admin' : '👤 User'}
+                      <span
+                        className={`badge-pill ${u.role === 'admin' ? 'badge-admin' : u.role === 'reseller' ? 'badge-pro' : 'badge-user'}`}
+                        style={{ padding: '3px 10px', fontSize: '12px', fontWeight: 600, textTransform: 'none' }}
+                      >
+                        {u.role === 'admin' ? '🛡️ Admin' : u.role === 'reseller' ? '🤝 Reseller' : '👤 User'}
                       </span>
                     </td>
                     <td>
                       {(() => {
                         const pInfo = getPlanInfo(u.plan);
+                        const daysText = u.daysRemaining !== null && u.daysRemaining !== undefined ? `${u.daysRemaining}d left` : 'Lifetime';
                         return (
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                            <span className={`badge-pill ${pInfo.className}`}>
+                          <div style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', whiteSpace: 'nowrap' }}>
+                            <span
+                              className={`badge-pill ${pInfo.className}`}
+                              style={{ padding: '3px 10px', fontSize: '12px', textTransform: 'uppercase', fontWeight: 600 }}
+                            >
                               {pInfo.name}
                             </span>
-                            <span style={{ fontSize: '11px', color: '#94a3b8' }}>
-                              ⏱ {u.daysRemaining !== null && u.daysRemaining !== undefined ? `${u.daysRemaining} days left` : 'Unlimited'}
+                            <span style={{ fontSize: '12px', color: '#94a3b8', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                              ⏱ {daysText}
                             </span>
                           </div>
                         );
@@ -422,7 +506,14 @@ function AdminUsers({ currentUser, isCreateOpen, onCloseCreate }) {
                         type="button"
                         onClick={() => handleToggleVerify(u)}
                         className={`badge-pill ${u.is_verified ? 'badge-verified' : 'badge-unverified'}`}
-                        style={{ cursor: 'pointer', border: '1px solid currentColor' }}
+                        style={{
+                          cursor: 'pointer',
+                          padding: '3px 10px',
+                          fontSize: '12px',
+                          fontWeight: 600,
+                          textTransform: 'none',
+                          border: '1px solid currentColor'
+                        }}
                         title="Click to toggle verification status"
                       >
                         {u.is_verified ? '✓ Verified' : '⏳ Pending'}
@@ -446,8 +537,8 @@ function AdminUsers({ currentUser, isCreateOpen, onCloseCreate }) {
                           type="button"
                           className="btn-table-action btn-table-delete"
                           onClick={() => handleDeleteUser(u)}
-                          disabled={u.email === 'candidate@ccna.com' || u.email === 'admin@flowbydcx.com' || u.email === 'admin@system.com'}
-                          title={u.email === 'candidate@ccna.com' || u.email === 'admin@flowbydcx.com' || u.email === 'admin@system.com' ? "Primary admin cannot be deleted" : "Delete User"}
+                          disabled={u.email === 'admin@flowbydcx.com' || u.email === 'admin@system.com'}
+                          title={u.email === 'admin@flowbydcx.com' || u.email === 'admin@system.com' ? "Primary admin cannot be deleted" : "Delete User"}
                         >
                           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
                           <span>Delete</span>
@@ -602,7 +693,7 @@ function AdminUsers({ currentUser, isCreateOpen, onCloseCreate }) {
         <div className="admin-modal-backdrop" onClick={() => onCloseCreate(false)}>
           <div className="admin-modal-card" onClick={(e) => e.stopPropagation()}>
             <div className="admin-modal-header">
-              <h4 className="admin-modal-title">Create New User</h4>
+              <h4 className="admin-modal-title">Create New Customer</h4>
               <button
                 type="button"
                 className="admin-modal-close"
@@ -626,15 +717,61 @@ function AdminUsers({ currentUser, isCreateOpen, onCloseCreate }) {
                 </div>
 
                 <div className="admin-form-group">
-                  <label className="admin-form-label">Email Address</label>
-                  <input
-                    type="email"
-                    className="admin-form-input"
-                    placeholder="e.g. user@example.com"
-                    value={newUserData.email}
-                    onChange={(e) => setNewUserData({ ...newUserData, email: e.target.value })}
-                    required
-                  />
+                  <label className="admin-form-label">
+                    Email Address
+                    <span style={{ fontSize: '12px', color: '#94a3b8', fontWeight: 400, marginLeft: '6px' }}>
+                      (domain auto-set to @{currentDomain})
+                    </span>
+                  </label>
+                  <div style={{ display: 'flex', alignItems: 'center' }}>
+                    <input
+                      type="text"
+                      className="admin-form-input"
+                      style={{
+                        borderTopRightRadius: 0,
+                        borderBottomRightRadius: 0,
+                        borderRight: 'none',
+                        flex: 1
+                      }}
+                      placeholder="e.g. alex"
+                      value={newUserData.emailPrefix !== undefined ? newUserData.emailPrefix : (newUserData.email ? newUserData.email.split('@')[0] : '')}
+                      onChange={(e) => {
+                        let val = e.target.value.trim().toLowerCase();
+                        if (val.includes('@')) {
+                          val = val.split('@')[0];
+                        }
+                        setNewUserData({
+                          ...newUserData,
+                          emailPrefix: val,
+                          email: val ? `${val}@${currentDomain}` : ''
+                        });
+                      }}
+                      required
+                    />
+                    <div
+                      style={{
+                        background: '#1e293b',
+                        border: '1px solid #334155',
+                        borderLeft: 'none',
+                        padding: '11px 16px',
+                        borderTopRightRadius: '10px',
+                        borderBottomRightRadius: '10px',
+                        color: '#38bdf8',
+                        fontSize: '14px',
+                        fontWeight: 700,
+                        userSelect: 'none',
+                        whiteSpace: 'nowrap'
+                      }}
+                    >
+                      @{currentDomain}
+                    </div>
+                  </div>
+                  <div style={{ fontSize: '12px', color: '#64748b', marginTop: '4px' }}>
+                    Full address will be:{' '}
+                    <span style={{ color: '#4ade80', fontWeight: 600 }}>
+                      {newUserData.emailPrefix ? `${newUserData.emailPrefix}@${currentDomain}` : `user@${currentDomain}`}
+                    </span>
+                  </div>
                 </div>
 
                 <div className="admin-form-group">
