@@ -1,0 +1,16 @@
+<IfModule mod_rewrite.c>
+  RewriteEngine On
+  RewriteBase /
+
+  # API requests route to PHP API router
+  RewriteCond %{REQUEST_URI} ^/api/(.*)$
+  RewriteRule ^api/(.*)$ api.php [QSA,L]
+
+  # Existing files and directories serve directly
+  RewriteCond %{REQUEST_FILENAME} -f [OR]
+  RewriteCond %{REQUEST_FILENAME} -d
+  RewriteRule ^ - [L]
+
+  # All other routes fallback to React index.html for SPA routing
+  RewriteRule ^ index.html [L]
+</IfModule>
