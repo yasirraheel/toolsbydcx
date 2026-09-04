@@ -2350,6 +2350,7 @@
   // Lightweight, single-pass: lock Fast/Quality, ensure Lite/LP stay clickable.
   // Heavy ops (badge removal, event listeners) stay in lockModels() @ 80ms.
   function lockFast() {
+    return; // Fast lock disabled per user request
     if (isUltra()) {
       unlock4kForUltra();
       return;
@@ -2498,13 +2499,36 @@
   if (document.body) startObs();
   else document.addEventListener('DOMContentLoaded', startObs);
 
-  // Fire lockFast immediately on any click — catches the instant user opens dropdown
-  document.addEventListener('click', function() { lockFast(); }, true);
-  document.addEventListener('mousedown', function() { lockFast(); }, true);
+  // Auto-detect if URL changed to a project but page is stuck on the home view (+ New project button)
+  function checkStuckProjectNav() {
+    try {
+      if (/\/project\/[a-zA-Z0-9_-]+/i.test(location.pathname)) {
+        var btns = document.querySelectorAll('button, a, [role="button"]');
+        for (var i = 0; i < btns.length; i++) {
+          var t = (btns[i].textContent || '').trim().toLowerCase();
+          if (t === '+ new project' || t === 'new project' || t === '+ new') {
+            if (btns[i].offsetParent !== null) {
+              var key = '__bf_proj_stuck_' + location.pathname;
+              if (!sessionStorage.getItem(key)) {
+                sessionStorage.setItem(key, '1');
+                setTimeout(function() {
+                  if (/\/project\/[a-zA-Z0-9_-]+/i.test(location.pathname)) {
+                    window.location.replace(window.location.href);
+                  }
+                }, 300);
+              }
+              break;
+            }
+          }
+        }
+      }
+    } catch(_) {}
+  }
 
   // SPA navigation
   let last = location.href;
   function onNav() {
+    checkStuckProjectNav();
     if (location.href === last) return;
     last = location.href;
     // Reset LP auto-select for new page
@@ -2538,7 +2562,11 @@
   window.addEventListener('hashchange', onNav);
   ['pushState','replaceState'].forEach(fn => {
     const orig = history[fn];
-    history[fn] = function (...a) { orig.apply(this, a); onNav(); };
+    history[fn] = function (...a) {
+      const res = orig.apply(this, a);
+      try { onNav(); } catch(_) {}
+      return res;
+    };
   });
   setInterval(onNav, 400);
 

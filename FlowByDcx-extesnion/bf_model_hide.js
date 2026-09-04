@@ -27,7 +27,15 @@
   _injectCSS();
   new MutationObserver(_injectCSS).observe(document.documentElement, { childList: true });
 
-  // ── Plan helpers ──────────────────────────────  // ── Patterns ──────────────────────────────────────────────────────────────
+  // ── Plan helpers ───────────────────────────────────────────────────────────
+  function _getPlan() {
+    try {
+      var p = document.documentElement.getAttribute('data-bf-plan');
+      return p ? p.toLowerCase() : 'basic';
+    } catch(_) { return 'basic'; }
+  }
+
+  // ── Patterns ──────────────────────────────────────────────────────────────
   var LP_RE    = /low(?:er)?[\s._-]*priority|\blite\b|veo.*lite/i;
   var MODEL_RE = /\bveo\b|\bomni\b|\bflash\b/i;
   var DROP_SEL =
@@ -289,10 +297,9 @@
   try {
     var _origPush = history.pushState;
     history.pushState = function() {
-      _origPush.apply(this, arguments);
-      _lpDone = false; _lpAttempts = 0;
-      setTimeout(_startAutoLP, 500);
-      setTimeout(_applyMultipliers, 500);
+      var r = _origPush.apply(this, arguments);
+      try { setTimeout(_applyMultipliers, 500); } catch(_) {}
+      return r;
     };
   } catch(_) {}
 
