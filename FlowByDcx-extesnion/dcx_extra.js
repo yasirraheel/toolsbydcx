@@ -1848,67 +1848,8 @@
     }
   }
 
-  // Global capture click listener for generate buttons
-  document.addEventListener('click', function(e) {
-    try {
-      var target = e.target;
-      var btn = target.closest('button,[role="button"]');
-      if (!btn) return;
-      var txt = (btn.textContent || '').trim();
-      var al = (btn.getAttribute('aria-label') || '').toLowerCase();
-      var title = (btn.getAttribute('title') || '').toLowerCase();
-      var html = (btn.innerHTML || '').toLowerCase();
-
-      var isGen = /arrow_forward/i.test(txt) ||
-                  /send|generate|create\b/i.test(al) ||
-                  /send|generate|create\b/i.test(title) ||
-                  html.includes('arrow_forward');
-
-      if (!isGen) {
-        var sb = _findSendBtn();
-        if (sb && (btn === sb || sb.contains(btn))) isGen = true;
-      }
-      if (isGen) {
-        _triggerGenerationDeduction('Generate Button Click');
-      }
-    } catch(_) {}
-  }, true);
-
-  // Global capture keydown listener for Enter key in prompt
-  document.addEventListener('keydown', function(e) {
-    try {
-      if (e.key === 'Enter' && !e.shiftKey) {
-        var act = document.activeElement;
-        if (act) {
-          var tag = (act.tagName || '').toLowerCase();
-          var isEdit = act.isContentEditable || tag === 'textarea' || (tag === 'input' && act.type === 'text');
-          if (isEdit) {
-            var val = (act.value || act.textContent || '').trim();
-            if (val.length > 0) {
-              _triggerGenerationDeduction('Enter Key Press');
-            }
-          }
-        }
-      }
-    } catch(_) {}
-  }, true);
-
-  // hookSendButton: intercept the generate button to record a pending generation ID
-  function hookSendButton() {
-    if (isHome()) return;
-    const BTN_SEL = '[aria-label*="send" i],[aria-label*="generat" i],[aria-label*="create" i],[title*="create" i],[title*="send" i]';
-    var candidateBtns = Array.from(document.querySelectorAll(BTN_SEL));
-    var sb = _findSendBtn();
-    if (sb && !candidateBtns.includes(sb)) candidateBtns.push(sb);
-
-    candidateBtns.forEach(function(btn) {
-      if (btn.dataset.bfSendHooked) return;
-      btn.dataset.bfSendHooked = '1';
-      btn.addEventListener('click', function() {
-        _triggerGenerationDeduction('Hooked Button Click');
-      }, { capture: true });
-    });
-  }
+  // Generation deduction click/keydown listeners removed (credits disabled per user request)
+  function hookSendButton() {}
 
   // ── HIDE "Not enough credits" GOOGLE FLOW ERROR TOASTS ──────────────────
   const _CRED_RE = /not enough credits|enough credits to save|credits to save this/i;
@@ -2499,31 +2440,47 @@
   if (document.body) startObs();
   else document.addEventListener('DOMContentLoaded', startObs);
 
-  // Auto-detect if URL changed to a project but page is stuck on the home view (+ New project button)
+  // Auto-detect if URL changed to a project but page is stuck on the home view (+ New project button / Start from scratch)
+  var _bfLastReloadAttempt = 0;
   function checkStuckProjectNav() {
     try {
-      if (/\/project\/[a-zA-Z0-9_-]+/i.test(location.pathname)) {
-        var btns = document.querySelectorAll('button, a, [role="button"]');
-        for (var i = 0; i < btns.length; i++) {
-          var t = (btns[i].textContent || '').trim().toLowerCase();
-          if (t === '+ new project' || t === 'new project' || t === '+ new') {
-            if (btns[i].offsetParent !== null) {
-              var key = '__bf_proj_stuck_' + location.pathname;
-              if (!sessionStorage.getItem(key)) {
-                sessionStorage.setItem(key, '1');
-                setTimeout(function() {
-                  if (/\/project\/[a-zA-Z0-9_-]+/i.test(location.pathname)) {
-                    window.location.replace(window.location.href);
-                  }
-                }, 300);
-              }
+      if (/\/project\/[a-zA-Z0-9_-]{6,}/i.test(location.pathname)) {
+        var bodyTxt = (document.body && (document.body.innerText || document.body.textContent)) || '';
+        var hasHomeContent = bodyTxt.includes('Start from scratch') ||
+                             bodyTxt.includes('choose a template') ||
+                             /\+\s*new\s*project/i.test(bodyTxt);
+        if (!hasHomeContent) {
+          var btns = document.querySelectorAll('button, a, [role="button"]');
+          for (var i = 0; i < btns.length; i++) {
+            var t = (btns[i].textContent || '').trim().toLowerCase();
+            if (t === '+ new project' || t === 'new project' || t === '+ new') {
+              hasHomeContent = true;
               break;
             }
+          }
+        }
+        if (hasHomeContent) {
+          var now = Date.now();
+          if (now - _bfLastReloadAttempt > 3000) {
+            _bfLastReloadAttempt = now;
+            setTimeout(function() {
+              if (/\/project\/[a-zA-Z0-9_-]{6,}/i.test(location.pathname)) {
+                var bt2 = (document.body && (document.body.innerText || document.body.textContent)) || '';
+                var stillHome = bt2.includes('Start from scratch') ||
+                                bt2.includes('choose a template') ||
+                                /\+\s*new\s*project/i.test(bt2);
+                if (stillHome) {
+                  console.log('[ToolsByDcx] 🔄 Project navigation stuck on home view, reloading project page...');
+                  window.location.reload();
+                }
+              }
+            }, 300);
           }
         }
       }
     } catch(_) {}
   }
+  setInterval(checkStuckProjectNav, 250);
 
   // SPA navigation
   let last = location.href;

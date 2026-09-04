@@ -349,7 +349,7 @@
   //
   // _BF_API matches only the Flow API endpoints that return JSON with videoUri/imageUri.
   // _BF_SKIP matches URLs we must NEVER read (media storage, fonts, analytics).
-  var _BF_API  = /labs\.google\/(?:fx\/)?api|labs\.google\/[^?]*\/generate|labs\.google\/[^?]*\/operation|labs\.google\/[^?]*\/project/i;
+  var _BF_API  = /labs\.google\/(?:fx\/)?api|labs\.google\/[^?]*\/generate|labs\.google\/[^?]*\/operation/i;
   var _BF_SKIP = /storage\.googleapis\.com|googleusercontent\.com|fonts|analytics|gtag|signout|\.(mp4|webm|mov|jpg|jpeg|png|webp|gif|mp3|ogg|wav)/i;
 
   var _bf_url = '', _bf_nv = 0, _bf_ni = 0;
