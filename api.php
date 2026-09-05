@@ -94,12 +94,17 @@ function verifyToken($token, $secret) {
     return $data;
 }
 
-// Helper: Get authenticated user from Bearer header
-function getAuthUser($pdo, $secret) {
-    $headers = function_exists('getallheaders') ? getallheaders() : [];
-    $auth = $headers['Authorization'] ?? $headers['authorization'] ?? ($_SERVER['HTTP_AUTHORIZATION'] ?? '');
-    if (preg_match('/Bearer\s+(.*)$/i', $auth, $m)) {
-        $token = $m[1];
+// Helper: Get authenticated user from Bearer header or token
+function getAuthUser($pdo, $secret, $explicitToken = null) {
+    $token = $explicitToken;
+    if (!$token) {
+        $headers = function_exists('getallheaders') ? getallheaders() : [];
+        $auth = $headers['Authorization'] ?? $headers['authorization'] ?? ($_SERVER['HTTP_AUTHORIZATION'] ?? '');
+        if (preg_match('/Bearer\s+(.*)$/i', $auth, $m)) {
+            $token = $m[1];
+        }
+    }
+    if ($token) {
         $verified = verifyToken($token, $secret);
         if ($verified && isset($verified['id'])) {
             $stmt = $pdo->prepare("SELECT * FROM users WHERE id = ?");
@@ -111,6 +116,20 @@ function getAuthUser($pdo, $secret) {
         }
     }
     return null;
+}
+
+// Helper: Calculate next semver version (patch bump)
+function getNextSemverPhp($currentVer) {
+    if (!$currentVer) return '1.0.0';
+    $clean = trim(ltrim($currentVer, 'vV'));
+    $parts = explode('.', $clean);
+    if (count($parts) >= 3 && is_numeric($parts[2])) {
+        $parts[2] = (string)((int)$parts[2] + 1);
+        return implode('.', array_slice($parts, 0, 3));
+    } else if (count($parts) == 2 && is_numeric($parts[1])) {
+        return $parts[0] . '.' . ((int)$parts[1] + 1) . '.0';
+    }
+    return $clean . '.1';
 }
 
 // Helper: Email template
@@ -739,6 +758,114 @@ if (preg_match('#^/api/admin/#', $basePath)) {
         echo json_encode(["success" => $ok]);
         exit;
     }
+
+    // 8.19 Admin Extension Releases: GET /api/admin/extension
+    if (preg_match('#^/api/admin/extension$#', $basePath) && $method === 'GET') {
+        $rows = $pdo->query("SELECT * FROM extension_releases ORDER BY created_at DESC")->fetchAll();
+        $current = null;
+        foreach ($rows as $r) {
+            if ((int)$r['is_active'] === 1) {
+                $current = $r;
+                break;
+            }
+        }
+        if (!$current && !empty($rows)) $current = $rows[0];
+        $latest = $current ? $current['version'] : (!empty($rows) ? $rows[0]['version'] : '1.0.0');
+        $next = empty($rows) ? '1.0.0' : getNextSemverPhp($latest);
+
+        echo json_encode([
+            "success" => true,
+            "current" => $current,
+            "latest_version" => $latest,
+            "next_version" => $next,
+            "releases" => $rows
+        ]);
+        exit;
+    }
+
+    // 8.20 Admin Upload Extension: POST /api/admin/extension/upload
+    if (preg_match('#^/api/admin/extension/upload$#', $basePath) && $method === 'POST') {
+        if (empty($_FILES['file']) || $_FILES['file']['error'] !== UPLOAD_ERR_OK) {
+            http_response_code(400);
+            echo json_encode(["error" => "Extension package file (.zip or .crx) is required."]);
+            exit;
+        }
+
+        $versionInput = trim($_POST['version'] ?? '');
+        if (empty($versionInput)) {
+            $latestRow = $pdo->query("SELECT version FROM extension_releases ORDER BY created_at DESC LIMIT 1")->fetch();
+            $latest = $latestRow ? $latestRow['version'] : '1.0.0';
+            $cleanVersion = getNextSemverPhp($latest);
+        } else {
+            $cleanVersion = preg_replace('/[^0-9.]/', '', trim(ltrim($versionInput, 'vV'))) ?: '1.0.0';
+        }
+
+        $minVersionInput = trim($_POST['min_version'] ?? '');
+        $cleanMinVersion = !empty($minVersionInput) ? preg_replace('/[^0-9.]/', '', trim(ltrim($minVersionInput, 'vV'))) : $cleanVersion;
+        $isForced = (!empty($_POST['force_update']) && ($_POST['force_update'] === '1' || $_POST['force_update'] === 'true')) ? 1 : 0;
+        $notes = trim($_POST['release_notes'] ?? '');
+
+        $extDir = __DIR__ . '/uploads/extension';
+        if (!is_dir($extDir)) {
+            mkdir($extDir, 0777, true);
+        }
+
+        // Standardized server file name: toolsbydcx_extension_v{version}.zip
+        $standardFileName = "toolsbydcx_extension_v{$cleanVersion}.zip";
+        $targetDiskPath = $extDir . '/' . $standardFileName;
+
+        if (file_exists($targetDiskPath)) {
+            @unlink($targetDiskPath);
+        }
+
+        if (!move_uploaded_file($_FILES['file']['tmp_name'], $targetDiskPath)) {
+            http_response_code(500);
+            echo json_encode(["error" => "Failed to save extension package to server disk."]);
+            exit;
+        }
+
+        $fileSize = filesize($targetDiskPath);
+        $relativePath = 'uploads/extension/' . $standardFileName;
+        $id = 'ext_rel_' . time();
+        $downloadUrl = "/api/extension/download?id={$id}";
+
+        $pdo->query("UPDATE extension_releases SET is_active = 0");
+
+        $stmt = $pdo->prepare("INSERT INTO extension_releases 
+            (id, version, min_version, force_update, file_name, file_path, file_size, release_notes, download_url, is_active, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, NOW())");
+        $stmt->execute([$id, $cleanVersion, $cleanMinVersion, $isForced, $standardFileName, $relativePath, $fileSize, $notes, $downloadUrl]);
+
+        $newRow = $pdo->prepare("SELECT * FROM extension_releases WHERE id = ?");
+        $newRow->execute([$id]);
+
+        echo json_encode([
+            "success" => true,
+            "message" => "Extension v{$cleanVersion} saved as \"{$standardFileName}\"! " . ($isForced ? "Mandatory update enforced." : "Optional update enabled."),
+            "release" => $newRow->fetch()
+        ]);
+        exit;
+    }
+
+    // 8.21 Admin Extension Settings: POST /api/admin/extension/settings
+    if (preg_match('#^/api/admin/extension/settings$#', $basePath) && $method === 'POST') {
+        $targetId = trim($body['id'] ?? '');
+        if (!$targetId) {
+            $currRow = $pdo->query("SELECT id FROM extension_releases WHERE is_active = 1 ORDER BY created_at DESC LIMIT 1")->fetch();
+            $targetId = $currRow['id'] ?? null;
+        }
+        if (!$targetId) {
+            http_response_code(404);
+            echo json_encode(["error" => "No active extension release found."]);
+            exit;
+        }
+        $isForced = (!empty($body['force_update']) && ($body['force_update'] === '1' || $body['force_update'] === 'true' || $body['force_update'] === true)) ? 1 : 0;
+        $stmt = $pdo->prepare("UPDATE extension_releases SET force_update = ?, updated_at = NOW() WHERE id = ?");
+        $stmt->execute([$isForced, $targetId]);
+
+        echo json_encode(["success" => true, "message" => "Force update rule updated."]);
+        exit;
+    }
 }
 
 // --------------------------------------------------------------------------
@@ -1057,6 +1184,94 @@ if (preg_match('#^/api/extension(2)?/#', $basePath)) {
             "cookies" => $parsedCookies,
             "cookieVersion" => (int)($acc['cookie_version'] ?? 1),
             "accountUrl" => $acc['target_url']
+        ]);
+        exit;
+    }
+
+    // 11.5 Extension Download: GET /api/extension/download
+    if (preg_match('#^/api/extension/download#', $basePath) && $method === 'GET') {
+        $token = $_GET['token'] ?? null;
+        if (!$token) {
+            $authHeader = $_SERVER['HTTP_AUTHORIZATION'] ?? '';
+            if (strpos($authHeader, 'Bearer ') === 0) {
+                $token = substr($authHeader, 7);
+            }
+        }
+        if (!$token) {
+            http_response_code(401);
+            echo json_encode(["error" => "Authentication required to download extension.", "login_required" => true]);
+            exit;
+        }
+        $authUser = getAuthUser($pdo, $jwtSecret, $token);
+        if (!$authUser) {
+            http_response_code(401);
+            echo json_encode(["error" => "Invalid session. Please login to download.", "login_required" => true]);
+            exit;
+        }
+
+        $id = $_GET['id'] ?? null;
+        if ($id) {
+            $stmt = $pdo->prepare("SELECT * FROM extension_releases WHERE id = ?");
+            $stmt->execute([$id]);
+            $row = $stmt->fetch();
+        } else {
+            $row = $pdo->query("SELECT * FROM extension_releases WHERE is_active = 1 ORDER BY created_at DESC LIMIT 1")->fetch();
+        }
+        if (!$row) {
+            http_response_code(404);
+            echo json_encode(["error" => "No extension package available."]);
+            exit;
+        }
+
+        $filePath = __DIR__ . '/' . $row['file_path'];
+        if (!file_exists($filePath)) {
+            http_response_code(404);
+            echo json_encode(["error" => "Package file not found on disk."]);
+            exit;
+        }
+
+        header('Content-Description: File Transfer');
+        header('Content-Type: application/zip');
+        header('Content-Disposition: attachment; filename="' . basename($row['file_name']) . '"');
+        header('Expires: 0');
+        header('Cache-Control: must-revalidate');
+        header('Pragma: public');
+        header('Content-Length: ' . filesize($filePath));
+        readfile($filePath);
+        exit;
+    }
+
+    // 11.6 Extension Version Check: GET /api/extension/check-update or /api/extension/version
+    if (preg_match('#^/api/extension/(check-update|version)#', $basePath) && $method === 'GET') {
+        $current = $pdo->query("SELECT * FROM extension_releases WHERE is_active = 1 ORDER BY created_at DESC LIMIT 1")->fetch();
+        if (!$current) {
+            echo json_encode([
+                "ok" => true,
+                "update_available" => false,
+                "update_required" => false,
+                "latest_version" => "1.0.0",
+                "min_version" => "1.0.0",
+                "force_update" => false
+            ]);
+            exit;
+        }
+        $clientVersion = $_GET['version'] ?? ($_SERVER['HTTP_X_EXTENSION_VERSION'] ?? '0.0.0');
+        $isOutdated = version_compare($clientVersion, $current['version'], '<');
+        $isBelowMin = version_compare($clientVersion, $current['min_version'] ?: $current['version'], '<');
+        $forceUpdate = ((int)$current['force_update'] === 1) && ($isBelowMin || $isOutdated);
+
+        echo json_encode([
+            "ok" => true,
+            "client_version" => $clientVersion,
+            "latest_version" => $current['version'],
+            "min_version" => $current['min_version'] ?: $current['version'],
+            "force_update" => (bool)$current['force_update'],
+            "update_available" => $isOutdated,
+            "update_required" => $forceUpdate,
+            "download_url" => $current['download_url'] ?: '/api/extension/download',
+            "file_name" => $current['file_name'],
+            "file_size" => (int)$current['file_size'],
+            "release_notes" => $current['release_notes']
         ]);
         exit;
     }
