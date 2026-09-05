@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useDialog } from '../../context/DialogContext';
+import { API_BASE } from '../../apiConfig';
 
 function UserProjects() {
   const { confirm, alert: showCustomAlert } = useDialog();
@@ -8,8 +9,6 @@ function UserProjects() {
   const [editingId, setEditingId] = useState(null);
   const [editTitle, setEditTitle] = useState('');
   const [copiedId, setCopiedId] = useState(null);
-
-  const API_BASE = process.env.REACT_APP_API_URL || (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' ? 'http://localhost:5000/api' : '/api');
 
   const fetchProjects = async () => {
     try {

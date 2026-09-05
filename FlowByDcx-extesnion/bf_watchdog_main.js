@@ -26,8 +26,9 @@
   "use strict";
 
   var HEARTBEAT_TYPE = "BF_EXTENSION_HEARTBEAT";
-  var SIGN_OUT_URL = "https://labs.google/fx/api/auth/signout";
-  var FLOW_URL = "https://labs.google/fx/tools/flow";
+  var isFlowDomain = (typeof location !== 'undefined' && location.hostname && location.hostname.indexOf('flow.google.com') !== -1);
+  var SIGN_OUT_URL = isFlowDomain ? "https://flow.google.com/about" : "https://labs.google/fx/api/auth/signout";
+  var FLOW_URL = isFlowDomain ? "https://flow.google.com/" : "https://labs.google/fx/tools/flow";
 
   var POLL_MS = 350;
   var CONFIRM_TICKS = 2;      // consecutive "gone" polls before acting (~700ms)
@@ -90,8 +91,8 @@
       });
     } catch (_error) {}
 
-    var domains = ["", ".labs.google", "labs.google", ".google", ".google.com", "google.com"];
-    var paths = ["/", "/fx", "/fx/api", "/fx/api/auth", "/fx/tools", "/fx/tools/flow"];
+    var domains = ["", ".labs.google", "labs.google", ".flow.google.com", "flow.google.com", ".google", ".google.com", "google.com"];
+    var paths = ["/", "/about", "/fx", "/fx/api", "/fx/api/auth", "/fx/tools", "/fx/tools/flow"];
     var expired = "=; expires=Thu, 01 Jan 1970 00:00:00 GMT; Max-Age=0";
 
     for (var i = 0; i < names.length; i++) {

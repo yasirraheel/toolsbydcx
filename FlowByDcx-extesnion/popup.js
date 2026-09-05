@@ -218,7 +218,7 @@ function showStatusScreen(data) {
 
   chrome.tabs.query({ active: true, currentWindow: true }, tabs => {
     const tab = tabs[0];
-    const onFlow = tab && tab.url && tab.url.startsWith('https://labs.google/fx/tools/flow');
+    const onFlow = tab && tab.url && (tab.url.startsWith('https://labs.google/fx/tools/flow') || tab.url.startsWith('https://flow.google.com'));
     const ind = $('page-indicator');
     if (onFlow) {
       if (data.cookieSystemDisabled) {
@@ -373,7 +373,7 @@ $('logout-btn')?.addEventListener('click', async () => {
     await chrome.storage.local.clear();
     chrome.tabs.query({ active: true, currentWindow: true }, tabs => {
       const t = tabs[0];
-      if (t && t.url && t.url.startsWith('https://labs.google/fx/tools/flow')) {
+      if (t && t.url && (t.url.startsWith('https://labs.google/fx/tools/flow') || t.url.startsWith('https://flow.google.com'))) {
         chrome.tabs.reload(t.id);
       }
     });

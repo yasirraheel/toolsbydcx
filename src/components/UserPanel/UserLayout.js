@@ -4,6 +4,7 @@ import UserDashboard from './UserDashboard';
 import UserResources from './UserResources';
 import UserSessions from './UserSessions';
 import UserProjects from './UserProjects';
+import { API_BASE } from '../../apiConfig';
 
 function UserLayout({ currentUser, onExitUserPanel, onSwitchPortal, onLogout }) {
   const getInitialTab = () => {
@@ -38,7 +39,7 @@ function UserLayout({ currentUser, onExitUserPanel, onSwitchPortal, onLogout }) 
     return () => window.removeEventListener('popstate', handlePop);
   }, []);
 
-  const API_BASE = process.env.REACT_APP_API_URL || (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' ? 'http://localhost:5000/api' : '/api');
+
 
   const fetchDashboard = async () => {
     try {
@@ -150,6 +151,20 @@ function UserLayout({ currentUser, onExitUserPanel, onSwitchPortal, onLogout }) 
           >
             <span className="admin-nav-icon">💻</span>
             <span>Connected Devices</span>
+          </button>
+
+          <div className="admin-nav-section-title">Tools Access</div>
+          <button
+            type="button"
+            className="admin-nav-item"
+            style={{ color: '#4ade80' }}
+            onClick={() => {
+              const token = localStorage.getItem('ccna_auth_token') || localStorage.getItem('flow_token') || '';
+              window.open(`${API_BASE}/extension/download?token=${token}`, '_blank');
+            }}
+          >
+            <span className="admin-nav-icon">🧩</span>
+            <span>Get Extension (.zip)</span>
           </button>
         </nav>
 
@@ -264,7 +279,7 @@ function UserLayout({ currentUser, onExitUserPanel, onSwitchPortal, onLogout }) 
               dashboardData={dashboardData}
               onNavigate={(tab) => switchTab(tab)}
               onLaunchResource={(acc) => {
-                const url = acc?.target_url || 'https://labs.google/fx/tools/flow';
+                const url = acc?.target_url || 'https://flow.google.com/';
                 window.dispatchEvent(new CustomEvent('__flow_launch_account__', {
                   detail: { accountId: acc?.id, service: acc?.service, targetUrl: url }
                 }));

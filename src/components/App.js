@@ -6,9 +6,17 @@ import AdminLayout from "./Admin/AdminLayout";
 import ResellerLayout from "./Reseller/ResellerLayout";
 import UserLayout from "./UserPanel/UserLayout";
 
-const API_BASE_URL = process.env.REACT_APP_API_URL || (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1" ? "http://localhost:5000/api" : "/api");
+import { API_BASE as API_BASE_URL } from "../apiConfig";
 
 function getPermittedView(requestedView, user) {
+  if (requestedView === "auth-login" || requestedView === "login") {
+    if (user) {
+      if (user.role === "admin") return "admin";
+      if (user.role === "reseller") return "reseller";
+      return "user-panel";
+    }
+    return "auth-login";
+  }
   if (requestedView === "admin") {
     if (!user) return "auth-login";
     return user.role === "admin" ? "admin" : "dashboard";
@@ -82,8 +90,9 @@ export default function App() {
     mode: "login",
   });
 
-  const handleNavigate = (requestedView) => {
-    const view = getPermittedView(requestedView, currentUser);
+  const handleNavigate = (requestedView, overrideUser) => {
+    const activeUser = overrideUser !== undefined ? overrideUser : currentUser;
+    const view = getPermittedView(requestedView, activeUser);
     setCurrentView(view);
     let targetUrl = "/";
     if (view === "admin") {
@@ -122,11 +131,11 @@ export default function App() {
     if (currentUser) {
       const permitted = getPermittedView(currentView, currentUser);
       if (permitted !== currentView) {
-        handleNavigate(permitted);
+        handleNavigate(permitted, currentUser);
       }
     } else {
       if (currentView === "admin" || currentView === "reseller" || currentView === "user-panel") {
-        handleNavigate("auth-login");
+        handleNavigate("auth-login", null);
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -193,11 +202,11 @@ export default function App() {
     setAuthModal({ isOpen: false, mode: "login" });
 
     if (user.role === "admin") {
-      handleNavigate("admin");
+      handleNavigate("admin", user);
     } else if (user.role === "reseller") {
-      handleNavigate("reseller");
+      handleNavigate("reseller", user);
     } else {
-      handleNavigate("user-panel");
+      handleNavigate("user-panel", user);
     }
   };
 

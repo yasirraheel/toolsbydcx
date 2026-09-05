@@ -5,6 +5,8 @@ const path = require('path');
 const crypto = require('crypto');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
+const fs = require('fs');
+const multer = require('multer');
 const { initDB, getPool } = require('./db');
 const { sendVerificationEmail, sendPasswordResetEmail } = require('./mailer');
 
@@ -14,6 +16,73 @@ const JWT_SECRET = process.env.JWT_SECRET || 'ccna_exam_jwt_secret_key_2026_secu
 
 app.use(cors());
 app.use(express.json());
+
+// Extension upload directory
+const extensionUploadDir = path.join(__dirname, '../uploads/extension');
+if (!fs.existsSync(extensionUploadDir)) {
+  fs.mkdirSync(extensionUploadDir, { recursive: true });
+}
+
+const extensionStorage = multer.diskStorage({
+  destination: function (req, file, cb) {
+    cb(null, extensionUploadDir);
+  },
+  filename: function (req, file, cb) {
+    const ext = path.extname(file.originalname) || '.zip';
+    cb(null, `temp_upload_${Date.now()}_${Math.random().toString(36).substring(2, 7)}${ext}`);
+  }
+});
+
+const uploadExtension = multer({
+  storage: extensionStorage,
+  limits: { fileSize: 100 * 1024 * 1024 }, // 100MB
+  fileFilter: (req, file, cb) => {
+    const ext = path.extname(file.originalname).toLowerCase();
+    if (['.zip', '.crx', '.rar'].includes(ext)) {
+      cb(null, true);
+    } else {
+      cb(new Error('Only extension package archives (.zip or .crx) are accepted.'));
+    }
+  }
+});
+
+// Helper for Semver comparison
+function compareSemver(v1, v2) {
+  const parts1 = String(v1 || '0.0.0').split('.').map((p) => parseInt(p, 10) || 0);
+  const parts2 = String(v2 || '0.0.0').split('.').map((p) => parseInt(p, 10) || 0);
+  for (let i = 0; i < Math.max(parts1.length, parts2.length); i++) {
+    const num1 = parts1[i] || 0;
+    const num2 = parts2[i] || 0;
+    if (num1 > num2) return 1;
+    if (num1 < num2) return -1;
+  }
+  return 0;
+}
+
+// Helper for calculating next incremented semver (patch bump)
+function getNextSemver(currentVer) {
+  if (!currentVer) return '1.0.0';
+  const clean = String(currentVer).replace(/^[vV]/, '').trim();
+  const parts = clean.split('.');
+  if (parts.length >= 3) {
+    const patch = parseInt(parts[2], 10);
+    if (!isNaN(patch)) {
+      parts[2] = String(patch + 1);
+      return parts.slice(0, 3).join('.');
+    }
+  } else if (parts.length === 2) {
+    const minor = parseInt(parts[1], 10);
+    if (!isNaN(minor)) {
+      return `${parts[0]}.${minor + 1}.0`;
+    }
+  } else if (parts.length === 1) {
+    const major = parseInt(parts[0], 10);
+    if (!isNaN(major)) {
+      return `${major + 1}.0.0`;
+    }
+  }
+  return `${clean}.1`;
+}
 
 // Serve exhibit images and static assets
 app.use('/exhibits', express.static(path.join(__dirname, '../public/exhibits')));
@@ -1831,6 +1900,250 @@ app.put('/api/user/profile', async (req, res) => {
 });
 
 // --------------------------------------------------------------------------
+// EXTENSION RELEASES & FORCE UPDATE MANAGEMENT API
+// --------------------------------------------------------------------------
+
+// 1. Admin - Get Extension Release Information & History
+app.get('/api/admin/extension', requireAdminRole, async (req, res) => {
+  try {
+    const pool = getPool();
+    const [rows] = await pool.query('SELECT * FROM extension_releases ORDER BY created_at DESC');
+    const current = rows.find((r) => r.is_active === 1) || rows[0] || null;
+    const latestVersion = current ? current.version : (rows[0]?.version || '1.0.0');
+    const nextVersion = rows.length === 0 ? '1.0.0' : getNextSemver(latestVersion);
+
+    res.json({
+      success: true,
+      current,
+      latest_version: latestVersion,
+      next_version: nextVersion,
+      releases: rows
+    });
+  } catch (error) {
+    console.error('Admin get extension error:', error);
+    res.status(500).json({ error: 'Failed to fetch extension information.' });
+  }
+});
+
+// 2. Admin - Upload New Extension Version (.zip, .crx)
+app.post('/api/admin/extension/upload', requireAdminRole, uploadExtension.single('file'), async (req, res) => {
+  try {
+    const pool = getPool();
+    const { version, min_version, force_update, release_notes } = req.body;
+    const file = req.file;
+
+    if (!file) {
+      return res.status(400).json({ error: 'Please upload an extension file (.zip or .crx).' });
+    }
+
+    // Determine version: use supplied or calculate next auto-incremented version
+    let cleanVersion = (version || '').replace(/^[vV]/, '').trim();
+    if (!cleanVersion) {
+      const [rows] = await pool.query('SELECT version FROM extension_releases ORDER BY created_at DESC LIMIT 1');
+      const latest = rows[0]?.version;
+      cleanVersion = rows.length === 0 ? '1.0.0' : getNextSemver(latest);
+    }
+    cleanVersion = cleanVersion.replace(/[^0-9.]/g, '') || '1.0.0';
+
+    const cleanMinVersion = (min_version || cleanVersion).replace(/^[vV]/, '').trim();
+    const isForced = (force_update === 'true' || force_update === '1' || force_update === 1 || force_update === true) ? 1 : 0;
+    const notes = (release_notes || '').trim();
+
+    // Standardized server file name: toolsbydcx_extension_v{version}.zip
+    const standardFileName = `toolsbydcx_extension_v${cleanVersion}.zip`;
+    const targetDiskPath = path.join(extensionUploadDir, standardFileName);
+
+    // Rename uploaded temporary file to standard name
+    if (file.path !== targetDiskPath) {
+      if (fs.existsSync(targetDiskPath)) {
+        try { fs.unlinkSync(targetDiskPath); } catch (_) {}
+      }
+      fs.renameSync(file.path, targetDiskPath);
+    }
+
+    const id = `ext_rel_${Date.now()}`;
+    const relativePath = path.relative(path.join(__dirname, '..'), targetDiskPath).replace(/\\/g, '/');
+    const downloadUrl = `/api/extension/download?id=${id}`;
+
+    // Mark previous releases as inactive
+    await pool.query('UPDATE extension_releases SET is_active = 0');
+
+    // Insert new release as active with standardized file_name
+    await pool.query(
+      `INSERT INTO extension_releases 
+       (id, version, min_version, force_update, file_name, file_path, file_size, release_notes, download_url, is_active, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, NOW())`,
+      [id, cleanVersion, cleanMinVersion, isForced, standardFileName, relativePath, file.size, notes, downloadUrl]
+    );
+
+    const [newRow] = await pool.query('SELECT * FROM extension_releases WHERE id = ?', [id]);
+
+    res.json({
+      success: true,
+      message: `Extension v${cleanVersion} saved as "${standardFileName}"! ${isForced ? 'Mandatory update enforced.' : 'Optional update enabled.'}`,
+      release: newRow[0]
+    });
+  } catch (error) {
+    console.error('Admin upload extension error:', error);
+    res.status(500).json({ error: error.message || 'Failed to upload extension.' });
+  }
+});
+
+// 3. Admin - Update Extension Settings (toggle force update or change notes without re-upload)
+app.post('/api/admin/extension/settings', requireAdminRole, async (req, res) => {
+  try {
+    const pool = getPool();
+    const { id, force_update, min_version, release_notes, version } = req.body;
+
+    const isForced = (force_update === 'true' || force_update === '1' || force_update === 1 || force_update === true) ? 1 : 0;
+
+    let targetId = id;
+    if (!targetId) {
+      const [currentRows] = await pool.query('SELECT id FROM extension_releases WHERE is_active = 1 ORDER BY created_at DESC LIMIT 1');
+      targetId = currentRows[0]?.id;
+    }
+
+    if (!targetId) {
+      return res.status(404).json({ error: 'No active extension release found to update.' });
+    }
+
+    await pool.query(
+      `UPDATE extension_releases 
+       SET force_update = ?, 
+           min_version = COALESCE(?, min_version), 
+           release_notes = COALESCE(?, release_notes),
+           version = COALESCE(?, version),
+           updated_at = NOW()
+       WHERE id = ?`,
+      [isForced, min_version || null, release_notes || null, version || null, targetId]
+    );
+
+    const [updatedRows] = await pool.query('SELECT * FROM extension_releases WHERE id = ?', [targetId]);
+    res.json({
+      success: true,
+      message: `Extension settings updated successfully. Force update is now ${isForced ? 'ON' : 'OFF'}.`,
+      release: updatedRows[0]
+    });
+  } catch (error) {
+    console.error('Admin update extension settings error:', error);
+    res.status(500).json({ error: 'Failed to update extension settings.' });
+  }
+});
+
+// 4. Download Extension (Strictly requires authenticated user token)
+app.get('/api/extension/download', async (req, res) => {
+  try {
+    let token = null;
+    const authHeader = req.headers.authorization;
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      token = authHeader.split(' ')[1];
+    } else if (req.query && req.query.token) {
+      token = req.query.token;
+    }
+
+    if (!token || token === 'undefined' || token === 'null' || !token.trim()) {
+      return res.status(401).json({
+        error: 'Authentication required. Please sign in to download the extension package.',
+        login_required: true
+      });
+    }
+
+    const pool = getPool();
+    let user = null;
+    try {
+      const decoded = jwt.verify(token, JWT_SECRET);
+      const [rows] = await pool.query('SELECT id, name, email, role FROM users WHERE id = ?', [decoded.id]);
+      if (rows.length > 0) user = rows[0];
+    } catch (_) {
+      return res.status(401).json({
+        error: 'Invalid or expired session. Please sign in again to download the extension.',
+        login_required: true
+      });
+    }
+
+    if (!user) {
+      return res.status(401).json({
+        error: 'User account not found. Please sign in.',
+        login_required: true
+      });
+    }
+
+    const { id } = req.query;
+
+    let row;
+    if (id) {
+      const [rows] = await pool.query('SELECT * FROM extension_releases WHERE id = ?', [id]);
+      row = rows[0];
+    } else {
+      const [rows] = await pool.query('SELECT * FROM extension_releases WHERE is_active = 1 ORDER BY created_at DESC LIMIT 1');
+      row = rows[0];
+    }
+
+    if (!row) {
+      return res.status(404).json({ error: 'No extension file available for download.' });
+    }
+
+    const fullFilePath = path.join(__dirname, '..', row.file_path);
+    if (fs.existsSync(fullFilePath)) {
+      return res.download(fullFilePath, row.file_name);
+    } else {
+      return res.status(404).json({
+        error: 'Extension package file not found on disk. Please ask the administrator to upload the extension package.',
+        release: row
+      });
+    }
+  } catch (error) {
+    console.error('Download extension error:', error);
+    res.status(500).json({ error: 'Failed to download extension.' });
+  }
+});
+
+// 5. Extension Runtime Version & Update Check (Public / Extension runtime)
+app.get(['/api/extension/check-update', '/api/extension/version'], async (req, res) => {
+  try {
+    const pool = getPool();
+    const [rows] = await pool.query('SELECT * FROM extension_releases WHERE is_active = 1 ORDER BY created_at DESC LIMIT 1');
+    const current = rows[0];
+
+    if (!current) {
+      return res.json({
+        ok: true,
+        update_available: false,
+        update_required: false,
+        latest_version: '1.0.0',
+        min_version: '1.0.0',
+        force_update: false
+      });
+    }
+
+    const clientVersion = req.query.version || req.headers['x-extension-version'] || '0.0.0';
+    const isOutdated = compareSemver(clientVersion, current.version) < 0;
+    const isBelowMin = compareSemver(clientVersion, current.min_version || current.version) < 0;
+    const forceUpdateEnforced = Boolean(current.force_update) && (isBelowMin || isOutdated);
+
+    res.json({
+      ok: true,
+      client_version: clientVersion,
+      latest_version: current.version,
+      min_version: current.min_version || current.version,
+      force_update: Boolean(current.force_update),
+      update_available: isOutdated,
+      update_required: forceUpdateEnforced,
+      download_url: current.download_url || '/api/extension/download',
+      file_name: current.file_name,
+      file_size: current.file_size,
+      release_notes: current.release_notes,
+      message: forceUpdateEnforced
+        ? `Mandatory update required! Please update your ToolsByDcx extension to v${current.version}.`
+        : (isOutdated ? `A new version (v${current.version}) of ToolsByDcx extension is available.` : 'Extension is up to date.')
+    });
+  } catch (error) {
+    console.error('Extension check update error:', error);
+    res.status(500).json({ ok: false, error: 'Failed to check extension version.' });
+  }
+});
+
+// --------------------------------------------------------------------------
 // SHARED ACCOUNTS & EXTENSION API
 // --------------------------------------------------------------------------
 
@@ -2046,6 +2359,25 @@ app.post(['/api/extension/inject-cookies', '/api/extension2/inject-cookies'], as
     const deviceId = req.headers['x-bf-device-id'] || (req.body && req.body.deviceId) || 'default_device';
     const pool = getPool();
 
+    // Check if extension is outdated and force update is active
+    const clientExtVersion = req.headers['x-extension-version'] || (req.body && req.body.extensionVersion) || (req.query && req.query.extensionVersion);
+    if (clientExtVersion) {
+      const [releaseRows] = await pool.query('SELECT * FROM extension_releases WHERE is_active = 1 LIMIT 1');
+      if (releaseRows.length > 0 && releaseRows[0].force_update) {
+        const minV = releaseRows[0].min_version || releaseRows[0].version;
+        if (compareSemver(clientExtVersion, minV) < 0) {
+          return res.status(426).json({
+            ok: false,
+            update_required: true,
+            force_update: true,
+            latest_version: releaseRows[0].version,
+            download_url: releaseRows[0].download_url || '/api/extension/download',
+            error: `Your ToolsByDcx extension (v${clientExtVersion}) is outdated. An update to v${releaseRows[0].version} is required by the administrator to access tools.`
+          });
+        }
+      }
+    }
+
     // Query active accounts
     const [accounts] = await pool.query("SELECT * FROM shared_accounts WHERE status = 'active' ORDER BY updated_at DESC");
 
@@ -2161,6 +2493,27 @@ app.post(['/api/extension/verify', '/api/extension2/verify'], async (req, res) =
     }
 
     const pool = getPool();
+
+    // Check if extension is outdated and force update is active
+    const clientExtVersion = req.headers['x-extension-version'] || (req.body && req.body.extensionVersion) || (req.query && req.query.extensionVersion);
+    if (clientExtVersion) {
+      const [releaseRows] = await pool.query('SELECT * FROM extension_releases WHERE is_active = 1 LIMIT 1');
+      if (releaseRows.length > 0 && releaseRows[0].force_update) {
+        const minV = releaseRows[0].min_version || releaseRows[0].version;
+        if (compareSemver(clientExtVersion, minV) < 0) {
+          return res.status(426).json({
+            ok: false,
+            valid: false,
+            update_required: true,
+            force_update: true,
+            latest_version: releaseRows[0].version,
+            download_url: releaseRows[0].download_url || '/api/extension/download',
+            error: `Your ToolsByDcx extension (v${clientExtVersion}) is outdated. An update to v${releaseRows[0].version} is required by the administrator.`
+          });
+        }
+      }
+    }
+
     const [uRows] = await pool.query(
       'SELECT u.*, p.credits as plan_credits, p.duration_days as plan_duration, p.billing_cycle as plan_billing_cycle FROM users u LEFT JOIN plans p ON (u.plan = p.id OR (p.id = CONCAT("plan_", u.plan))) WHERE u.id = ?',
       [user.id]

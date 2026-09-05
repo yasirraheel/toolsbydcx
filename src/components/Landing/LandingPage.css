@@ -9,7 +9,7 @@
   background-color: #090d16;
   color: #f8fafc;
   font-family: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, "Helvetica Neue", sans-serif;
-  font-size: 18px;
+  font-size: 15px;
   overflow-x: clip;
   position: relative;
   line-height: 1.6;
@@ -43,7 +43,7 @@
 .landing-container {
   width: 100%;
   max-width: 100%;
-  padding: 0 54px;
+  padding: 0 44px;
   position: relative;
   z-index: 1;
 }
@@ -71,39 +71,40 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  height: 98px;
+  height: 74px;
 }
 
 .landing-brand {
   display: flex;
   align-items: center;
-  gap: 16px;
+  gap: 12px;
   text-decoration: none;
   color: #f8fafc;
   cursor: pointer;
+  flex-shrink: 0;
 }
 
 .landing-brand-icon {
-  width: 54px;
-  height: 54px;
+  width: 40px;
+  height: 40px;
   background: linear-gradient(135deg, rgba(34, 197, 94, 0.25) 0%, rgba(16, 185, 129, 0.08) 100%);
   border: 1px solid rgba(34, 197, 94, 0.5);
-  border-radius: 14px;
+  border-radius: 10px;
   display: flex;
   align-items: center;
   justify-content: center;
   color: #22c55e;
-  box-shadow: 0 0 24px rgba(34, 197, 94, 0.35);
+  box-shadow: 0 0 16px rgba(34, 197, 94, 0.25);
 }
 
 .landing-brand-text {
-  font-size: 32px;
-  font-weight: 900;
-  letter-spacing: -0.03em;
+  font-size: 22px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
   color: #f8fafc;
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 2px;
 }
 
 .landing-brand-text span {
@@ -113,19 +114,19 @@
 .landing-nav-links {
   display: flex;
   align-items: center;
-  gap: 48px;
+  gap: 32px;
 }
 
 .landing-nav-link {
   color: #94a3b8;
-  font-size: 20px;
+  font-size: 15px;
   font-weight: 600;
   text-decoration: none;
   transition: all 0.15s ease;
   cursor: pointer;
   background: none;
   border: none;
-  padding: 8px 6px;
+  padding: 6px 4px;
 }
 
 .landing-nav-link:hover {
@@ -135,28 +136,28 @@
 .landing-nav-actions {
   display: flex;
   align-items: center;
-  gap: 18px;
+  gap: 14px;
 }
 
 .landing-user-chip {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
   background: #131926;
   border: 1px solid #1e293b;
-  padding: 12px 24px;
+  padding: 8px 18px;
   border-radius: 9999px;
-  font-size: 19px;
+  font-size: 14px;
   font-weight: 600;
   color: #cbd5e1;
 }
 
 .landing-user-dot {
-  width: 10px;
-  height: 10px;
+  width: 8px;
+  height: 8px;
   border-radius: 50%;
   background: #22c55e;
-  box-shadow: 0 0 12px #22c55e;
+  box-shadow: 0 0 10px #22c55e;
 }
 
 /* Tactile SaaS Buttons */
@@ -164,13 +165,13 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 10px;
+  gap: 8px;
   background: #22c55e;
   color: #090d16;
   font-weight: 700;
-  font-size: 16px;
-  padding: 12px 26px;
-  border-radius: 12px;
+  font-size: 14px;
+  padding: 10px 20px;
+  border-radius: 10px;
   border: 1px solid rgba(255, 255, 255, 0.25);
   text-decoration: none;
   cursor: pointer;
@@ -189,13 +190,13 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 10px;
+  gap: 8px;
   background: #131926;
   color: #f8fafc;
   font-weight: 600;
-  font-size: 16px;
-  padding: 12px 24px;
-  border-radius: 12px;
+  font-size: 14px;
+  padding: 10px 20px;
+  border-radius: 10px;
   border: 1px solid #1e293b;
   text-decoration: none;
   cursor: pointer;
@@ -214,9 +215,9 @@
   background: transparent;
   color: #94a3b8;
   font-weight: 600;
-  font-size: 16px;
-  padding: 10px 20px;
-  border-radius: 12px;
+  font-size: 14px;
+  padding: 8px 16px;
+  border-radius: 10px;
   border: 1px solid transparent;
   cursor: pointer;
   transition: all 0.15s ease;
@@ -228,36 +229,36 @@
 }
 
 /* --------------------------------------------------------------------------
-   HERO SECTION (Grand & Bold)
+   HERO SECTION (Balanced & Modern)
    -------------------------------------------------------------------------- */
 .landing-hero {
-  padding: 100px 0 120px;
+  padding: 72px 0 84px;
   text-align: center;
 }
 
 .landing-pill-badge {
   display: inline-flex;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
   background: rgba(34, 197, 94, 0.12);
   border: 1px solid rgba(34, 197, 94, 0.4);
-  padding: 12px 28px;
+  padding: 8px 20px;
   border-radius: 9999px;
-  font-size: 18px;
+  font-size: 13px;
   font-weight: 700;
   color: #4ade80;
-  margin-bottom: 34px;
+  margin-bottom: 24px;
   letter-spacing: 0.02em;
 }
 
 .landing-hero-title {
-  font-size: clamp(48px, 5.2vw, 84px);
+  font-size: clamp(34px, 3.8vw, 54px);
   font-weight: 900;
-  line-height: 1.12;
-  letter-spacing: -0.04em;
+  line-height: 1.15;
+  letter-spacing: -0.035em;
   color: #f8fafc;
-  max-width: 1400px;
-  margin: 0 auto 32px;
+  max-width: 1100px;
+  margin: 0 auto 24px;
 }
 
 .landing-hero-gradient {
@@ -267,36 +268,36 @@
 }
 
 .landing-hero-subtitle {
-  font-size: 24px;
+  font-size: 17px;
   font-weight: 500;
   color: #cbd5e1;
-  max-width: 1250px;
-  margin: 0 auto 52px;
-  line-height: 1.75;
+  max-width: 880px;
+  margin: 0 auto 38px;
+  line-height: 1.65;
 }
 
 .landing-hero-actions {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 24px;
+  gap: 18px;
   flex-wrap: wrap;
-  margin-bottom: 74px;
+  margin-bottom: 56px;
 }
 
 /* Balanced CTA buttons in Hero */
 .hero-cta-primary {
-  padding: 15px 32px !important;
-  font-size: 18px !important;
+  padding: 13px 26px !important;
+  font-size: 15px !important;
   font-weight: 700 !important;
-  border-radius: 12px !important;
+  border-radius: 11px !important;
 }
 
 .hero-cta-secondary {
-  padding: 15px 30px !important;
-  font-size: 18px !important;
+  padding: 13px 24px !important;
+  font-size: 15px !important;
   font-weight: 600 !important;
-  border-radius: 12px !important;
+  border-radius: 11px !important;
 }
 
 /* --------------------------------------------------------------------------
@@ -304,13 +305,13 @@
    -------------------------------------------------------------------------- */
 .landing-hero-preview {
   width: 100%;
-  max-width: 1400px;
+  max-width: 1200px;
   margin: 0 auto;
   background: #131926;
   border: 1px solid #1e293b;
-  border-radius: 28px;
-  padding: 44px;
-  box-shadow: 0 30px 70px rgba(0, 0, 0, 0.75), 0 0 40px rgba(34, 197, 94, 0.12);
+  border-radius: 22px;
+  padding: 32px 28px;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.7), 0 0 35px rgba(34, 197, 94, 0.1);
   position: relative;
   overflow: hidden;
 }
@@ -320,19 +321,19 @@
   align-items: center;
   justify-content: space-between;
   border-bottom: 1px solid #1e293b;
-  padding-bottom: 24px;
-  margin-bottom: 32px;
+  padding-bottom: 16px;
+  margin-bottom: 22px;
 }
 
 .landing-preview-dots {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 8px;
 }
 
 .landing-preview-dot {
-  width: 16px;
-  height: 16px;
+  width: 11px;
+  height: 11px;
   border-radius: 50%;
 }
 .landing-dot-red { background: #ef4444; }
@@ -340,30 +341,30 @@
 .landing-dot-green { background: #22c55e; }
 
 .landing-preview-chip {
-  font-size: 17px;
+  font-size: 13px;
   font-weight: 700;
   color: #4ade80;
   background: rgba(34, 197, 94, 0.15);
   border: 1px solid rgba(34, 197, 94, 0.35);
-  padding: 10px 24px;
+  padding: 6px 16px;
   border-radius: 9999px;
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 8px;
 }
 
 .landing-preview-body {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: 28px;
+  gap: 20px;
   text-align: left;
 }
 
 .landing-preview-box {
   background: #090d16;
   border: 1px solid #1e293b;
-  border-radius: 20px;
-  padding: 30px 28px;
+  border-radius: 14px;
+  padding: 20px 18px;
   transition: border-color 0.2s ease;
 }
 
@@ -372,78 +373,78 @@
 }
 
 .landing-box-label {
-  font-size: 16px;
+  font-size: 12px;
   color: #94a3b8;
   text-transform: uppercase;
   font-weight: 800;
   letter-spacing: 0.08em;
-  margin-bottom: 12px;
+  margin-bottom: 8px;
 }
 
 .landing-box-val {
-  font-size: 26px;
-  font-weight: 900;
+  font-size: 19px;
+  font-weight: 800;
   color: #f8fafc;
   display: flex;
   align-items: center;
-  gap: 14px;
+  gap: 10px;
 }
 
 /* --------------------------------------------------------------------------
    SECTIONS GENERAL
    -------------------------------------------------------------------------- */
 .landing-section {
-  padding: 130px 0;
+  padding: 76px 0;
   border-top: 1px solid rgba(30, 41, 59, 0.7);
 }
 
 .landing-section-header {
   text-align: center;
-  max-width: 1100px;
-  margin: 0 auto 74px;
+  max-width: 900px;
+  margin: 0 auto 48px;
 }
 
 .landing-section-badge {
-  font-size: 18px;
+  font-size: 13px;
   font-weight: 800;
   text-transform: uppercase;
-  letter-spacing: 0.14em;
+  letter-spacing: 0.12em;
   color: #22c55e;
-  margin-bottom: 18px;
+  margin-bottom: 12px;
   display: inline-block;
 }
 
 .landing-section-title {
-  font-size: clamp(42px, 4.2vw, 64px);
+  font-size: clamp(28px, 2.8vw, 38px);
   font-weight: 900;
   color: #f8fafc;
-  letter-spacing: -0.03em;
-  margin-bottom: 24px;
-  line-height: 1.15;
+  letter-spacing: -0.025em;
+  margin-bottom: 16px;
+  line-height: 1.2;
 }
 
 .landing-section-desc {
-  font-size: 24px;
+  font-size: 16px;
   font-weight: 500;
   color: #cbd5e1;
-  line-height: 1.7;
+  line-height: 1.65;
 }
 
 /* --------------------------------------------------------------------------
-   PLANS / PRICING SECTION (Large 3-Column Standard SaaS Display)
+   PLANS / PRICING SECTION (Medium Balanced 3-Column SaaS Display)
    -------------------------------------------------------------------------- */
 .landing-plans-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 38px;
+  gap: 28px;
   align-items: stretch;
 }
 
 .landing-plan-card {
   background: #131926;
   border: 1px solid #1e293b;
-  border-radius: 28px;
-  padding: 52px 42px;
+  border-radius: 20px;
+  padding: 38px 28px;
   display: flex;
   flex-direction: column;
   position: relative;
@@ -451,70 +452,70 @@
 }
 
 .landing-plan-card:hover {
-  transform: translateY(-8px);
+  transform: translateY(-6px);
   border-color: #334155;
-  box-shadow: 0 25px 55px rgba(0, 0, 0, 0.65);
+  box-shadow: 0 20px 45px rgba(0, 0, 0, 0.6);
 }
 
 .landing-plan-card.popular {
   border-color: #22c55e;
   background: linear-gradient(180deg, rgba(34, 197, 94, 0.12) 0%, #131926 100%);
-  box-shadow: 0 0 50px rgba(34, 197, 94, 0.25), 0 25px 60px rgba(0, 0, 0, 0.7);
+  box-shadow: 0 0 40px rgba(34, 197, 94, 0.2), 0 20px 50px rgba(0, 0, 0, 0.65);
 }
 
 .landing-popular-badge {
   position: absolute;
-  top: -20px;
+  top: -15px;
   left: 50%;
   transform: translateX(-50%);
   background: #22c55e;
   color: #090d16;
-  font-size: 16px;
+  font-size: 12px;
   font-weight: 900;
   text-transform: uppercase;
   letter-spacing: 0.08em;
-  padding: 10px 24px;
+  padding: 6px 18px;
   border-radius: 9999px;
-  box-shadow: 0 4px 20px rgba(34, 197, 94, 0.55);
+  box-shadow: 0 4px 16px rgba(34, 197, 94, 0.5);
 }
 
 .landing-plan-top {
   border-bottom: 1px solid #1e293b;
-  padding-bottom: 32px;
-  margin-bottom: 34px;
+  padding-bottom: 22px;
+  margin-bottom: 24px;
 }
 
 .landing-plan-name {
-  font-size: 36px;
-  font-weight: 900;
+  font-size: 24px;
+  font-weight: 800;
   color: #f8fafc;
-  margin-bottom: 14px;
+  margin-bottom: 8px;
 }
 
 .landing-plan-desc {
-  font-size: 20px;
+  font-size: 14px;
   font-weight: 500;
   color: #cbd5e1;
-  line-height: 1.6;
-  min-height: 64px;
+  line-height: 1.55;
+  min-height: 48px;
 }
 
 .landing-plan-price-wrap {
   display: flex;
   align-items: baseline;
-  gap: 12px;
-  margin-top: 26px;
+  gap: 8px;
+  margin-top: 18px;
 }
 
 .landing-plan-price {
-  font-size: 72px;
+  font-size: 48px;
   font-weight: 900;
   color: #f8fafc;
   line-height: 1;
 }
 
 .landing-plan-cycle {
-  font-size: 22px;
+  font-size: 15px;
   color: #94a3b8;
   font-weight: 700;
 }
@@ -522,32 +523,32 @@
 .landing-plan-features {
   list-style: none;
   padding: 0;
-  margin: 28px 0 48px;
+  margin: 22px 0 34px;
   flex: 1;
 }
 
 .landing-plan-feature-item {
   display: flex;
   align-items: flex-start;
-  gap: 18px;
-  font-size: 21px;
-  font-weight: 600;
+  gap: 12px;
+  font-size: 14px;
+  font-weight: 500;
   color: #f8fafc;
-  margin-bottom: 22px;
+  margin-bottom: 14px;
   line-height: 1.5;
 }
 
 .landing-feature-check {
   color: #22c55e;
   flex-shrink: 0;
-  margin-top: 3px;
+  margin-top: 2px;
 }
 
 .landing-plan-btn {
   width: 100%;
-  padding: 16px 28px;
-  border-radius: 14px;
-  font-size: 18px;
+  padding: 12px 20px;
+  border-radius: 11px;
+  font-size: 14px;
   font-weight: 800;
   cursor: pointer;
   text-align: center;
@@ -560,7 +561,7 @@
 .landing-plan-btn.primary {
   background: #22c55e;
   color: #090d16;
-  box-shadow: 0 6px 24px rgba(34, 197, 94, 0.45);
+  box-shadow: 0 4px 18px rgba(34, 197, 94, 0.4);
 }
 
 .landing-plan-btn.primary:hover {
@@ -580,136 +581,136 @@
 }
 
 /* --------------------------------------------------------------------------
-   FEATURES GRID (Expansive Layout)
+   FEATURES GRID (Balanced Layout)
    -------------------------------------------------------------------------- */
 .landing-features-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(380px, 1fr));
-  gap: 40px;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 26px;
 }
 
 .landing-feature-card {
   background: #131926;
   border: 1px solid #1e293b;
-  border-radius: 26px;
-  padding: 50px 42px;
+  border-radius: 18px;
+  padding: 34px 28px;
   transition: all 0.25s ease;
 }
 
 .landing-feature-card:hover {
-  transform: translateY(-6px);
+  transform: translateY(-4px);
   border-color: rgba(34, 197, 94, 0.5);
-  box-shadow: 0 20px 45px rgba(0, 0, 0, 0.65), 0 0 30px rgba(34, 197, 94, 0.12);
+  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.6), 0 0 24px rgba(34, 197, 94, 0.1);
 }
 
 .landing-feature-icon {
-  width: 76px;
-  height: 76px;
-  border-radius: 20px;
+  width: 54px;
+  height: 54px;
+  border-radius: 14px;
   background: rgba(34, 197, 94, 0.15);
   border: 1px solid rgba(34, 197, 94, 0.4);
   display: flex;
   align-items: center;
   justify-content: center;
   color: #22c55e;
-  margin-bottom: 30px;
+  margin-bottom: 20px;
 }
 
 .landing-feature-title {
-  font-size: 30px;
-  font-weight: 900;
+  font-size: 21px;
+  font-weight: 800;
   color: #f8fafc;
-  margin-bottom: 16px;
+  margin-bottom: 10px;
 }
 
 .landing-feature-desc {
-  font-size: 21px;
+  font-size: 14px;
   font-weight: 500;
   color: #cbd5e1;
-  line-height: 1.7;
+  line-height: 1.65;
 }
 
 /* --------------------------------------------------------------------------
-   HOW IT WORKS (Spacious 3 Steps)
+   HOW IT WORKS (Balanced 3 Steps)
    -------------------------------------------------------------------------- */
 .landing-steps-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 40px;
+  gap: 26px;
 }
 
 .landing-step-card {
   background: #131926;
   border: 1px solid #1e293b;
-  border-radius: 26px;
-  padding: 52px 42px;
+  border-radius: 18px;
+  padding: 34px 28px;
   position: relative;
 }
 
 .landing-step-num {
-  font-size: 68px;
+  font-size: 46px;
   font-weight: 900;
   color: rgba(34, 197, 94, 0.35);
   line-height: 1;
-  margin-bottom: 24px;
-}
-
-.landing-step-title {
-  font-size: 30px;
-  font-weight: 900;
-  color: #f8fafc;
   margin-bottom: 16px;
 }
 
-.landing-step-desc {
+.landing-step-title {
   font-size: 21px;
+  font-weight: 800;
+  color: #f8fafc;
+  margin-bottom: 10px;
+}
+
+.landing-step-desc {
+  font-size: 14px;
   font-weight: 500;
   color: #cbd5e1;
-  line-height: 1.7;
+  line-height: 1.65;
 }
 
 /* --------------------------------------------------------------------------
-   EXTENSION BANNER (Widescreen Feature Block)
+   EXTENSION BANNER (Balanced Feature Block)
    -------------------------------------------------------------------------- */
 .landing-ext-banner {
   background: linear-gradient(135deg, rgba(34, 197, 94, 0.16) 0%, rgba(19, 25, 38, 0.98) 100%);
   border: 1px solid rgba(34, 197, 94, 0.45);
-  border-radius: 34px;
-  padding: 80px;
+  border-radius: 24px;
+  padding: 52px 42px;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 56px;
-  margin: 110px 0;
-  box-shadow: 0 25px 65px rgba(0, 0, 0, 0.7);
+  gap: 40px;
+  margin: 76px 0;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.65);
 }
 
 .landing-ext-content {
-  max-width: 900px;
+  max-width: 760px;
 }
 
 .landing-ext-title {
-  font-size: 52px;
+  font-size: 34px;
   font-weight: 900;
   color: #f8fafc;
-  margin-bottom: 22px;
-  line-height: 1.2;
+  margin-bottom: 14px;
+  line-height: 1.25;
 }
 
 .landing-ext-desc {
-  font-size: 24px;
+  font-size: 16px;
   font-weight: 500;
   color: #e2e8f0;
-  line-height: 1.75;
-  margin-bottom: 40px;
+  line-height: 1.65;
+  margin-bottom: 28px;
 }
 
 /* --------------------------------------------------------------------------
-   FOOTER (Expansive & Modern)
+   FOOTER (Modern & Clean)
    -------------------------------------------------------------------------- */
 .landing-footer {
   border-top: 1px solid #1e293b;
-  padding: 74px 0 50px;
+  padding: 52px 0 34px;
   background: #090d16;
 }
 
@@ -718,8 +719,8 @@
   align-items: center;
   justify-content: space-between;
   flex-wrap: wrap;
-  gap: 32px;
-  margin-bottom: 46px;
+  gap: 28px;
+  margin-bottom: 34px;
 }
 
 .landing-footer-bottom {
@@ -727,11 +728,11 @@
   align-items: center;
   justify-content: space-between;
   border-top: 1px solid #131926;
-  padding-top: 36px;
-  font-size: 19px;
+  padding-top: 24px;
+  font-size: 14px;
   color: #64748b;
   flex-wrap: wrap;
-  gap: 24px;
+  gap: 20px;
 }
 
 /* Responsive adjustments */

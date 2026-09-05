@@ -169,6 +169,36 @@ async function initDB() {
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
     `);
 
+    // Extension Releases table for Admin Extension Upload & Force Update Control
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS extension_releases (
+        id VARCHAR(100) PRIMARY KEY,
+        version VARCHAR(50) NOT NULL,
+        min_version VARCHAR(50) DEFAULT '1.0.0',
+        force_update BOOLEAN DEFAULT 0,
+        file_name VARCHAR(255) NOT NULL,
+        file_path VARCHAR(255) NOT NULL,
+        file_size BIGINT DEFAULT 0,
+        release_notes TEXT,
+        download_url VARCHAR(255) NOT NULL,
+        is_active BOOLEAN DEFAULT 1,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+    `);
+
+    try {
+      const [existingReleases] = await pool.query('SELECT COUNT(*) as count FROM extension_releases');
+      if (existingReleases[0].count === 0) {
+        await pool.query(`
+          INSERT INTO extension_releases (id, version, min_version, force_update, file_name, file_path, file_size, release_notes, download_url, is_active)
+          VALUES ('ext_rel_initial', '1.0.0', '1.0.0', 0, 'toolsbydcx_extension_v1.0.0.zip', 'uploads/extension/toolsbydcx_extension_v1.0.0.zip', 0, 'Initial production release of ToolsByDcx Chrome Extension.', '/api/extension/download', 1);
+        `);
+      }
+    } catch (e) {
+      console.warn('Extension releases seed warning:', e.message);
+    }
+
     // Seed default shared account if empty
     try {
       const [existingAccs] = await pool.query('SELECT COUNT(*) as count FROM shared_accounts');

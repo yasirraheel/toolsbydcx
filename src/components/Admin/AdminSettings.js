@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
-
-const API_BASE = process.env.REACT_APP_API_URL || (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' ? 'http://localhost:5000/api' : '/api');
+import { API_BASE } from '../../apiConfig';
 
 function AdminSettings({ currentUser }) {
   const [testEmailTo, setTestEmailTo] = useState(currentUser?.email || 'saadmaqbool7861@gmail.com');

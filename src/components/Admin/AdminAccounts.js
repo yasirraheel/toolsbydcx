@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useDialog } from '../../context/DialogContext';
+import { API_BASE } from '../../apiConfig';
 
 function AdminAccounts() {
   const { confirm, alert: showCustomAlert } = useDialog();
@@ -13,8 +14,6 @@ function AdminAccounts() {
   const [inspectAccount, setInspectAccount] = useState(null);
   const [actionFeedback, setActionFeedback] = useState(null);
   const [cookieValidation, setCookieValidation] = useState(null);
-
-  const API_BASE = process.env.REACT_APP_API_URL || (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' ? 'http://localhost:5000/api' : '/api');
 
   const getAuthHeaders = () => {
     const token = localStorage.getItem('ccna_auth_token') || localStorage.getItem('flow_token') || '';
@@ -219,7 +218,7 @@ function AdminAccounts() {
     setCookieValidation(null);
     setEditingAccount({
       service_name: '',
-      target_url: 'https://labs.google/fx/tools/flow',
+      target_url: 'https://flow.google.com/',
       description: '',
       status: 'active',
       allowed_plans: ['plan_pro', 'plan_unlimited'],
@@ -555,7 +554,7 @@ function AdminAccounts() {
                     required
                     value={editingAccount.target_url}
                     onChange={(e) => setEditingAccount({ ...editingAccount, target_url: e.target.value })}
-                    placeholder="https://labs.google/fx/tools/flow"
+                    placeholder="https://flow.google.com/"
                     style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', background: '#0f121d', border: '1px solid #2e344d', color: '#fff' }}
                   />
                 </div>

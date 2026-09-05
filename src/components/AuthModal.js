@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 
-const API_AUTH_BASE = process.env.REACT_APP_API_URL ? `${process.env.REACT_APP_API_URL}/auth` : (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1" ? "http://localhost:5000/api/auth" : "/api/auth");
+import { API_AUTH_BASE } from "../apiConfig";
 function AuthModal({ isOpen, onClose, currentUser, onAuthSuccess, onLogout, initialMode = "login" }) {
   const [mode, setMode] = useState(initialMode === "signup" ? "login" : initialMode);
   const [email, setEmail] = useState("");

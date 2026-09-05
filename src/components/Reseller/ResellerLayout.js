@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import '../Admin/admin.css';
 import ResellerDashboard from './ResellerDashboard';
 import ResellerUsers from './ResellerUsers';
+import { API_BASE } from '../../apiConfig';
 
 function ResellerLayout({ currentUser, onExitReseller, onSwitchPortal, onLogout }) {
   const getInitialTab = () => {
@@ -35,7 +36,7 @@ function ResellerLayout({ currentUser, onExitReseller, onSwitchPortal, onLogout 
     return () => window.removeEventListener('popstate', handlePop);
   }, []);
 
-  const API_BASE = process.env.REACT_APP_API_URL || (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' ? 'http://localhost:5000/api' : '/api');
+
 
   const fetchStats = async () => {
     try {

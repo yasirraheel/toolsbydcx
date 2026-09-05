@@ -6,6 +6,8 @@ import AdminResellers from './AdminResellers';
 import AdminPlans from './AdminPlans';
 import AdminAccounts from './AdminAccounts';
 import AdminSettings from './AdminSettings';
+import AdminExtension from './AdminExtension';
+import { API_BASE } from '../../apiConfig';
 
 function AdminLayout({ currentUser, onExitAdmin, onSwitchPortal, onLogout }) {
   const getInitialAdminTab = () => {
@@ -17,6 +19,7 @@ function AdminLayout({ currentUser, onExitAdmin, onSwitchPortal, onLogout }) {
     if (path.includes("/admin/users")) return "users";
     if (path.includes("/admin/resellers")) return "resellers";
     if (path.includes("/admin/plans")) return "plans";
+    if (path.includes("/admin/extension")) return "extension";
     if (path.includes("/admin/settings")) return "settings";
     return "dashboard";
   };
@@ -57,7 +60,7 @@ function AdminLayout({ currentUser, onExitAdmin, onSwitchPortal, onLogout }) {
     }
   }, [activeTab]);
 
-  const API_BASE = process.env.REACT_APP_API_URL || (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' ? 'http://localhost:5000/api' : '/api');
+
 
   const getAuthHeaders = () => {
     const token = localStorage.getItem('ccna_auth_token') || localStorage.getItem('flow_token') || '';
@@ -100,6 +103,7 @@ function AdminLayout({ currentUser, onExitAdmin, onSwitchPortal, onLogout }) {
       case 'users': return '👥 Customers';
       case 'resellers': return '🤝 Resellers';
       case 'plans': return '💳 Plans';
+      case 'extension': return '🧩 Chrome Extension';
       case 'settings': return '⚙️ Settings & SMTP';
       default: return 'Admin Portal';
     }
@@ -186,6 +190,15 @@ function AdminLayout({ currentUser, onExitAdmin, onSwitchPortal, onLogout }) {
             <span>Plans</span>
           </button>
 
+          <button
+            type="button"
+            className={`admin-nav-item ${activeTab === 'extension' ? 'active' : ''}`}
+            onClick={() => switchTab('extension')}
+          >
+            <span className="admin-nav-icon">🧩</span>
+            <span>Extension</span>
+          </button>
+
           {/* CONFIGURATION - Hidden from sidebar UI, code and page fully preserved */}
           {false && (
             <>
@@ -201,17 +214,6 @@ function AdminLayout({ currentUser, onExitAdmin, onSwitchPortal, onLogout }) {
             </>
           )}
         </nav>
-
-        <div className="admin-sidebar-footer">
-          <button
-            type="button"
-            className="btn-admin-back"
-            onClick={onExitAdmin}
-          >
-            <span>⬅️</span>
-            <span>Back to Main App</span>
-          </button>
-        </div>
       </aside>
 
       {/* MAIN VIEWPORT */}
@@ -309,6 +311,8 @@ function AdminLayout({ currentUser, onExitAdmin, onSwitchPortal, onLogout }) {
           )}
 
           {activeTab === 'plans' && <AdminPlans />}
+
+          {activeTab === 'extension' && <AdminExtension />}
 
           {activeTab === 'settings' && <AdminSettings currentUser={currentUser} />}
         </div>

@@ -1,25 +1,59 @@
 // BunnyFlow — Flow About / Landing Page Status Card
-// ONLY runs on labs.google/flow/about and labs.google root (NOT on fx/tools/flow).
-// Shows NOTHING if extension is alive and cookies are present.
+// Runs on flow.google.com/about and labs.google roots.
+// Waits for cookie injection then redirects to Flow home.
 (function () {
   'use strict';
 
   var path = location.pathname;
-  var isAboutPage = /^\/flow(\/about)?\/?$/i.test(path) || path === '/' || path === '';
-  if (!isAboutPage) return; // never run on flow tool pages
+  var isAboutPage = /^\/(flow\/)?about\/?$/i.test(path) || path === '/about';
+  if (!isAboutPage) return;
 
-  var POLL_MS    = 4000;
-  var MAX_TRIES  = 15;
+  var POLL_MS    = 3000;
+  var MAX_TRIES  = 20;
   var _attempts  = 0;
   var _pollId    = null;
   var _card      = null;
   var _autoHide  = null;
+  var _redirecting = false;
 
+  // Loop protection: count how many times we've tried to redirect on this tab
+  var _REDIRECT_KEY = '__bf_redirect_count__';
+  var _redirectCount = parseInt(sessionStorage.getItem(_REDIRECT_KEY) || '0', 10);
+
+  // Returns the correct Flow URL based on current domain
+  function getTargetUrl() {
+    return (location.hostname.indexOf('flow.google.com') !== -1)
+      ? 'https://flow.google.com/'
+      : 'https://labs.google/fx/tools/flow';
+  }
+
+  // Check document.cookie for visible (non-httpOnly) Google auth cookies
   function hasCookies() {
     var c = document.cookie;
-    return c.indexOf('SID=') !== -1 || c.indexOf('SSID=') !== -1 ||
-           c.indexOf('HSID=') !== -1 || c.indexOf('__Secure-1PSID') !== -1 ||
-           c.indexOf('SAPISID') !== -1;
+    return c.indexOf('SAPISID') !== -1 ||
+           c.indexOf('SID=')    !== -1 ||
+           c.indexOf('SSID=')   !== -1 ||
+           c.indexOf('HSID=')   !== -1 ||
+           c.indexOf('__Secure-1PSID') !== -1;
+  }
+
+  // Also ask the background worker via chrome.runtime to check httpOnly cookies (OSID, etc.)
+  function hasCookiesAsync(cb) {
+    if (hasCookies()) { cb(true); return; }
+    try {
+      if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.id) {
+        var sent = false;
+        var timer = setTimeout(function() { if (!sent) { sent = true; cb(false); } }, 1000);
+        chrome.runtime.sendMessage({ type: 'BF_CHECK_COOKIES', url: location.origin }, function() {
+          clearTimeout(timer);
+          if (sent) return; sent = true;
+          // Even if background doesn't support this message, fallback to doc.cookie result
+          cb(hasCookies());
+        });
+        return;
+      }
+    } catch(e) {}
+    cb(false);
   }
 
   function isExtensionAlive(cb) {
@@ -94,56 +128,55 @@
   function poll() {
     _attempts++;
     requestInjection();
-    if (hasCookies()) {
-      clearInterval(_pollId);
-      showCard('Flow is Active — Opening\u2026', '\u2705',
-        'linear-gradient(135deg,#16a34a,#166534)');
-      setTimeout(function() {
-        location.replace('https://labs.google/fx/tools/flow');
-      }, 1800);
-      return;
-    }
-    if (_attempts >= MAX_TRIES) {
-      clearInterval(_pollId);
-      showCard('Flow not available \u2014 try again', '\u274c',
-        'linear-gradient(135deg,#dc2626,#991b1b)');
-      return;
-    }
-    showCard('Flow is opening\u2026 Please wait', '\u23f3',
-      'linear-gradient(135deg,#6d28d9,#4c1d95)',
-      'Refresh this page & Visit FlowByDcx');
-  }
-
-  function init() {
-    // If cookies already present, check if extension alive
-    if (hasCookies()) {
-      isExtensionAlive(function(alive) {
-        if (alive) {
-          // Extension active + cookies = just redirect, show nothing
-          location.replace('https://labs.google/fx/tools/flow');
-        } else {
-          // Cookies present but extension gone — show active briefly then stop
-          showCard('Flow is Active!', '\u2705',
-            'linear-gradient(135deg,#16a34a,#166534)');
-          _autoHide = setTimeout(hideCard, 3000);
-        }
-      });
-      return;
-    }
-    // No cookies — check if extension is alive to decide message
-    isExtensionAlive(function(alive) {
-      if (!alive) {
-        // Extension removed — show "not available"
+    hasCookiesAsync(function(found) {
+      if (_redirecting) return;
+      if (found) {
+        clearInterval(_pollId);
+        _redirecting = true;
+        showCard('Flow is Active \u2014 Opening\u2026', '\u2705',
+          'linear-gradient(135deg,#16a34a,#166534)');
+        setTimeout(function() { location.replace(getTargetUrl()); }, 1200);
+        return;
+      }
+      if (_attempts >= MAX_TRIES) {
+        clearInterval(_pollId);
         showCard('Flow not available \u2014 try again', '\u274c',
           'linear-gradient(135deg,#dc2626,#991b1b)');
         return;
       }
-      // Extension alive but no cookies yet — start polling
-      requestInjection();
       showCard('Flow is opening\u2026 Please wait', '\u23f3',
         'linear-gradient(135deg,#6d28d9,#4c1d95)',
         'Refresh this page & Visit FlowByDcx');
-      _pollId = setInterval(poll, POLL_MS);
+    });
+  }
+
+  function init() {
+    hasCookiesAsync(function(found) {
+      if (found) {
+        isExtensionAlive(function(alive) {
+          if (alive) {
+            _redirecting = true;
+            location.replace(getTargetUrl());
+          } else {
+            showCard('Flow is Active!', '\u2705',
+              'linear-gradient(135deg,#16a34a,#166534)');
+            _autoHide = setTimeout(hideCard, 3000);
+          }
+        });
+        return;
+      }
+      isExtensionAlive(function(alive) {
+        if (!alive) {
+          showCard('Flow not available \u2014 try again', '\u274c',
+            'linear-gradient(135deg,#dc2626,#991b1b)');
+          return;
+        }
+        requestInjection();
+        showCard('Flow is opening\u2026 Please wait', '\u23f3',
+          'linear-gradient(135deg,#6d28d9,#4c1d95)',
+          'Refresh this page & Visit FlowByDcx');
+        _pollId = setInterval(poll, POLL_MS);
+      });
     });
   }
 

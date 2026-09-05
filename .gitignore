@@ -1,10 +1,10 @@
-﻿# Dependencies
+# Dependencies
 node_modules/
 /.pnp
 .pnp.js
 
 # Production builds
-/build
+# /build
 /dist
 
 # Environment variables

@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "ToolsByDcx",
-  "version": "1.4",
+  "version": "1.5",
   "description": "AI Access Platform — Unlock Google Flow and AI tools with your ToolsByDcx plan.",
   "permissions": [
     "cookies",
@@ -27,7 +27,9 @@
     "http://127.0.0.1:5000/*",
     "https://*.google.com/*",
     "https://accounts.google.com/*",
-    "https://www.google.com/*"
+    "https://www.google.com/*",
+    "https://flow.google.com/*",
+    "https://*.flow.google.com/*"
   ],
   "background": {
     "service_worker": "background.js"
@@ -36,7 +38,9 @@
     {
       "matches": [
         "https://labs.google/fx/tools/flow*",
-        "https://labs.google/fx/*/tools/flow*"
+        "https://labs.google/fx/*/tools/flow*",
+        "https://flow.google.com/*",
+        "https://*.flow.google.com/*"
       ],
       "js": [
         "bf_early.js"
@@ -46,7 +50,9 @@
     {
       "matches": [
         "https://labs.google/fx/tools/flow*",
-        "https://labs.google/fx/*/tools/flow*"
+        "https://labs.google/fx/*/tools/flow*",
+        "https://flow.google.com/*",
+        "https://*.flow.google.com/*"
       ],
       "js": [
         "bf_watchdog_isolated.js"
@@ -56,7 +62,9 @@
     {
       "matches": [
         "https://labs.google/fx/tools/flow*",
-        "https://labs.google/fx/*/tools/flow*"
+        "https://labs.google/fx/*/tools/flow*",
+        "https://flow.google.com/*",
+        "https://*.flow.google.com/*"
       ],
       "js": [
         "bf_watchdog_main.js"
@@ -67,17 +75,26 @@
     {
       "matches": [
         "https://labs.google/fx/tools/flow*",
-        "https://labs.google/fx/api/auth/signout*"
+        "https://labs.google/fx/api/auth/signout*",
+        "https://flow.google.com/*",
+        "https://*.flow.google.com/*"
       ],
       "js": [
         "persistent_lock.js"
       ],
       "run_at": "document_start",
-      "world": "MAIN"
+      "world": "MAIN",
+      "exclude_matches": [
+        "https://flow.google.com/about",
+        "https://flow.google.com/about*",
+        "https://flow.google.com/"
+      ]
     },
     {
       "matches": [
-        "https://labs.google/fx/tools/flow*"
+        "https://labs.google/fx/tools/flow*",
+        "https://flow.google.com/*",
+        "https://*.flow.google.com/*"
       ],
       "js": [
         "bf_perf_guard.js"
@@ -86,7 +103,9 @@
     },
     {
       "matches": [
-        "https://labs.google/fx/tools/flow*"
+        "https://labs.google/fx/tools/flow*",
+        "https://flow.google.com/*",
+        "https://*.flow.google.com/*"
       ],
       "js": [
         "flow_overrides.js"
@@ -97,7 +116,9 @@
     {
       "matches": [
         "https://labs.google/fx/tools/flow*",
-        "https://labs.google/fx/*/tools/flow*"
+        "https://labs.google/fx/*/tools/flow*",
+        "https://flow.google.com/*",
+        "https://*.flow.google.com/*"
       ],
       "js": [
         "bf_model_hide.js"
@@ -107,7 +128,9 @@
     },
     {
       "matches": [
-        "https://labs.google/fx/tools/flow*"
+        "https://labs.google/fx/tools/flow*",
+        "https://flow.google.com/*",
+        "https://*.flow.google.com/*"
       ],
       "js": [
         "content.js"
@@ -116,7 +139,9 @@
     },
     {
       "matches": [
-        "https://labs.google/fx/tools/flow*"
+        "https://labs.google/fx/tools/flow*",
+        "https://flow.google.com/*",
+        "https://*.flow.google.com/*"
       ],
       "js": [
         "dcx_extra.js"
@@ -125,7 +150,8 @@
     },
     {
       "matches": [
-        "https://labs.google/fx/api/auth/signout*"
+        "https://labs.google/fx/api/auth/signout*",
+        "https://flow.google.com/api/auth/signout*"
       ],
       "js": [
         "auto_signout.js"
@@ -135,7 +161,8 @@
     },
     {
       "matches": [
-        "https://labs.google/fx/api/auth/signout*"
+        "https://labs.google/fx/api/auth/signout*",
+        "https://flow.google.com/api/auth/signout*"
       ],
       "js": [
         "auto_signout.js"
@@ -164,7 +191,9 @@
       "matches": [
         "https://labs.google/*",
         "https://*.labs.google/*",
-        "https://*.google.com/*"
+        "https://*.google.com/*",
+        "https://flow.google.com/*",
+        "https://*.flow.google.com/*"
       ],
       "js": [
         "bf_watchdog.js"
@@ -175,7 +204,9 @@
       "matches": [
         "https://labs.google/flow/about*",
         "https://labs.google/flow",
-        "https://labs.google/"
+        "https://labs.google/",
+        "https://flow.google.com/about*",
+        "https://flow.google.com/"
       ],
       "js": [
         "bf_about.js"
@@ -184,7 +215,8 @@
     },
     {
       "matches": [
-        "https://labs.google/fx/api/auth/signout*"
+        "https://labs.google/fx/api/auth/signout*",
+        "https://flow.google.com/api/auth/signout*"
       ],
       "js": [
         "bf_signout_click.js"
@@ -206,7 +238,9 @@
       ],
       "matches": [
         "https://labs.google/fx/tools/flow*",
-        "https://labs.google/fx/*/tools/flow*"
+        "https://labs.google/fx/*/tools/flow*",
+        "https://flow.google.com/*",
+        "https://*.flow.google.com/*"
       ],
       "run_at": "document_idle"
     }

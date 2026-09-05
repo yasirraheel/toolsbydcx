@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useDialog } from '../../context/DialogContext';
+import { API_BASE } from '../../apiConfig';
 
 function UserSettings({ currentUser, onProfileUpdated }) {
   const { alert: showCustomAlert } = useDialog();
@@ -9,8 +10,6 @@ function UserSettings({ currentUser, onProfileUpdated }) {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [saving, setSaving] = useState(false);
   const [feedback, setFeedback] = useState(null);
-
-  const API_BASE = process.env.REACT_APP_API_URL || (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' ? 'http://localhost:5000/api' : '/api');
 
   const getAuthHeaders = () => {
     const token = localStorage.getItem('ccna_auth_token');

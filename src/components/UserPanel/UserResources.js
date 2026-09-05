@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { API_BASE } from '../../apiConfig';
 
 function UserResources() {
   const [resources, setResources] = useState([]);
@@ -6,8 +7,6 @@ function UserResources() {
   const [search, setSearch] = useState('');
   const [activeFilter, setActiveFilter] = useState('all');
   const [launchingId, setLaunchingId] = useState(null);
-
-  const API_BASE = process.env.REACT_APP_API_URL || (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' ? 'http://localhost:5000/api' : '/api');
 
   const getAuthHeaders = () => {
     const token = localStorage.getItem('ccna_auth_token');
