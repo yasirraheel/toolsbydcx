@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { API_BASE } from '../../apiConfig';
+import { API_BASE, handleAuthError, authFetch } from '../../apiConfig';
 
 function AdminExtension() {
   const [loading, setLoading] = useState(true);
@@ -90,10 +90,13 @@ function AdminExtension() {
   const fetchExtensionData = async () => {
     try {
       setLoading(true);
-      const res = await fetch(`${API_BASE}/admin/extension`, {
+      const res = await authFetch(`${API_BASE}/admin/extension`, {
         headers: getAuthHeaders()
       });
       const data = await res.json();
+      if (handleAuthError(res, data)) {
+        return;
+      }
       if (data.success) {
         setCurrentRelease(data.current);
         setReleasesHistory(data.releases || []);

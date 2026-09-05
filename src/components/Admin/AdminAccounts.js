@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useDialog } from '../../context/DialogContext';
-import { API_BASE } from '../../apiConfig';
+import { API_BASE, handleAuthError, authFetch } from '../../apiConfig';
 
 function AdminAccounts() {
   const { confirm, alert: showCustomAlert } = useDialog();
@@ -27,10 +27,11 @@ function AdminAccounts() {
 
   const fetchPlans = async () => {
     try {
-      const res = await fetch(`${API_BASE}/admin/plans`, {
+      const res = await authFetch(`${API_BASE}/admin/plans`, {
         headers: getAuthHeaders()
       });
       const data = await res.json();
+      if (handleAuthError(res, data)) return;
       if (data.plans && Array.isArray(data.plans)) {
         setAvailablePlans(data.plans);
       }
@@ -42,10 +43,11 @@ function AdminAccounts() {
   const fetchAccounts = async () => {
     try {
       setLoading(true);
-      const res = await fetch(`${API_BASE}/admin/accounts`, {
+      const res = await authFetch(`${API_BASE}/admin/accounts`, {
         headers: getAuthHeaders()
       });
       const data = await res.json();
+      if (handleAuthError(res, data)) return;
       if (data.success && Array.isArray(data.accounts)) {
         setAccounts(data.accounts);
         return;

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { API_BASE } from '../../apiConfig';
+import { API_BASE, handleAuthError, authFetch } from '../../apiConfig';
 
 function AdminSettings({ currentUser }) {
   const [testEmailTo, setTestEmailTo] = useState(currentUser?.email || 'saadmaqbool7861@gmail.com');
@@ -23,7 +23,7 @@ function AdminSettings({ currentUser }) {
       setSendingEmail(true);
       setEmailResult(null);
 
-      const res = await fetch(`${API_BASE}/admin/test-email`, {
+      const res = await authFetch(`${API_BASE}/admin/test-email`, {
         method: 'POST',
         headers: getAuthHeaders(),
         body: JSON.stringify({
@@ -33,6 +33,7 @@ function AdminSettings({ currentUser }) {
       });
 
       const data = await res.json();
+      if (handleAuthError(res, data)) return;
       if (res.ok) {
         setEmailResult({
           type: 'success',

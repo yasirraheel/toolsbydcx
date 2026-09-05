@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import '../Admin/admin.css';
 import ResellerDashboard from './ResellerDashboard';
 import ResellerUsers from './ResellerUsers';
-import { API_BASE } from '../../apiConfig';
+import { API_BASE, handleAuthError, authFetch } from '../../apiConfig';
 
 function ResellerLayout({ currentUser, onExitReseller, onSwitchPortal, onLogout }) {
   const getInitialTab = () => {
@@ -41,13 +41,17 @@ function ResellerLayout({ currentUser, onExitReseller, onSwitchPortal, onLogout 
   const fetchStats = async () => {
     try {
       const token = localStorage.getItem('ccna_auth_token');
-      const res = await fetch(`${API_BASE}/reseller/stats`, {
+      const res = await authFetch(`${API_BASE}/reseller/stats`, {
         headers: {
           'Content-Type': 'application/json',
           ...(token ? { Authorization: `Bearer ${token}` } : {})
         }
       });
       const data = await res.json();
+      if (handleAuthError(res, data)) {
+        if (onLogout) onLogout();
+        return;
+      }
       if (data.stats) {
         setStatsData(data);
       }

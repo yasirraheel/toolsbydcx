@@ -4,7 +4,7 @@ import UserDashboard from './UserDashboard';
 import UserResources from './UserResources';
 import UserSessions from './UserSessions';
 import UserProjects from './UserProjects';
-import { API_BASE } from '../../apiConfig';
+import { API_BASE, handleAuthError, authFetch } from '../../apiConfig';
 
 function UserLayout({ currentUser, onExitUserPanel, onSwitchPortal, onLogout }) {
   const getInitialTab = () => {
@@ -44,13 +44,17 @@ function UserLayout({ currentUser, onExitUserPanel, onSwitchPortal, onLogout }) 
   const fetchDashboard = async () => {
     try {
       const token = localStorage.getItem('ccna_auth_token');
-      const res = await fetch(`${API_BASE}/user/dashboard`, {
+      const res = await authFetch(`${API_BASE}/user/dashboard`, {
         headers: {
           'Content-Type': 'application/json',
           ...(token ? { Authorization: `Bearer ${token}` } : {})
         }
       });
       const data = await res.json();
+      if (handleAuthError(res, data)) {
+        if (onLogout) onLogout();
+        return;
+      }
       if (data.user || data.sharedAccountsCount !== undefined) {
         setDashboardData(data);
       }

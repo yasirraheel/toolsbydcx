@@ -88,6 +88,7 @@ export default function App() {
   const [authModal, setAuthModal] = useState({
     isOpen: false,
     mode: "login",
+    errorMsg: "",
   });
 
   const handleNavigate = (requestedView, overrideUser) => {
@@ -170,27 +171,65 @@ export default function App() {
     } catch (_) {}
   };
 
+  const handleLogout = (reason) => {
+    setCurrentUser(null);
+    localStorage.removeItem("ccna_auth_token");
+    localStorage.removeItem("ccna_auth_user");
+    clearExtensionAuth();
+    handleNavigate("dashboard", null);
+    if (reason && typeof reason === "string") {
+      setAuthModal({
+        isOpen: true,
+        mode: "login",
+        errorMsg: reason,
+      });
+    }
+  };
+
+  useEffect(() => {
+    const handleExpired = (e) => {
+      const reason = e?.detail?.reason || "Your session has expired or permissions were revoked. Please log in again.";
+      handleLogout(reason);
+    };
+    window.addEventListener("auth_session_expired", handleExpired);
+    return () => window.removeEventListener("auth_session_expired", handleExpired);
+  }, []);
+
   useEffect(() => {
     const token = localStorage.getItem("ccna_auth_token");
     if (token) {
       fetch(`${API_BASE_URL}/auth/me`, {
         headers: { Authorization: `Bearer ${token}` },
       })
-        .then((res) => res.json())
+        .then((res) => {
+          if (!res.ok) {
+            throw new Error("Session invalid");
+          }
+          return res.json();
+        })
         .then((data) => {
-          if (data.user) {
+          if (data.user && data.user.role) {
             setCurrentUser(data.user);
             localStorage.setItem("ccna_auth_user", JSON.stringify(data.user));
             syncExtensionAuth(data.user, token);
+          } else {
+            handleLogout("Your session has expired or account is no longer authorized. Please sign in again.");
           }
         })
-        .catch(() => {});
+        .catch(() => {
+          handleLogout("Your session has expired or account is no longer authorized. Please sign in again.");
+        });
+    } else {
+      const stored = localStorage.getItem("ccna_auth_user");
+      if (stored || currentUser) {
+        handleLogout("Session expired. Please sign in to continue.");
+      }
     }
   }, []);
 
   const handleOpenAuth = (mode = "login") => {
     const safeMode = mode === "signup" ? "login" : mode;
-    setAuthModal({ isOpen: true, mode: safeMode });
+    setAuthModal({ isOpen: true, mode: safeMode, errorMsg: "" });
   };
 
   const handleAuthSuccess = (user, token) => {
@@ -199,7 +238,7 @@ export default function App() {
       localStorage.setItem("ccna_auth_token", token);
       syncExtensionAuth(user, token);
     }
-    setAuthModal({ isOpen: false, mode: "login" });
+    setAuthModal({ isOpen: false, mode: "login", errorMsg: "" });
 
     if (user.role === "admin") {
       handleNavigate("admin", user);
@@ -208,14 +247,6 @@ export default function App() {
     } else {
       handleNavigate("user-panel", user);
     }
-  };
-
-  const handleLogout = () => {
-    setCurrentUser(null);
-    localStorage.removeItem("ccna_auth_token");
-    localStorage.removeItem("ccna_auth_user");
-    clearExtensionAuth();
-    handleNavigate("dashboard");
   };
 
   if (currentView === "admin") {
@@ -282,7 +313,8 @@ export default function App() {
       <AuthModal
         isOpen={authModal.isOpen}
         initialMode={authModal.mode}
-        onClose={() => setAuthModal({ isOpen: false, mode: "login" })}
+        initialError={authModal.errorMsg}
+        onClose={() => setAuthModal({ isOpen: false, mode: "login", errorMsg: "" })}
         currentUser={currentUser}
         onAuthSuccess={handleAuthSuccess}
         onLogout={handleLogout}

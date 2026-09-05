@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useDialog } from '../../context/DialogContext';
-import { API_BASE } from '../../apiConfig';
+import { API_BASE, handleAuthError, authFetch } from '../../apiConfig';
 
 function AdminUsers({ currentUser, isCreateOpen, onCloseCreate, resellerFilter, onClearResellerFilter }) {
   const { confirm, alert: showCustomAlert } = useDialog();
@@ -39,10 +39,11 @@ function AdminUsers({ currentUser, isCreateOpen, onCloseCreate, resellerFilter, 
 
   const fetchPlans = async () => {
     try {
-      const res = await fetch(`${API_BASE}/admin/plans`, {
+      const res = await authFetch(`${API_BASE}/admin/plans`, {
         headers: getAuthHeaders()
       });
       const data = await res.json();
+      if (handleAuthError(res, data)) return;
       if (data.plans && Array.isArray(data.plans)) {
         setAvailablePlans(data.plans);
         if (data.plans.length > 0) {
@@ -72,10 +73,11 @@ function AdminUsers({ currentUser, isCreateOpen, onCloseCreate, resellerFilter, 
       if (statusFilter) query.append('status', statusFilter);
       if (planFilter) query.append('plan', planFilter);
 
-      const res = await fetch(`${API_BASE}/admin/users?${query.toString()}`, {
+      const res = await authFetch(`${API_BASE}/admin/users?${query.toString()}`, {
         headers: getAuthHeaders()
       });
       const data = await res.json();
+      if (handleAuthError(res, data)) return;
       if (res.ok && Array.isArray(data.users)) {
         setUsers(data.users);
       } else {

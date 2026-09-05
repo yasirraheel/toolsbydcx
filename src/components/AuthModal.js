@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
 
 import { API_AUTH_BASE } from "../apiConfig";
-function AuthModal({ isOpen, onClose, currentUser, onAuthSuccess, onLogout, initialMode = "login" }) {
+function AuthModal({ isOpen, onClose, currentUser, onAuthSuccess, onLogout, initialMode = "login", initialError = "" }) {
   const [mode, setMode] = useState(initialMode === "signup" ? "login" : initialMode);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -16,16 +16,16 @@ function AuthModal({ isOpen, onClose, currentUser, onAuthSuccess, onLogout, init
 
   // Status & loading
   const [loading, setLoading] = useState(false);
-  const [errorMsg, setErrorMsg] = useState("");
+  const [errorMsg, setErrorMsg] = useState(initialError || "");
   const [successMsg, setSuccessMsg] = useState("");
 
   const otpInputsRef = useRef([]);
 
   useEffect(() => {
     setMode(initialMode);
-    setErrorMsg("");
+    setErrorMsg(initialError || "");
     setSuccessMsg("");
-  }, [initialMode, isOpen]);
+  }, [initialMode, isOpen, initialError]);
 
   // Resend countdown timer
   useEffect(() => {

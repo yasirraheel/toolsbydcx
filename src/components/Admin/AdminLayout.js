@@ -7,7 +7,7 @@ import AdminPlans from './AdminPlans';
 import AdminAccounts from './AdminAccounts';
 import AdminSettings from './AdminSettings';
 import AdminExtension from './AdminExtension';
-import { API_BASE } from '../../apiConfig';
+import { API_BASE, handleAuthError, authFetch } from '../../apiConfig';
 
 function AdminLayout({ currentUser, onExitAdmin, onSwitchPortal, onLogout }) {
   const getInitialAdminTab = () => {
@@ -74,10 +74,14 @@ function AdminLayout({ currentUser, onExitAdmin, onSwitchPortal, onLogout }) {
 
   const fetchStats = async () => {
     try {
-      const res = await fetch(`${API_BASE}/admin/stats`, {
+      const res = await authFetch(`${API_BASE}/admin/stats`, {
         headers: getAuthHeaders()
       });
       const data = await res.json();
+      if (handleAuthError(res, data)) {
+        if (onLogout) onLogout();
+        return;
+      }
       if (data.stats) {
         setStatsData(data);
         return;

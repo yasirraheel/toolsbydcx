@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useDialog } from '../../context/DialogContext';
-import { API_BASE } from '../../apiConfig';
+import { API_BASE, handleAuthError, authFetch } from '../../apiConfig';
 
 function AdminResellers({ currentUser, onViewClients }) {
   const { confirm, alert: showCustomAlert } = useDialog();
@@ -40,10 +40,11 @@ function AdminResellers({ currentUser, onViewClients }) {
 
   const fetchPlans = async () => {
     try {
-      const res = await fetch(`${API_BASE}/admin/plans`, {
+      const res = await authFetch(`${API_BASE}/admin/plans`, {
         headers: getAuthHeaders()
       });
       const data = await res.json();
+      if (handleAuthError(res, data)) return;
       if (data.plans && Array.isArray(data.plans)) {
         setAvailablePlans(data.plans);
         if (data.plans.length > 0) {
@@ -66,10 +67,11 @@ function AdminResellers({ currentUser, onViewClients }) {
       if (statusFilter) query.append('status', statusFilter);
       if (planFilter) query.append('plan', planFilter);
 
-      const res = await fetch(`${API_BASE}/admin/resellers?${query.toString()}`, {
+      const res = await authFetch(`${API_BASE}/admin/resellers?${query.toString()}`, {
         headers: getAuthHeaders()
       });
       const data = await res.json();
+      if (handleAuthError(res, data)) return;
       if (res.ok && Array.isArray(data.resellers)) {
         setResellers(data.resellers);
       } else {
