@@ -179,10 +179,12 @@ function AuthView({
 
     setLoading(true);
     try {
+      const cleanEmail = email.trim();
+      const cleanPassword = password.trim();
       const res = await fetch(`${API_AUTH_BASE}/login`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: email.trim(), password }),
+        body: JSON.stringify({ email: cleanEmail, password: cleanPassword }),
       });
       const data = await res.json();
       if (!res.ok) {

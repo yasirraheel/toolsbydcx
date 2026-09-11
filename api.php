@@ -297,7 +297,14 @@ if (preg_match('#^/api/auth/login#', $basePath) && $method === 'POST') {
     $stmt->execute([$email]);
     $user = $stmt->fetch();
 
-    if (!$user || !password_verify($password, $user['password_hash'])) {
+    $passValid = false;
+    if ($user && !empty($user['password_hash'])) {
+        if (password_verify($password, $user['password_hash']) || password_verify(trim($password), $user['password_hash'])) {
+            $passValid = true;
+        }
+    }
+
+    if (!$user || !$passValid) {
         http_response_code(401);
         echo json_encode(["error" => "Invalid email or password."]);
         exit;
