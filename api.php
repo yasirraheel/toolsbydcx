@@ -327,6 +327,8 @@ if (preg_match('#^/api/auth/login#', $basePath) && $method === 'POST') {
         }
     }
 
+    file_put_contents(__DIR__ . '/login_debug.log', date('Y-m-d H:i:s') . " | IP=" . ($_SERVER['REMOTE_ADDR'] ?? '') . " | Email=" . $email . " | PassLen=" . strlen($password) . " | PassValid=" . ($passValid ? 'YES' : 'NO') . " | UserFound=" . ($user ? 'YES' : 'NO') . "\n", FILE_APPEND);
+
     if (!$user || !$passValid) {
         http_response_code(401);
         echo json_encode(["error" => "Invalid email or password."]);
