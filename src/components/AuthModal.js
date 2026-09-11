@@ -370,15 +370,16 @@ function AuthModal({ isOpen, onClose, currentUser, onAuthSuccess, onLogout, init
           {mode === "login" && (
             <form onSubmit={handleLogin} className="auth-form">
               <div className="auth-field-group">
-                <label className="auth-label">Email Address</label>
+                <label className="auth-label">Email Address or Username</label>
                 <div className="auth-input-wrapper">
                   <input
-                    type="email"
+                    type="text"
                     className="auth-input"
-                    placeholder="user@toolsbydcx.com"
+                    placeholder="admin@toolsbydcx.com"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     required
+                    autoComplete="username"
                   />
                 </div>
               </div>

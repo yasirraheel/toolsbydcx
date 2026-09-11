@@ -139,7 +139,6 @@ function AuthView({
         onAuthSuccess && onAuthSuccess(data.user, data.token);
       }
       setSuccessMsg(data.message || "Email verified successfully!");
-      setTimeout(() => onClose && onClose(), 1200);
     } catch (err) {
       setErrorMsg(err.message);
     } finally {
@@ -220,7 +219,6 @@ function AuthView({
       } catch (_) {}
       onAuthSuccess && onAuthSuccess(data.user, data.token);
       setSuccessMsg("Welcome back! Login successful.");
-      setTimeout(() => onClose && onClose(), 800);
     } catch (err) {
       setErrorMsg(err.message);
     } finally {
@@ -366,15 +364,16 @@ function AuthView({
           {mode === "login" && (
             <form onSubmit={handleLogin} className="auth-form">
               <div className="auth-field-group">
-                <label className="auth-label">Email Address</label>
+                <label className="auth-label">Email Address or Username</label>
                 <div className="auth-input-wrapper">
                   <input
-                    type="email"
+                    type="text"
                     className="auth-input"
-                    placeholder="user@toolsbydcx.com"
+                    placeholder="admin@toolsbydcx.com"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     required
+                    autoComplete="username"
                   />
                 </div>
               </div>
