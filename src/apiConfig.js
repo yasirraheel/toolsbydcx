@@ -1,9 +1,14 @@
 export const getApiBase = () => {
-  if (process.env.REACT_APP_API_URL) {
-    return process.env.REACT_APP_API_URL.replace(/\/+$/, "");
-  }
-  if (typeof window !== "undefined" && window.location && window.location.port === "3000") {
-    return "http://localhost:5000/api";
+  if (typeof window !== "undefined" && window.location) {
+    const host = (window.location.hostname || "").toLowerCase();
+    const port = window.location.port || "";
+    // On production domain toolsbydcx.com or standard web ports: ALWAYS use /api
+    if (host === "toolsbydcx.com" || host === "www.toolsbydcx.com" || (port !== "3000" && port !== "5000")) {
+      return "/api";
+    }
+    if (port === "3000") {
+      return "http://localhost:5000/api";
+    }
   }
   return "/api";
 };
