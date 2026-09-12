@@ -29,7 +29,7 @@ export default function LandingPage({ currentUser, onOpenAuth, onNavigate, onLog
       return;
     }
     const token = localStorage.getItem("ccna_auth_token") || localStorage.getItem("flow_token") || "";
-    const downloadUrl = `${API_BASE}/extension/download?token=${token}`;
+    const downloadUrl = `${API_BASE}/extension/download?token=${encodeURIComponent(token)}`;
     window.open(downloadUrl, "_blank");
   };
 

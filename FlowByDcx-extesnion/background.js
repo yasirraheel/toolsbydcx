@@ -439,8 +439,9 @@
         if (api.includes(':3000')) api = api.replace(':3000', ':5000');
         if (api.includes('flowbydcx.com') || api.includes('labs.google')) api = 'http://localhost:5000';
 
-        var cleanTitle = (title && typeof title === 'string' && !/flow|google/i.test(title)) ? title.trim() : 'Flow Project';
-        var cleanUrl = projectUrl || ('https://labs.google/fx/tools/flow/project/' + projectId);
+        var isChat = (projectUrl && projectUrl.includes('chatgpt.com')) || (title && /chat/i.test(title));
+        var cleanTitle = (title && typeof title === 'string' && !/flow|google/i.test(title)) ? title.trim() : (isChat ? 'ChatGPT Chat' : 'Flow Project');
+        var cleanUrl = projectUrl || (isChat ? ('https://chatgpt.com/c/' + projectId) : ('https://labs.google/fx/tools/flow/project/' + projectId));
 
         var headers = {
           'Content-Type': 'application/json',
@@ -553,10 +554,44 @@
   setTimeout(bfSyncAllStoredProjects, 2000);
   setInterval(bfSyncAllStoredProjects, 30000);
 
-    // SAVE_PROJECT — saves project url and id to server against the current user
-    if (msg.type === 'SAVE_PROJECT') {
-      bfSaveProjectToServer(msg.projectId, msg.projectUrl, msg.title, function(res) {
+    // SAVE_PROJECT / SAVE_CHAT — saves project or chat url and id to server against the current user
+    if (msg.type === 'SAVE_PROJECT' || msg.type === 'SAVE_CHAT') {
+      var sId = msg.chatId || msg.projectId;
+      var sUrl = msg.url || msg.projectUrl || ('https://chatgpt.com/c/' + sId);
+      var sTitle = msg.title || (sUrl.includes('chatgpt') ? 'ChatGPT Chat' : 'Flow Project');
+      bfSaveProjectToServer(sId, sUrl, sTitle, function(res) {
         try { sendResponse(res); } catch(_) {}
+      });
+      return true; // async
+    }
+
+    // GET_USER_CHATS — fetches saved chats for user from server for cross-device sync
+    if (msg.type === 'GET_USER_CHATS' || msg.type === 'GET_USER_PROJECTS') {
+      chrome.storage.local.get(['token', 'sessionToken', 'userId', 'apiBase', 'serverUrl'], function(st) {
+        var token = st && st.token;
+        if (!token && st && st.sessionToken) {
+          token = st.sessionToken.includes(':') ? st.sessionToken.split(':')[1] : st.sessionToken;
+        }
+        var base = (st && (st.apiBase || st.serverUrl) || BF_DEFAULT_SERVER || 'http://localhost:5000').replace(/\/+$/, '');
+        if (base.includes(':3000')) base = base.replace(':3000', ':5000');
+        if (base.includes('flowbydcx.com') || base.includes('labs.google')) base = 'http://localhost:5000';
+
+        var headers = { 'Content-Type': 'application/json' };
+        if (token) headers['Authorization'] = 'Bearer ' + token;
+        if (st && st.userId) headers['X-User-Id'] = String(st.userId);
+
+        fetch(base + '/api/user/projects', {
+          method: 'GET',
+          headers: headers
+        })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+          var projects = (data && data.projects) || [];
+          try { sendResponse({ ok: true, chats: projects }); } catch(_) {}
+        })
+        .catch(function(err) {
+          try { sendResponse({ ok: false, error: err.message, chats: [] }); } catch(_) {}
+        });
       });
       return true; // async
     }
@@ -694,12 +729,25 @@ function bunnyflowMaybeRedirect(tabId, url) {
     chrome.tabs.update(tabId, { url: BUNNYFLOW_CANONICAL_FLOW_URL }).catch(function() {});
   });
 }
+const __tabInjectedMap = new Map();
 chrome.tabs.onUpdated.addListener(function(tabId, changeInfo, tab) {
   const url = changeInfo.url || (tab && tab.url);
   if (!url) return;
   if (url.includes('flow.google.com') || url.includes('labs.google/fx/tools/flow')) {
     if (changeInfo.status === 'loading') {
-      bunnyflowInjectCookies({ force: true });
+      const lastInj = __tabInjectedMap.get(tabId) || 0;
+      if (Date.now() - lastInj > 30000) {
+        __tabInjectedMap.set(tabId, Date.now());
+        bunnyflowInjectCookies({ force: true, targetUrl: url, service: 'google_flow' });
+      }
+    }
+  } else if (url.includes('chatgpt.com') || url.includes('openai.com')) {
+    if (changeInfo.status === 'loading' || changeInfo.status === 'complete') {
+      const lastInj = __tabInjectedMap.get(tabId) || 0;
+      if (Date.now() - lastInj > 30000) {
+        __tabInjectedMap.set(tabId, Date.now());
+        bunnyflowInjectCookies({ force: true, targetUrl: url, service: 'chatgpt' });
+      }
     }
   } else {
     bunnyflowMaybeRedirect(tabId, url);
@@ -713,7 +761,10 @@ chrome.tabs.onActivated.addListener(function(info) {
     if (tab) bunnyflowMaybeRedirect(info.tabId, tab.url);
   }).catch(function() {});
 });
-chrome.tabs.onRemoved.addListener(function(tabId) { __bunnyflowRedirected.delete(tabId); });
+chrome.tabs.onRemoved.addListener(function(tabId) {
+  __bunnyflowRedirected.delete(tabId);
+  __tabInjectedMap.delete(tabId);
+});
 
 
 // Cookie injection from the Ext1 daily-basis "first" pool. Uses chrome.cookies.set
@@ -722,12 +773,14 @@ const BUNNYFLOW_INJECT_URL = 'https://toolsbydcx.com/api/extension/inject-cookie
 const BUNNYFLOW_VALID_SAMESITE = ['no_restriction', 'lax', 'strict', 'unspecified'];
 let __bunnyflowInjectInFlight = null;
 let __bunnyflowLastInjectAt = 0;
-function bunnyflowMapSameSite(v) {
-  if (!v) return 'no_restriction';
+function bunnyflowMapSameSite(v, isSecure) {
+  if (!v) return isSecure ? 'no_restriction' : 'lax';
   const s = String(v).toLowerCase().replace(/-/g, '_');
-  if (s === 'none') return 'no_restriction';
+  if (s === 'none' || s === 'no_restriction') {
+    return isSecure ? 'no_restriction' : 'lax';
+  }
   if (BUNNYFLOW_VALID_SAMESITE.indexOf(s) >= 0) return s;
-  return 'no_restriction';
+  return isSecure ? 'no_restriction' : 'lax';
 }
 // Auth cookie names + domains we manage. Mirrors the TTL watchdog's BF_AUTH list
 // (kept self-contained here because that list lives inside an earlier IIFE and is
@@ -753,10 +806,7 @@ function bunnyflowIsAuthCookieName(name) {
 }
 // Remove EVERY managed Google/Flow auth cookie currently in the browser. Called
 // right before applying a fresh bundle so injection is an ATOMIC REPLACE, never a
-// merge: a rotated/refreshed cookie set (often from a DIFFERENT Google account)
-// must not leave behind leftover cookies (e.g. OSID/LSID/old session-token) that
-// aren't in the new set — that mix makes Google see a mismatched session and signs
-// the user out with /fx/api/auth/signin?error=OAuthCallback.
+// merge.
 async function bunnyflowClearAuthCookies() {
   let removed = 0;
   for (const domain of BUNNYFLOW_AUTH_DOMAINS) {
@@ -772,97 +822,150 @@ async function bunnyflowClearAuthCookies() {
   }
   return removed;
 }
-async function bunnyflowApplyCookies(cookies) {
-  let applied = 0, failed = 0;
-  // ATOMIC REPLACE: wipe the previously-injected account's auth cookies BEFORE
-  // applying the fresh set, so a rotated/refreshed bundle never merges with stale
-  // cookies from a different Google account (mismatch → OAuthCallback logout).
-  // Only wipe when we actually have a non-empty set to apply.
-  if (Array.isArray(cookies) && cookies.length) {
-    try { await bunnyflowClearAuthCookies(); } catch (_) {}
+
+// Clear old ChatGPT session cookies before injecting fresh ones to avoid token collisions
+async function bunnyflowClearChatGptCookies() {
+  const cDomains = ['chatgpt.com', '.chatgpt.com', 'oaistatic.com', '.oaistatic.com', 'openai.com', '.openai.com'];
+  for (const domain of cDomains) {
+    try {
+      const cookies = await chrome.cookies.getAll({ domain: domain });
+      for (const c of (cookies || [])) {
+        if (
+          c.name.includes('next-auth') ||
+          c.name.includes('oai') ||
+          c.name.includes('cf_bm') ||
+          c.name.includes('_account')
+        ) {
+          const host = (c.domain && c.domain.startsWith('.')) ? c.domain.slice(1) : (c.domain || domain);
+          const url = 'https://' + host + (c.path || '/');
+          try { await chrome.cookies.remove({ url: url, name: c.name, storeId: c.storeId }); } catch (_) {}
+        }
+      }
+    } catch (_) {}
   }
+}
+
+async function bunnyflowApplyCookies(cookies, accountUrl) {
+  let applied = 0, failed = 0;
+  if (!Array.isArray(cookies) || !cookies.length) {
+    return { applied: 0, failed: 0, total: 0 };
+  }
+  const isGoogle = cookies.some(c => (c.domain || '').includes('google.com') || (c.domain || '').includes('labs.google'));
+  const isChatGPT = cookies.some(c => (c.domain || '').includes('chatgpt.com') || (c.domain || '').includes('openai.com'));
+  
+  if (isGoogle) {
+    try { await bunnyflowClearAuthCookies(); } catch (_) {}
+  } else if (isChatGPT) {
+    try { await bunnyflowClearChatGptCookies(); } catch (_) {}
+  }
+
   const nowSec = Math.floor(Date.now() / 1000);
   for (const c of cookies) {
     try {
       if (!c || !c.name) { failed++; continue; }
-      const rawDomain = c.domain || '.google.com';
-      const host = rawDomain.startsWith('.') ? rawDomain.slice(1) : rawDomain;
+      let rawDomain = c.domain || '';
+      if (!rawDomain) {
+        if (accountUrl) {
+          try { rawDomain = (new URL(accountUrl)).hostname; } catch(_) {}
+        }
+        if (!rawDomain) rawDomain = isChatGPT ? '.chatgpt.com' : '.google.com';
+      }
+      const host = rawDomain.replace(/^\./, '');
       const path = c.path || '/';
-      const secure = c.secure !== false;
-      const url = (secure ? 'https://' : 'http://') + host + path;
+
+      // Ensure prefix security compliance
+      const isPrefixSecure = c.name.startsWith('__Secure-') || c.name.startsWith('__Host-');
+      const secure = isPrefixSecure ? true : (c.secure === true || c.secure === 1 || c.secure === 'true');
+      const url = 'https://' + host + path;
+
       const opts = {
-        url: url, name: c.name,
+        url: url,
+        name: c.name,
         value: c.value == null ? '' : String(c.value),
-        path: path, secure: secure,
+        path: path,
+        secure: secure,
         httpOnly: !!c.httpOnly,
-        sameSite: bunnyflowMapSameSite(c.sameSite),
+        sameSite: bunnyflowMapSameSite(c.sameSite, secure)
       };
-      // For __Host- or hostOnly cookies, omit domain so Chrome creates a strict host cookie
-      if (!c.name.startsWith('__Host-') && !c.hostOnly && rawDomain.startsWith('.')) {
+
+      // __Host- cookies MUST NOT have domain property
+      if (c.name.startsWith('__Host-')) {
+        opts.path = '/';
+        opts.secure = true;
+        delete opts.domain;
+      } else if (!c.hostOnly && rawDomain.startsWith('.')) {
         opts.domain = rawDomain;
       }
-      if (typeof c.expirationDate === 'number' && isFinite(c.expirationDate) && c.expirationDate > nowSec) {
-        opts.expirationDate = c.expirationDate;
-      } else if (c.expirationDate || c.session) {
-        opts.expirationDate = nowSec + (30 * 24 * 3600); // 30 days
+
+      // Session vs persistent cookies
+      if (c.session === true) {
+        delete opts.expirationDate;
+      } else if (typeof c.expirationDate === 'number' && isFinite(c.expirationDate)) {
+        const exp = Math.round(c.expirationDate);
+        opts.expirationDate = (exp > nowSec) ? exp : (nowSec + 30 * 86400);
+      } else {
+        opts.expirationDate = nowSec + (30 * 86400);
       }
-      await chrome.cookies.set(opts);
-      applied++;
+
+      const setRes = await chrome.cookies.set(opts);
+      if (setRes) {
+        applied++;
+      } else {
+        failed++;
+        console.warn('[ToolsByDcx] Cookie set notice:', opts.name, chrome.runtime.lastError?.message);
+      }
 
       // Cross-mirror between labs.google and flow.google.com
       if (host.includes('labs.google')) {
         try {
-          const flowOpts = {
-            url: (secure ? 'https://' : 'http://') + 'flow.google.com' + path,
-            name: c.name,
-            value: c.value == null ? '' : String(c.value),
-            path: path,
-            secure: secure,
-            httpOnly: !!c.httpOnly,
-            sameSite: bunnyflowMapSameSite(c.sameSite)
-          };
-          if (!c.name.startsWith('__Host-') && !c.hostOnly) {
-            flowOpts.domain = '.google.com';
-          }
-          if (opts.expirationDate) flowOpts.expirationDate = opts.expirationDate;
+          const flowOpts = Object.assign({}, opts, {
+            url: 'https://flow.google.com' + path,
+            domain: (!c.name.startsWith('__Host-') && !c.hostOnly) ? '.google.com' : undefined
+          });
+          if (flowOpts.domain === undefined) delete flowOpts.domain;
           await chrome.cookies.set(flowOpts);
         } catch (_) {}
       } else if (host.includes('flow.google.com')) {
         try {
-          const labsOpts = {
-            url: (secure ? 'https://' : 'http://') + 'labs.google' + path,
-            name: c.name,
-            value: c.value == null ? '' : String(c.value),
-            path: path,
-            secure: secure,
-            httpOnly: !!c.httpOnly,
-            sameSite: bunnyflowMapSameSite(c.sameSite)
-          };
-          if (!c.name.startsWith('__Host-') && !c.hostOnly) {
-            labsOpts.domain = '.google.com';
-          }
-          if (opts.expirationDate) labsOpts.expirationDate = opts.expirationDate;
+          const labsOpts = Object.assign({}, opts, {
+            url: 'https://labs.google' + path,
+            domain: (!c.name.startsWith('__Host-') && !c.hostOnly) ? '.google.com' : undefined
+          });
+          if (labsOpts.domain === undefined) delete labsOpts.domain;
           await chrome.cookies.set(labsOpts);
         } catch (_) {}
       }
-    } catch (e) { failed++; }
+    } catch (e) {
+      failed++;
+      console.warn('[ToolsByDcx] Cookie exception:', c.name, e);
+    }
   }
   return { applied: applied, failed: failed, total: cookies.length };
 }
+
 async function bunnyflowInjectCookies(opts) {
   opts = opts || {};
   const force = !!opts.force;
+  const targetUrl = opts.targetUrl || '';
+  const accountId = opts.accountId || '';
+  const service = opts.service || '';
   const now = Date.now();
   if (!force && (now - __bunnyflowLastInjectAt) < 15000) return { ok: false, reason: 'cooldown' };
   if (__bunnyflowInjectInFlight) return __bunnyflowInjectInFlight;
   __bunnyflowInjectInFlight = (async function() {
     try {
-      const stored = await chrome.storage.local.get(['token', 'sessionToken', 'deviceId', 'apiBase']);
-      const token = stored.token || stored.sessionToken;
+      const stored = await chrome.storage.local.get(['token', 'sessionToken', 'deviceId', 'apiBase', 'userId']);
+      const token = stored.token || stored.sessionToken || stored.userId;
       if (!token) return { ok: false, reason: 'no_token' };
       const deviceId = stored.deviceId;
       const injectHeaders = { 'Content-Type': 'application/json' };
-      const injectBody = { token: token, sessionToken: token };
+      const injectBody = {
+        token: token,
+        sessionToken: token,
+        targetUrl: targetUrl,
+        accountId: accountId,
+        service: service
+      };
       if (deviceId) {
         injectHeaders['X-BF-Device-Id'] = String(deviceId);
         injectBody.deviceId = deviceId;
@@ -878,7 +981,7 @@ async function bunnyflowInjectCookies(opts) {
       if (!resp.ok || !data.ok || !Array.isArray(data.cookies)) {
         return { ok: false, reason: data.error || 'bad_response', status: resp.status };
       }
-      const result = await bunnyflowApplyCookies(data.cookies);
+      const result = await bunnyflowApplyCookies(data.cookies, data.accountUrl || targetUrl);
       __bunnyflowLastInjectAt = Date.now();
       try {
         chrome.storage.local.set({
@@ -890,6 +993,37 @@ async function bunnyflowInjectCookies(opts) {
           userTier: data.tier || '',
         });
       } catch (e) {}
+
+      // AUTO-RELOAD OPEN TABS MATCHING TARGET SERVICE SO USER LANDS LOGGED IN
+      if (result.applied > 0) {
+        try {
+          let hostPattern = '';
+          if (targetUrl) {
+            try { hostPattern = new URL(targetUrl).hostname; } catch(_) {}
+          }
+          if (!hostPattern) {
+            if (service === 'chatgpt' || (data.accountUrl && data.accountUrl.includes('chatgpt.com'))) {
+              hostPattern = 'chatgpt.com';
+            } else if (service === 'google_flow' || (data.accountUrl && data.accountUrl.includes('flow.google.com'))) {
+              hostPattern = 'flow.google.com';
+            }
+          }
+          if (hostPattern) {
+            const cleanHost = hostPattern.replace(/^\./, '');
+            chrome.tabs.query({}, function(tabs) {
+              (tabs || []).forEach(function(t) {
+                if (t && t.id && t.url && t.url.includes(cleanHost)) {
+                  console.log('[ToolsByDcx] Reloading tab after cookie injection:', t.id, t.url);
+                  chrome.tabs.reload(t.id);
+                }
+              });
+            });
+          }
+        } catch(reloadErr) {
+          console.warn('[ToolsByDcx] Auto-reload notice:', reloadErr);
+        }
+      }
+
       return { ok: true, applied: result.applied, failed: result.failed, total: result.total };
     } catch (err) {
       return { ok: false, reason: 'exception', message: String(err && err.message || err) };
@@ -1001,7 +1135,12 @@ chrome.runtime.onMessage.addListener(function(msg, _sender, sendResponse) {
   if (!msg) return false;
   // Support both new and legacy popup message types.
   if (msg.type === 'BUNNYFLOW_INJECT_COOKIES' || msg.type === 'INJECT_NOW' || msg.type === 'BF_SYNC_NOW') {
-    bunnyflowInjectCookies({ force: !!msg.force }).then(function(r) {
+    bunnyflowInjectCookies({
+      force: !!msg.force,
+      accountId: msg.accountId || '',
+      service: msg.service || '',
+      targetUrl: msg.targetUrl || ''
+    }).then(function(r) {
       // Send both new (ok) and legacy (success) shapes for compatibility.
       sendResponse(Object.assign({ success: !!r.ok }, r));
     });

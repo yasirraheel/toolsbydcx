@@ -232,7 +232,7 @@ function AdminExtension() {
 
   const handleDownload = (releaseId) => {
     const token = localStorage.getItem('ccna_auth_token') || localStorage.getItem('flow_token') || '';
-    const url = `${API_BASE}/extension/download${releaseId ? `?id=${releaseId}&token=${token}` : `?token=${token}`}`;
+    const url = `${API_BASE}/extension/download${releaseId ? `?id=${releaseId}&token=${encodeURIComponent(token)}` : `?token=${encodeURIComponent(token)}`}`;
     window.open(url, '_blank');
   };
 
