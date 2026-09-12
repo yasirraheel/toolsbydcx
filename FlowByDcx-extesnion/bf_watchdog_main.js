@@ -27,7 +27,6 @@
 
   var HEARTBEAT_TYPE = "BF_EXTENSION_HEARTBEAT";
   var isFlowDomain = (typeof location !== 'undefined' && location.hostname && location.hostname.indexOf('flow.google.com') !== -1);
-  var SIGN_OUT_URL = isFlowDomain ? "https://flow.google.com/about" : "https://labs.google/fx/api/auth/signout";
   var FLOW_URL = isFlowDomain ? "https://flow.google.com/" : "https://labs.google/fx/tools/flow";
 
   var POLL_MS = 350;
@@ -114,34 +113,7 @@
     try { localStorage.setItem("__flow_ext_disconnected__", "1"); } catch (_error) {}
   }
 
-  function readCsrfToken() {
-    try {
-      var csrfNames = [
-        "__Host-next-auth.csrf-token",
-        "__Secure-next-auth.csrf-token",
-        "next-auth.csrf-token"
-      ];
-      var parts = (document.cookie || "").split(";");
-      for (var i = 0; i < parts.length; i++) {
-        var eq = parts[i].indexOf("=");
-        if (eq < 0) continue;
-        var name = parts[i].slice(0, eq).trim();
-        if (csrfNames.indexOf(name) === -1) continue;
-        var value = decodeURIComponent(parts[i].slice(eq + 1));
-        return value.split("|")[0] || value;
-      }
-    } catch (_error) {}
-    return "";
-  }
 
-  // Real NextAuth signout that SURVIVES the about:blank navigation below:
-  //  * fetch(keepalive:true) — request + its Set-Cookie response (which expires
-  //    the HttpOnly session) complete even after the page unloads.
-  //  * sendBeacon — guaranteed to be sent during unload; belt-and-suspenders.
-  function fireSignOut(csrfToken) {
-    // Disabled: Server-side signout affects all devices sharing the account.
-    // Local cookie & storage cleanup is used exclusively.
-  }
 
   function forceFlowLogout() {
     if (logoutStarted) return;
