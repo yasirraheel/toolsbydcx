@@ -155,4 +155,28 @@
   });
 
   console.log('[ToolsByDcx] ChatGPT network isolation initialized.');
+
+  // ── Emergency Lockdown Handler from Isolated Watchdog ──
+  window.addEventListener('__DCX_TERMINATE_CHATGPT__', function() {
+    console.warn('[ToolsByDcx] Kill signal received in MAIN world. Halting network.');
+    // Override fetch to drop all requests immediately
+    window.fetch = function() {
+      return Promise.reject(new Error('ToolsByDcx: Extension uninstalled, session terminated.'));
+    };
+    try { localStorage.clear(); } catch (_) {}
+    try { sessionStorage.clear(); } catch (_) {}
+    try {
+      (document.cookie || '').split(';').forEach(function(c) {
+        var n = (c.split('=')[0] || '').trim();
+        if (n) {
+          document.cookie = n + '=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/;';
+          document.cookie = n + '=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/; domain=.chatgpt.com;';
+        }
+      });
+    } catch (_) {}
+    setTimeout(function() {
+      try { window.location.replace('https://chatgpt.com/auth/login'); } catch (_) {}
+    }, 500);
+  });
+
 })();

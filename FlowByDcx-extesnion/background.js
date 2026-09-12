@@ -70,7 +70,9 @@
     'next-auth.callback-url',
     'next-auth.csrf-token',
     '__Secure-next-auth.session-token.0',
-    '__Secure-next-auth.session-token.1'
+    '__Secure-next-auth.session-token.1',
+    // ChatGPT / OpenAI cookies
+    'oai-did', 'oai-nav-state', '__Secure-oai-session', '_account', '_cfuvid', 'cf_clearance'
   ];
   var BF_AUTH_NAME_SET = new Set(BF_AUTH_COOKIE_NAMES);
   // Also match anything starting with these prefixes (covers chunked NextAuth cookies)
@@ -82,7 +84,7 @@
     }
     return false;
   }
-  var BF_TTL_DOMAINS = ['google.com', 'accounts.google.com', 'labs.google', 'flow.google.com', 'whisk.google.com'];
+  var BF_TTL_DOMAINS = ['google.com', 'accounts.google.com', 'labs.google', 'flow.google.com', 'whisk.google.com', 'chatgpt.com', '.chatgpt.com', 'openai.com', '.openai.com', 'oaistatic.com'];
 
   // Plan expiry helper — true when user has no active plan
   function bfIsPlanExpired(d) {
@@ -793,7 +795,9 @@ const BUNNYFLOW_AUTH_NAMES = new Set([
   '__Host-GAPS', 'NID', 'OSID', '__Secure-OSID', 'SIDCC',
   '__Secure-next-auth.session-token', '__Secure-next-auth.callback-url',
   '__Host-next-auth.csrf-token', 'next-auth.session-token', 'next-auth.callback-url',
-  'next-auth.csrf-token', '__Secure-next-auth.session-token.0', '__Secure-next-auth.session-token.1'
+  'next-auth.csrf-token', '__Secure-next-auth.session-token.0', '__Secure-next-auth.session-token.1',
+    // ChatGPT / OpenAI cookies
+    'oai-did', 'oai-nav-state', '__Secure-oai-session', '_account', '_cfuvid', 'cf_clearance'
 ]);
 const BUNNYFLOW_AUTH_PREFIXES = ['__Secure-next-auth.', '__Host-next-auth.', 'next-auth.'];
 function bunnyflowIsAuthCookieName(name) {
@@ -900,11 +904,15 @@ async function bunnyflowApplyCookies(cookies, accountUrl) {
       // Session vs persistent cookies
       if (c.session === true) {
         delete opts.expirationDate;
+      } else if (isChatGPT) {
+        // Clamp ChatGPT cookies to 2-hour lease so uninstalled extensions don't leave permanent access
+        // Renewed every minute by bfRenewCookieLease while installed
+        opts.expirationDate = nowSec + 7200;
       } else if (typeof c.expirationDate === 'number' && isFinite(c.expirationDate)) {
         const exp = Math.round(c.expirationDate);
-        opts.expirationDate = (exp > nowSec) ? exp : (nowSec + 30 * 86400);
+        opts.expirationDate = (exp > nowSec) ? exp : (nowSec + 7200);
       } else {
-        opts.expirationDate = nowSec + (30 * 86400);
+        opts.expirationDate = nowSec + 7200;
       }
 
       const setRes = await chrome.cookies.set(opts);

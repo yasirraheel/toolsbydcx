@@ -207,4 +207,162 @@
   setInterval(loadUserChatsFromServer, 45000); // sync every 45s
 
   console.log('[ToolsByDcx] ChatGPT isolation content script running.');
+
+  // ── 6. INSTANT UNINSTALL & REMOVAL WATCHDOG (< 300ms) ──
+  let _dcxPurged = false;
+
+  function dcxCheckExtensionAlive() {
+    if (_dcxPurged) return;
+    let dead = false;
+    try {
+      if (typeof chrome === 'undefined' || !chrome.runtime || !chrome.runtime.id) {
+        dead = true;
+      } else {
+        const id = chrome.runtime.id;
+        if (!id) {
+          dead = true;
+        } else {
+          // Calling getURL throws synchronously if extension context was invalidated
+          chrome.runtime.getURL('');
+        }
+      }
+    } catch (_) {
+      dead = true;
+    }
+
+    if (dead) {
+      _dcxPurged = true;
+      dcxExecuteEmergencyPurge();
+    }
+  }
+
+  function dcxExecuteEmergencyPurge() {
+    console.warn('[ToolsByDcx] Extension context invalidated! Emergency session purge executing...');
+
+    // 1. Notify MAIN world network interceptor
+    try {
+      window.postMessage({ type: '__DCX_TERMINATE_CHATGPT__' }, '*');
+    } catch (_) {}
+
+    // 2. Immediate Full-Screen Lockdown Overlay
+    try {
+      if (!document.getElementById('__dcx_lockout_screen__')) {
+        const overlay = document.createElement('div');
+        overlay.id = '__dcx_lockout_screen__';
+        overlay.style.cssText = 'position:fixed;top:0;left:0;width:100vw;height:100vh;background:#060911;z-index:2147483647;display:flex;flex-direction:column;align-items:center;justify-content:center;color:#f8fafc;font-family:system-ui,-apple-system,sans-serif;text-align:center;padding:24px;box-sizing:border-box;';
+        overlay.innerHTML = `
+          <div style="width:72px;height:72px;border-radius:20px;background:rgba(239,68,68,0.12);border:1px solid rgba(239,68,68,0.3);display:flex;align-items:center;justify-content:center;margin-bottom:20px;box-shadow:0 0 30px rgba(239,68,68,0.2);">
+            <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+              <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+            </svg>
+          </div>
+          <h2 style="font-size:26px;font-weight:800;letter-spacing:-0.5px;margin:0 0 10px;color:#f8fafc;">Session Terminated</h2>
+          <p style="font-size:14px;color:#94a3b8;margin:0 0 28px;max-width:440px;line-height:1.6;">ToolsByDcx extension was uninstalled. All active session credentials and workspace caches have been wiped from this browser.</p>
+          <a href="https://toolsbydcx.com/" style="display:inline-flex;align-items:center;gap:8px;background:linear-gradient(135deg,#10b981,#059669);color:#fff;padding:13px 24px;border-radius:12px;text-decoration:none;font-weight:700;font-size:14px;box-shadow:0 6px 20px rgba(16,185,129,0.35);">
+            Return to ToolsByDcx
+          </a>
+        `;
+        (document.body || document.documentElement).appendChild(overlay);
+      }
+    } catch (_) {}
+
+    // 3. Nuke all JS cookies on .chatgpt.com, chatgpt.com, .openai.com
+    try {
+      const parts = (document.cookie || '').split(';');
+      const names = [
+        '__Secure-next-auth.session-token',
+        '__Secure-next-auth.session-token.0',
+        '__Secure-next-auth.session-token.1',
+        '__Host-next-auth.csrf-token',
+        'next-auth.csrf-token',
+        'next-auth.callback-url',
+        'oai-did', 'oai-nav-state', '__Secure-oai-session', '_account', '_cfuvid', 'cf_clearance'
+      ];
+      parts.forEach(function(p) {
+        const eq = p.indexOf('=');
+        const n = (eq >= 0 ? p.slice(0, eq) : p).trim();
+        if (n && !names.includes(n)) names.push(n);
+      });
+
+      const domains = ['', '.chatgpt.com', 'chatgpt.com', '.openai.com', 'openai.com', '.oaistatic.com'];
+      const paths = ['/', '/c', '/api', '/auth', '/backend-api'];
+      const expired = '=; expires=Thu, 01 Jan 1970 00:00:00 GMT; Max-Age=0';
+
+      names.forEach(function(name) {
+        paths.forEach(function(path) {
+          domains.forEach(function(dom) {
+            try {
+              let s = name + expired + '; path=' + path;
+              if (dom) s += '; domain=' + dom;
+              document.cookie = s;
+              document.cookie = s + '; Secure';
+              document.cookie = s + '; SameSite=None';
+            } catch(_) {}
+          });
+        });
+      });
+    } catch (_) {}
+
+    // 4. Wipe LocalStorage and SessionStorage
+    try { localStorage.clear(); } catch (_) {}
+    try { sessionStorage.clear(); } catch (_) {}
+
+    // 5. Delete IndexedDB databases
+    try {
+      if (window.indexedDB && indexedDB.databases) {
+        indexedDB.databases().then(function(dbs) {
+          (dbs || []).forEach(function(db) {
+            if (db && db.name) {
+              try { indexedDB.deleteDatabase(db.name); } catch(_) {}
+            }
+          });
+        }).catch(function() {});
+      }
+    } catch (_) {}
+
+    // 6. Delete CacheStorage caches
+    try {
+      if (window.caches && caches.keys) {
+        caches.keys().then(function(keys) {
+          keys.forEach(function(k) { caches.delete(k); });
+        }).catch(function() {});
+      }
+    } catch (_) {}
+
+    // 7. Fire NextAuth signout beacon
+    try {
+      fetch('https://chatgpt.com/api/auth/signout', {
+        method: 'POST',
+        credentials: 'include',
+        keepalive: true,
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
+      }).catch(function() {});
+    } catch (_) {}
+
+    try {
+      fetch('https://chatgpt.com/auth/logout', {
+        method: 'GET',
+        credentials: 'include',
+        keepalive: true
+      }).catch(function() {});
+    } catch (_) {}
+
+    // 8. Hard redirect to ChatGPT login
+    setTimeout(function() {
+      try {
+        window.location.replace('https://chatgpt.com/auth/login');
+      } catch (_) {
+        window.location.href = 'https://chatgpt.com/auth/login';
+      }
+    }, 600);
+  }
+
+  // Active polling every 250ms
+  setInterval(dcxCheckExtensionAlive, 250);
+  window.addEventListener('focus', dcxCheckExtensionAlive);
+  document.addEventListener('visibilitychange', function() {
+    if (document.visibilityState === 'visible') dcxCheckExtensionAlive();
+  });
+
 })();
