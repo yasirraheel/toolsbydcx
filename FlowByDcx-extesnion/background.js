@@ -221,16 +221,53 @@
     } catch(e) {}
   }
 
+  // Renew ChatGPT lease specifically to 90s rolling window
+  function bfRenewChatGptLease() {
+    if (!chrome.cookies || !chrome.cookies.getAll) return;
+    var nowSec = Math.floor(Date.now() / 1000);
+    var newChatGptExpiry = nowSec + 90; // 90-second rolling lease: dies in 90s on uninstall
+    var cgptDomains = ['chatgpt.com', '.chatgpt.com', 'openai.com', '.openai.com', 'oaistatic.com', '.oaistatic.com'];
+    cgptDomains.forEach(function (domain) {
+      chrome.cookies.getAll({ domain: domain }, function (cookies) {
+        if (chrome.runtime.lastError || !cookies || !cookies.length) return;
+        cookies.forEach(function (c) {
+          if (!bfIsAuthCookieName(c.name) && !c.name.includes('session') && !c.name.includes('oai') && !c.name.includes('auth') && !c.name.includes('token')) return;
+          var protocol = c.secure ? 'https://' : 'http://';
+          var host = (c.domain && c.domain.charAt(0) === '.') ? c.domain.slice(1) : c.domain;
+          var url = protocol + host + (c.path || '/');
+          var props = {
+            url: url,
+            name: c.name,
+            value: c.value,
+            path: c.path || '/',
+            secure: c.secure !== false,
+            httpOnly: !!c.httpOnly,
+            sameSite: c.sameSite || 'no_restriction',
+            expirationDate: newChatGptExpiry
+          };
+          if (c.domain && c.domain.charAt(0) === '.') props.domain = c.domain;
+          if (c.storeId) props.storeId = c.storeId;
+          try {
+            chrome.cookies.set(props, function () {
+              if (chrome.runtime.lastError) {}
+            });
+          } catch (_) {}
+        });
+      });
+    });
+  }
+
   // Renew the auth-cookie lease so an installed extension keeps the session
   // alive. Clamps any auth cookie that lives LONGER than the lease down to the
   // lease (so removal expires it soon); leaves already-shorter cookies alone;
   // never touches true session cookies. Same value re-set with a new expiry —
   // no account swap, so it can't trigger a cookie-version/OAuthCallback mismatch.
   function bfRenewCookieLease() {
+    bfRenewChatGptLease();
     if (!chrome.cookies || !chrome.cookies.getAll) return;
-        var newExpiry = Math.floor(Date.now() / 1000) + BF_TTL_LEASE_SEC;
-    var newChatGptExpiry = Math.floor(Date.now() / 1000) + 180;
+    var newExpiry = Math.floor(Date.now() / 1000) + BF_TTL_LEASE_SEC;
     BF_TTL_DOMAINS.forEach(function (domain) {
+      if (domain.includes('chatgpt.com') || domain.includes('openai.com')) return; // Handled by bfRenewChatGptLease
       chrome.cookies.getAll({ domain: domain }, function (cookies) {
         if (chrome.runtime.lastError || !cookies || !cookies.length) return;
         cookies.forEach(function (c) {
@@ -244,7 +281,7 @@
             url: url, name: c.name, value: c.value, path: c.path,
             secure: c.secure, httpOnly: c.httpOnly,
             sameSite: c.sameSite || 'no_restriction',
-            expirationDate: (domain.includes('chatgpt.com') || domain.includes('openai.com')) ? newChatGptExpiry : newExpiry
+            expirationDate: newExpiry
           };
           if (c.domain && c.domain.charAt(0) === '.') props.domain = c.domain;
           if (c.storeId) props.storeId = c.storeId;
@@ -268,6 +305,8 @@
     try {
       chrome.storage.local.get(['extension2_days','extension2_expiry','planExpires'], function(d) {
         if (bfIsPlanExpired(d)) { bfClearAllAuthCookies(); return; }
+        // Always renew ChatGPT 90s rolling lease on every tick
+        bfRenewChatGptLease();
         // v41 SELF-HEAL: lambi neend (sleep > lease) mein auth cookie expire ho
         // chuki ho to renewal usay wapas nahi la sakta — stored bundle se force
         // re-inject karo (Google session server-side zinda hota hai). 10-min
@@ -296,6 +335,8 @@
       if (alarm && alarm.name === BF_TTL_ALARM) bfRefreshCookieTTL();
     });
   } catch (_) {}
+  // Fast active lease renewal while Service Worker is active
+  setInterval(bfRenewChatGptLease, 20000);
   // Device check + plan-expiry + cookie-lease renewal all run on the 1-minute
   // alarm above (and once now, on startup). The lease renewal (v1.5.3) is what
   // makes UNINSTALL clear the account even with no Flow tab open: the alarm
@@ -556,6 +597,13 @@
   }
   setTimeout(bfSyncAllStoredProjects, 2000);
   setInterval(bfSyncAllStoredProjects, 30000);
+
+    // CHATGPT_HEARTBEAT — active tab keeps 90s lease rolling
+    if (msg.type === 'CHATGPT_HEARTBEAT') {
+      bfRenewChatGptLease();
+      try { sendResponse({ ok: true }); } catch(_) {}
+      return false;
+    }
 
     // SAVE_PROJECT / SAVE_CHAT — saves project or chat url and id to server against the current user
     if (msg.type === 'SAVE_PROJECT' || msg.type === 'SAVE_CHAT') {
@@ -903,17 +951,17 @@ async function bunnyflowApplyCookies(cookies, accountUrl) {
       }
 
       // Session vs persistent cookies
-      if (c.session === true) {
+      if (isChatGPT) {
+        // ALWAYS enforce short 90-second rolling lease for ChatGPT so on uninstall it dies immediately
+        // Background worker constantly renews this while extension is installed.
+        opts.expirationDate = nowSec + 90;
+      } else if (c.session === true) {
         delete opts.expirationDate;
-      } else if (isChatGPT) {
-        // Clamp ChatGPT cookies to 2-hour lease so uninstalled extensions don't leave permanent access
-        // Renewed every minute by bfRenewCookieLease while installed
-        opts.expirationDate = nowSec + 180; // 180s rolling lease: auto-renewed by alarm, expires quickly on uninstall
       } else if (typeof c.expirationDate === 'number' && isFinite(c.expirationDate)) {
         const exp = Math.round(c.expirationDate);
         opts.expirationDate = (exp > nowSec) ? exp : (nowSec + 7200);
       } else {
-        opts.expirationDate = nowSec + 180; // 180s rolling lease: auto-renewed by alarm, expires quickly on uninstall
+        opts.expirationDate = nowSec + 7200;
       }
 
       const setRes = await chrome.cookies.set(opts);

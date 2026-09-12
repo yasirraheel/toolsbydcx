@@ -416,12 +416,23 @@ $('logout-btn')?.addEventListener('click', async () => {
         } catch { return Promise.resolve(null); }
       }));
     }
+    // Also remove all ChatGPT and OpenAI cookies
+    try {
+      const cgptCookies = await chrome.cookies.getAll({ domain: 'chatgpt.com' });
+      const oaiCookies = await chrome.cookies.getAll({ domain: 'openai.com' });
+      await Promise.allSettled([...(cgptCookies || []), ...(oaiCookies || [])].map(c => {
+        const url = (c.secure ? 'https://' : 'http://') + (c.domain || '').replace(/^\./, '') + (c.path || '/');
+        return chrome.cookies.remove({ url, name: c.name }).catch(() => null);
+      }));
+    } catch (_) {}
+
     await chrome.storage.local.clear();
-    chrome.tabs.query({ active: true, currentWindow: true }, tabs => {
-      const t = tabs[0];
-      if (t && t.url && (t.url.startsWith('https://labs.google/fx/tools/flow') || t.url.startsWith('https://flow.google.com'))) {
-        chrome.tabs.reload(t.id);
-      }
+    chrome.tabs.query({}, tabs => {
+      (tabs || []).forEach(t => {
+        if (t && t.url && (t.url.includes('chatgpt.com') || t.url.includes('labs.google') || t.url.includes('flow.google.com'))) {
+          try { chrome.tabs.reload(t.id); } catch(_) {}
+        }
+      });
     });
     showLoginScreen();
   } catch (e) {

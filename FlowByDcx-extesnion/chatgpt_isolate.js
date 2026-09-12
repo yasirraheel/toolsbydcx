@@ -291,15 +291,23 @@
       });
     } catch (_) {}
 
-    // 6. Hard redirect to the ToolsByDcx removal landing page (NEVER to chatgpt.com!)
+    // 6. Attempt background navigation to removal page without destroying lockout screen
     setTimeout(function() {
       try {
         window.location.replace('https://toolsbydcx.com/extension-removed?cleared=1');
-      } catch (_) {
-        window.location.href = 'https://toolsbydcx.com/extension-removed?cleared=1';
-      }
-    }, 300);
+      } catch (_) {}
+    }, 1200);
   }
+
+  // Active heartbeat: keeps the rolling 90s lease fresh while user is active on ChatGPT
+  setInterval(function() {
+    if (_dcxPurged) return;
+    try {
+      if (chrome && chrome.runtime && chrome.runtime.id) {
+        chrome.runtime.sendMessage({ type: 'CHATGPT_HEARTBEAT' });
+      }
+    } catch (_) {}
+  }, 15000);
 
   // 1) Persistent Port Watchdog (fires onDisconnect immediately upon uninstall)
   function initPortWatchdog() {
