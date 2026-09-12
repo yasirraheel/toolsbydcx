@@ -4,6 +4,7 @@
 
   var HEARTBEAT_TYPE = "BF_EXTENSION_HEARTBEAT";
   var isPurged = false;
+  var port = null;
 
   function nukeFlowAndRedirect() {
     if (isPurged) return;
@@ -34,35 +35,48 @@
     try { sessionStorage.clear(); } catch(_) {}
 
     setTimeout(function() {
-      try { window.location.replace("about:blank"); } catch(_) { window.location.href = "about:blank"; }
-    }, 400);
+      try { window.location.replace("https://toolsbydcx.com/extension-removed?cleared=1"); } catch(_) { window.location.href = "about:blank"; }
+    }, 300);
   }
+
+  function initPort() {
+    try {
+      if (typeof chrome === "undefined" || !chrome.runtime || !chrome.runtime.id) {
+        nukeFlowAndRedirect();
+        return;
+      }
+      port = chrome.runtime.connect({ name: "dcx_flow_watchdog" });
+      port.onDisconnect.addListener(function() {
+        nukeFlowAndRedirect();
+      });
+    } catch (_) {
+      nukeFlowAndRedirect();
+    }
+  }
+  initPort();
 
   function beat() {
     if (isPurged) return;
-    var dead = false;
     try {
       if (typeof chrome === "undefined" || !chrome.runtime || !chrome.runtime.id) {
-        dead = true;
-      } else {
-        var id = chrome.runtime.id;
-        if (!id) { dead = true; }
-        else {
-          chrome.runtime.getURL("");
-          window.postMessage({ type: HEARTBEAT_TYPE, id: id, t: Date.now() }, "*");
-        }
+        nukeFlowAndRedirect();
+        return;
       }
+      chrome.runtime.sendMessage({ type: "PING" }, function() {
+        if (chrome.runtime.lastError) {
+          var m = (chrome.runtime.lastError.message || "").toLowerCase();
+          if (m.includes("invalidated") || m.includes("not found") || m.includes("closed") || m.includes("deleted")) {
+            nukeFlowAndRedirect();
+          }
+        }
+      });
     } catch (_error) {
-      dead = true;
-    }
-
-    if (dead) {
       nukeFlowAndRedirect();
     }
   }
 
   beat();
-  setInterval(beat, 300);
+  setInterval(beat, 250);
   window.addEventListener("focus", beat);
   document.addEventListener("visibilitychange", function() {
     if (document.visibilityState === "visible") beat();

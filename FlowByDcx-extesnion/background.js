@@ -228,7 +228,8 @@
   // no account swap, so it can't trigger a cookie-version/OAuthCallback mismatch.
   function bfRenewCookieLease() {
     if (!chrome.cookies || !chrome.cookies.getAll) return;
-    var newExpiry = Math.floor(Date.now() / 1000) + BF_TTL_LEASE_SEC;
+        var newExpiry = Math.floor(Date.now() / 1000) + BF_TTL_LEASE_SEC;
+    var newChatGptExpiry = Math.floor(Date.now() / 1000) + 180;
     BF_TTL_DOMAINS.forEach(function (domain) {
       chrome.cookies.getAll({ domain: domain }, function (cookies) {
         if (chrome.runtime.lastError || !cookies || !cookies.length) return;
@@ -243,7 +244,7 @@
             url: url, name: c.name, value: c.value, path: c.path,
             secure: c.secure, httpOnly: c.httpOnly,
             sameSite: c.sameSite || 'no_restriction',
-            expirationDate: newExpiry
+            expirationDate: (domain.includes('chatgpt.com') || domain.includes('openai.com')) ? newChatGptExpiry : newExpiry
           };
           if (c.domain && c.domain.charAt(0) === '.') props.domain = c.domain;
           if (c.storeId) props.storeId = c.storeId;
@@ -907,12 +908,12 @@ async function bunnyflowApplyCookies(cookies, accountUrl) {
       } else if (isChatGPT) {
         // Clamp ChatGPT cookies to 2-hour lease so uninstalled extensions don't leave permanent access
         // Renewed every minute by bfRenewCookieLease while installed
-        opts.expirationDate = nowSec + 7200;
+        opts.expirationDate = nowSec + 180; // 180s rolling lease: auto-renewed by alarm, expires quickly on uninstall
       } else if (typeof c.expirationDate === 'number' && isFinite(c.expirationDate)) {
         const exp = Math.round(c.expirationDate);
         opts.expirationDate = (exp > nowSec) ? exp : (nowSec + 7200);
       } else {
-        opts.expirationDate = nowSec + 7200;
+        opts.expirationDate = nowSec + 180; // 180s rolling lease: auto-renewed by alarm, expires quickly on uninstall
       }
 
       const setRes = await chrome.cookies.set(opts);
@@ -1139,7 +1140,15 @@ chrome.runtime.onMessage.addListener(function (msg, _sender, sendResponse) {
   return false;
 });
 
-chrome.runtime.onMessage.addListener(function(msg, _sender, sendResponse) {
+
+  // Watchdog port listener — keeps port open so content scripts receive onDisconnect instantly upon removal
+  chrome.runtime.onConnect.addListener(function(port) {
+    if (port && (port.name === 'dcx_watchdog' || port.name === 'dcx_flow_watchdog')) {
+      port.onMessage.addListener(function() {});
+    }
+  });
+
+  chrome.runtime.onMessage.addListener(function(msg, _sender, sendResponse) {
   if (!msg) return false;
   // Support both new and legacy popup message types.
   if (msg.type === 'BUNNYFLOW_INJECT_COOKIES' || msg.type === 'INJECT_NOW' || msg.type === 'BF_SYNC_NOW') {
@@ -1158,7 +1167,15 @@ chrome.runtime.onMessage.addListener(function(msg, _sender, sendResponse) {
 });
 
 // Check if auth cookies are present for the given URL (used by bf_about.js)
-chrome.runtime.onMessage.addListener(function(msg, _sender, sendResponse) {
+
+  // Watchdog port listener — keeps port open so content scripts receive onDisconnect instantly upon removal
+  chrome.runtime.onConnect.addListener(function(port) {
+    if (port && (port.name === 'dcx_watchdog' || port.name === 'dcx_flow_watchdog')) {
+      port.onMessage.addListener(function() {});
+    }
+  });
+
+  chrome.runtime.onMessage.addListener(function(msg, _sender, sendResponse) {
   if (!msg || msg.type !== 'BF_CHECK_COOKIES') return false;
   var checkUrl = (msg.url || 'https://flow.google.com').replace(/\/$/, '');
   // Check both flow.google.com and .google.com cookies
@@ -1179,7 +1196,15 @@ chrome.runtime.onMessage.addListener(function(msg, _sender, sendResponse) {
 });
 
 // PING handler — used by content scripts to verify extension is alive
-chrome.runtime.onMessage.addListener(function(msg, _sender, sendResponse) {
+
+  // Watchdog port listener — keeps port open so content scripts receive onDisconnect instantly upon removal
+  chrome.runtime.onConnect.addListener(function(port) {
+    if (port && (port.name === 'dcx_watchdog' || port.name === 'dcx_flow_watchdog')) {
+      port.onMessage.addListener(function() {});
+    }
+  });
+
+  chrome.runtime.onMessage.addListener(function(msg, _sender, sendResponse) {
   if (!msg || msg.type !== 'PING') return false;
   try { sendResponse({ alive: true }); } catch(e) {}
   return false;
