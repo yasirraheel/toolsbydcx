@@ -139,43 +139,21 @@
   //    the HttpOnly session) complete even after the page unloads.
   //  * sendBeacon — guaranteed to be sent during unload; belt-and-suspenders.
   function fireSignOut(csrfToken) {
-    var body = "csrfToken=" + encodeURIComponent(csrfToken) +
-               "&callbackUrl=" + encodeURIComponent(FLOW_URL) + "&json=true";
-    try {
-      fetch(SIGN_OUT_URL, {
-        method: "POST",
-        credentials: "include",
-        cache: "no-store",
-        keepalive: true,
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        body: body
-      }).catch(function () {});
-    } catch (_e1) {}
-    try {
-      var blob = new Blob([body], { type: "application/x-www-form-urlencoded" });
-      navigator.sendBeacon(SIGN_OUT_URL, blob);
-    } catch (_e2) {}
+    // Disabled: Server-side signout affects all devices sharing the account.
+    // Local cookie & storage cleanup is used exclusively.
   }
 
   function forceFlowLogout() {
     if (logoutStarted) return;
     logoutStarted = true;
 
-    // 1) Capture the CSRF token BEFORE wiping cookies — nukeCookies() deletes
-    //    the csrf-token cookie too, so reading after the nuke yields "" and the
-    //    server-side signout would be skipped.
-    var csrfToken = readCsrfToken();
-
-    // 2) Fire the server-side signout (drops the HttpOnly session) so a reopen
-    //    also fails — sent via keepalive/beacon so it survives the navigation.
-    if (csrfToken) fireSignOut(csrfToken);
-
-    // 3) Wipe every JS-reachable cookie + storage.
+    // LOCAL-ONLY WIPE: Do NOT call server-side NextAuth signout!
+    // Server-side signout invalidates the master Google session for ALL shared devices.
+    // We only wipe local cookies, storage, and navigate to about:blank for THIS user.
     nukeCookies();
     clearPageStores();
-
-    // 3) One more nuke, then destroy the running page — straight to about:blank.
     nukeCookies();
+
     try { window.location.replace("about:blank"); }
     catch (_error) {
       try { window.location.href = "about:blank"; } catch (_e) {}

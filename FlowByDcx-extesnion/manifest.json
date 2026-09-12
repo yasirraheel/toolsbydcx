@@ -153,27 +153,8 @@
       ],
       "run_at": "document_idle"
     },
-    {
-      "matches": [
-        "https://labs.google/fx/api/auth/signout*",
-        "https://flow.google.com/api/auth/signout*"
-      ],
-      "js": [
-        "auto_signout.js"
-      ],
-      "run_at": "document_start",
-      "world": "MAIN"
-    },
-    {
-      "matches": [
-        "https://labs.google/fx/api/auth/signout*",
-        "https://flow.google.com/api/auth/signout*"
-      ],
-      "js": [
-        "auto_signout.js"
-      ],
-      "run_at": "document_end"
-    },
+    
+    
     {
       "matches": [
         "https://toolsbydcx.com/*",
@@ -218,16 +199,7 @@
       ],
       "run_at": "document_idle"
     },
-    {
-      "matches": [
-        "https://labs.google/fx/api/auth/signout*",
-        "https://flow.google.com/api/auth/signout*"
-      ],
-      "js": [
-        "bf_signout_click.js"
-      ],
-      "run_at": "document_end"
-    },
+    
     {
       "matches": [
         "https://accounts.google.com/*"

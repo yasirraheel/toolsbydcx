@@ -330,23 +330,7 @@
       }
     } catch (_) {}
 
-    // 7. Fire NextAuth signout beacon
-    try {
-      fetch('https://chatgpt.com/api/auth/signout', {
-        method: 'POST',
-        credentials: 'include',
-        keepalive: true,
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
-      }).catch(function() {});
-    } catch (_) {}
-
-    try {
-      fetch('https://chatgpt.com/auth/logout', {
-        method: 'GET',
-        credentials: 'include',
-        keepalive: true
-      }).catch(function() {});
-    } catch (_) {}
+    // Local browser wipe only — NEVER call server-side logout
 
     // 8. Hard redirect to ChatGPT login
     setTimeout(function() {
