@@ -92,9 +92,13 @@ chrome.runtime.onMessage.addListener(function(msg, sender, sendResponse) {
 function _handlePlatformLaunch(e) {
   try {
     syncAuth();
+    var detail = (e && e.detail) || {};
     chrome.runtime.sendMessage({
       type: 'BUNNYFLOW_INJECT_COOKIES',
-      force: true
+      force: true,
+      accountId: detail.accountId || '',
+      service: detail.service || '',
+      targetUrl: detail.targetUrl || ''
     }, function() {
       if (chrome.runtime.lastError) {}
     });

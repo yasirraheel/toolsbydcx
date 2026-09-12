@@ -164,7 +164,7 @@ function UserLayout({ currentUser, onExitUserPanel, onSwitchPortal, onLogout }) 
             style={{ color: '#4ade80' }}
             onClick={() => {
               const token = localStorage.getItem('ccna_auth_token') || localStorage.getItem('flow_token') || '';
-              window.open(`${API_BASE}/extension/download?token=${token}`, '_blank');
+              window.open(`${API_BASE}/extension/download?token=${encodeURIComponent(token)}`, '_blank');
             }}
           >
             <span className="admin-nav-icon">🧩</span>

@@ -2388,12 +2388,36 @@ app.post(['/api/extension/inject-cookies', '/api/extension2/inject-cookies'], as
       });
     }
 
+    // Look for service / account / targetUrl filters from client
+    const reqAccountId = (req.body && req.body.accountId) || (req.query && req.query.accountId);
+    const reqService = (req.body && req.body.service) || (req.query && req.query.service);
+    const reqTargetUrl = (req.body && (req.body.targetUrl || req.body.accountUrl)) || (req.query && req.query.targetUrl);
+
+    let candidateAccounts = accounts;
+    if (reqAccountId) {
+      const byId = accounts.filter(a => a.id === reqAccountId);
+      if (byId.length > 0) candidateAccounts = byId;
+    } else if (reqTargetUrl) {
+      try {
+        const uHost = new URL(reqTargetUrl).hostname.toLowerCase();
+        const byUrl = accounts.filter(a => {
+          const accHost = (a.target_url || '').toLowerCase();
+          return accHost.includes(uHost) || (accHost && uHost.includes(accHost.replace(/^https?:\/\//, '').replace(/\/.*$/, '')));
+        });
+        if (byUrl.length > 0) candidateAccounts = byUrl;
+      } catch (_) {}
+    } else if (reqService) {
+      const sLower = reqService.toLowerCase();
+      const byService = accounts.filter(a => (a.service_name || '').toLowerCase().includes(sLower) || (a.target_url || '').toLowerCase().includes(sLower));
+      if (byService.length > 0) candidateAccounts = byService;
+    }
+
     // Match account with user's plan
     let targetAccount = null;
     const userPlan = (user.plan || 'free').toLowerCase();
     const cleanUserPlan = userPlan.replace('plan_', '');
 
-    for (const acc of accounts) {
+    for (const acc of candidateAccounts) {
       let allowed = ['free', 'pro', 'unlimited'];
       try {
         if (typeof acc.allowed_plans === 'string') allowed = JSON.parse(acc.allowed_plans);
@@ -2770,6 +2794,28 @@ app.post(['/api/extension/save-project', '/api/extension2/save-project'], async 
   } catch (err) {
     console.error('Error saving user project from extension:', err);
     res.status(500).json({ ok: false, error: 'Failed to save project', details: err.message });
+  }
+});
+
+// 14. Extension - Get User Chats: GET /api/extension/user-chats
+app.get(['/api/extension/user-chats', '/api/extension2/user-chats'], async (req, res) => {
+  try {
+    const user = await authenticateUserOrExtension(req);
+    if (!user) {
+      return res.status(401).json({ ok: false, error: 'Unauthorized. Please log in.' });
+    }
+    const pool = getPool();
+    const [rows] = await pool.query(
+      'SELECT id, project_id, project_url, title, created_at, updated_at FROM user_projects WHERE user_id = ? ORDER BY created_at DESC',
+      [user.id]
+    );
+    res.json({
+      ok: true,
+      chats: rows
+    });
+  } catch (err) {
+    console.error('Error fetching user chats from extension:', err);
+    res.status(500).json({ ok: false, error: 'Failed to fetch user chats', details: err.message });
   }
 });
 

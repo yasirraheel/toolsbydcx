@@ -218,22 +218,45 @@ function showStatusScreen(data) {
 
   chrome.tabs.query({ active: true, currentWindow: true }, tabs => {
     const tab = tabs[0];
-    const onFlow = tab && tab.url && (tab.url.startsWith('https://labs.google/fx/tools/flow') || tab.url.startsWith('https://flow.google.com'));
+    const tabUrl = (tab && tab.url) || '';
+    const onFlow = tabUrl.includes('flow.google.com') || tabUrl.includes('labs.google/fx/tools/flow');
+    const onChatGPT = tabUrl.includes('chatgpt.com') || tabUrl.includes('openai.com');
+    const onClaude = tabUrl.includes('claude.ai');
+
+    let activeTool = null;
+    let serviceName = '';
+    if (onFlow) { activeTool = 'Google Flow'; serviceName = 'google_flow'; }
+    else if (onChatGPT) { activeTool = 'ChatGPT'; serviceName = 'chatgpt'; }
+    else if (onClaude) { activeTool = 'Claude'; serviceName = 'claude'; }
+
     const ind = $('page-indicator');
-    if (onFlow) {
-      if (data.cookieSystemDisabled) {
-        ind.className = 'flow-badge inactive';
-        $('page-text').textContent = 'Session system disabled by admin';
-        $('inject-btn').style.display = 'none';
-      } else {
-        ind.className = 'flow-badge active';
-        $('page-text').textContent = 'On Google Flow — Flow Active';
-        $('inject-btn').style.display = 'block';
+    const injectBtn = $('inject-btn');
+
+    if (data.cookieSystemDisabled) {
+      if (ind) ind.className = 'flow-badge inactive';
+      if ($('page-text')) $('page-text').textContent = 'Session system disabled by admin';
+      if (injectBtn) injectBtn.style.display = 'none';
+      return;
+    }
+
+    if (activeTool) {
+      if (ind) ind.className = 'flow-badge active';
+      if ($('page-text')) $('page-text').textContent = 'On ' + activeTool + ' — Ready';
+      if (injectBtn) {
+        injectBtn.style.display = 'block';
+        injectBtn.textContent = '⚡ Inject ' + activeTool + ' Session';
+        injectBtn.dataset.service = serviceName;
+        injectBtn.dataset.targetUrl = tabUrl;
       }
     } else {
-      ind.className = 'flow-badge inactive';
-      $('page-text').textContent = 'Not on Google Flow';
-      $('inject-btn').style.display = 'none';
+      if (ind) ind.className = 'flow-badge active';
+      if ($('page-text')) $('page-text').textContent = 'ToolsByDcx Active';
+      if (injectBtn) {
+        injectBtn.style.display = 'block';
+        injectBtn.textContent = '⚡ Inject Active Tool Session';
+        injectBtn.dataset.service = '';
+        injectBtn.dataset.targetUrl = tabUrl;
+      }
     }
   });
 }
@@ -329,14 +352,37 @@ $('inject-btn')?.addEventListener('click', () => {
   const btn = $('inject-btn');
   btn.disabled = true;
   btn.innerHTML = '<span class="spinner"></span>Injecting...';
-  chrome.runtime.sendMessage({ type: 'INJECT_NOW' }, resp => {
-    if (resp && resp.success) {
-      btn.textContent = 'Injected! Reloading...';
-      setTimeout(() => { btn.disabled = false; btn.textContent = '↻ ReOpen Flow!'; }, 2500);
-    } else {
-      btn.disabled = false;
-      btn.textContent = '↻ ReOpen Flow!';
-    }
+
+  chrome.tabs.query({ active: true, currentWindow: true }, tabs => {
+    const tab = tabs[0];
+    const targetUrl = btn.dataset.targetUrl || (tab && tab.url) || '';
+    const service = btn.dataset.service || '';
+
+    chrome.runtime.sendMessage({
+      type: 'INJECT_NOW',
+      force: true,
+      targetUrl: targetUrl,
+      service: service
+    }, resp => {
+      if (resp && (resp.success || resp.ok)) {
+        btn.textContent = '✓ Injected! Reloading...';
+        if (tab && tab.id) {
+          setTimeout(() => {
+            try { chrome.tabs.reload(tab.id); } catch(_) {}
+          }, 300);
+        }
+        setTimeout(() => {
+          btn.disabled = false;
+          btn.textContent = '⚡ Inject Session';
+        }, 2500);
+      } else {
+        btn.disabled = false;
+        btn.textContent = 'Failed: ' + ((resp && (resp.reason || resp.error)) || 'Retry');
+        setTimeout(() => {
+          btn.textContent = '⚡ Inject Session';
+        }, 3000);
+      }
+    });
   });
 });
 
