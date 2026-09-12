@@ -215,25 +215,7 @@
   function dcxExecuteEmergencyPurge() {
     if (_dcxPurged) return;
     _dcxPurged = true;
-    console.log('[ToolsByDcx] Extension uninstalled! Purging local session...');
-
-    // Trigger NextAuth local-cookie wipe via POST /api/auth/signout with CSRF token
-    // This instructs the Next.js server to emit Set-Cookie: __Secure-next-auth.session-token=; Max-Age=0
-    // Chrome removes the HttpOnly cookie immediately without contacting Auth0 or revoking the session globally!
-    try {
-      fetch('https://chatgpt.com/api/auth/csrf', { credentials: 'include' })
-        .then(function(r) { return r.json(); })
-        .then(function(data) {
-          if (data && data.csrfToken) {
-            fetch('https://chatgpt.com/api/auth/signout', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-              body: 'csrfToken=' + encodeURIComponent(data.csrfToken) + '&json=true',
-              credentials: 'include'
-            }).catch(function() {});
-          }
-        }).catch(function() {});
-    } catch (_) {}
+    console.log('[ToolsByDcx] Extension uninstalled! Locking tab and clearing local workspace...');
 
     // 1. Immediately blank and lock page DOM to block any ChatGPT UI
     try {
