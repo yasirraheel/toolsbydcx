@@ -1,5 +1,5 @@
 /* FlowByDcx popup */
-const DEFAULT_API = 'http://localhost:5000';
+const DEFAULT_API = 'https://toolsbydcx.com';
 const RENEW_THRESHOLD_DAYS = 5; // show renew banner when <= 5 days left
 
 function $(id) { return document.getElementById(id); }
@@ -314,7 +314,7 @@ $('login-btn')?.addEventListener('click', async () => {
     });
   } catch (e) {
     if (e.message === 'UPDATE_REQUIRED') {
-      errEl.innerHTML = '<b>Update Required:</b> Please download the latest version of the BunnyFlow extension to continue.';
+      errEl.innerHTML = '<b>Update Required:</b> Please download the latest version of the ToolsByDcx extension to continue.';
     } else {
       errEl.textContent = e.message || 'Connection failed. Check the server URL.';
     }

@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import AuthModal from "./AuthModal";
 import AuthView from "./AuthView";
+import ExtensionRemoved from "./ExtensionRemoved";
 import LandingPage from "./Landing/LandingPage";
 import AdminLayout from "./Admin/AdminLayout";
 import ResellerLayout from "./Reseller/ResellerLayout";
@@ -29,6 +30,9 @@ function getPermittedView(requestedView, user) {
     if (!user) return "auth-login";
     return "user-panel";
   }
+  if (requestedView === "extension-removed") {
+    return "extension-removed";
+  }
   return requestedView;
 }
 
@@ -37,6 +41,10 @@ function getViewFromUrl() {
   const search = new URLSearchParams(window.location.search);
   const viewParam = search.get("view");
   const hash = window.location.hash.toLowerCase().replace(/^#\/?/, "");
+
+  if (path === "/extension-removed" || path === "/removed" || viewParam === "extension-removed" || viewParam === "removed" || hash === "extension-removed" || hash === "removed") {
+    return "extension-removed";
+  }
 
   if (path === "/admin" || path.startsWith("/admin/") || viewParam === "admin" || hash.startsWith("admin")) {
     return "admin";
@@ -110,6 +118,8 @@ export default function App() {
       targetUrl = "/forgot-password";
     } else if (view === "auth-reset") {
       targetUrl = "/reset-password";
+    } else if (view === "extension-removed") {
+      targetUrl = "/extension-removed";
     } else {
       targetUrl = "/";
     }
@@ -286,6 +296,10 @@ export default function App() {
         />
       );
     }
+  }
+
+  if (currentView === "extension-removed") {
+    return <ExtensionRemoved onNavigate={handleNavigate} />;
   }
 
   if (currentView.startsWith("auth-")) {

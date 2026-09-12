@@ -17,7 +17,7 @@ setInterval(setHeartbeat, HEARTBEAT_INTERVAL);
 
 // Normalize origin: use active platform origin or fallback
 function _bfNormalizeOrigin(origin) {
-  if (!origin) return 'http://localhost:5000';
+  if (!origin) return 'https://toolsbydcx.com';
   // Strip www if present
   return origin.replace('https://www.', 'https://').replace('http://www.', 'http://');
 }
