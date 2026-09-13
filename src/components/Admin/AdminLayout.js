@@ -5,6 +5,7 @@ import AdminUsers from './AdminUsers';
 import AdminResellers from './AdminResellers';
 import AdminPlans from './AdminPlans';
 import AdminAccounts from './AdminAccounts';
+import AdminAccountTypes from './AdminAccountTypes';
 import AdminSettings from './AdminSettings';
 import AdminExtension from './AdminExtension';
 import { API_BASE, handleAuthError, authFetch } from '../../apiConfig';
@@ -15,6 +16,7 @@ function AdminLayout({ currentUser, onExitAdmin, onSwitchPortal, onLogout }) {
     const search = new URLSearchParams(window.location.search);
     const tabParam = search.get("tab");
     if (tabParam) return tabParam;
+    if (path.includes("/admin/account-types")) return "account-types";
     if (path.includes("/admin/accounts")) return "accounts";
     if (path.includes("/admin/users")) return "users";
     if (path.includes("/admin/resellers")) return "resellers";
@@ -104,6 +106,7 @@ function AdminLayout({ currentUser, onExitAdmin, onSwitchPortal, onLogout }) {
     switch (activeTab) {
       case 'dashboard': return '📊 Admin Dashboard';
       case 'accounts': return '🔑 Accounts';
+      case 'account-types': return '🏷️ Account Types';
       case 'users': return '👥 Customers';
       case 'resellers': return '🤝 Resellers';
       case 'plans': return '💳 Plans';
@@ -165,6 +168,15 @@ function AdminLayout({ currentUser, onExitAdmin, onSwitchPortal, onLogout }) {
           >
             <span className="admin-nav-icon">🔑</span>
             <span>Accounts</span>
+          </button>
+
+          <button
+            type="button"
+            className={`admin-nav-item ${activeTab === 'account-types' ? 'active' : ''}`}
+            onClick={() => switchTab('account-types')}
+          >
+            <span className="admin-nav-icon">🏷️</span>
+            <span>Account Types</span>
           </button>
 
           <button
@@ -296,6 +308,7 @@ function AdminLayout({ currentUser, onExitAdmin, onSwitchPortal, onLogout }) {
           )}
 
           {activeTab === 'accounts' && <AdminAccounts />}
+          {activeTab === 'account-types' && <AdminAccountTypes />}
 
           {activeTab === 'users' && (
             <AdminUsers

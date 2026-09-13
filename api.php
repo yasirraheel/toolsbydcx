@@ -776,9 +776,93 @@ if (preg_match('#^/api/admin/#', $basePath)) {
         exit;
     }
 
+    // 8.12b Admin Account Types: GET /api/admin/account-types
+    if (preg_match('#^/api/admin/account-types$#', $basePath) && $method === 'GET') {
+        $stmt = $pdo->query("SELECT at.*, 
+            (SELECT COUNT(*) FROM shared_accounts sa WHERE sa.account_type_id = at.id) AS accounts_count 
+            FROM account_types at 
+            ORDER BY at.sort_order ASC, at.created_at ASC");
+        echo json_encode(["success" => true, "account_types" => $stmt->fetchAll()]);
+        exit;
+    }
+
+    // 8.12c Create Account Type: POST /api/admin/account-types
+    if (preg_match('#^/api/admin/account-types$#', $basePath) && $method === 'POST') {
+        $name = trim($body['name'] ?? '');
+        $slug = strtolower(trim(preg_replace('/[^a-zA-Z0-9_-]/', '', str_replace(' ', '-', $body['slug'] ?? $body['name'] ?? ''))));
+        $icon = trim($body['icon'] ?? '🚀') ?: '🚀';
+        $description = trim($body['description'] ?? '');
+        $status = $body['status'] ?? 'active';
+        $sortOrder = (int)($body['sort_order'] ?? 0);
+
+        if (!$name || !$slug) {
+            http_response_code(400);
+            echo json_encode(["error" => "Name and slug are required."]);
+            exit;
+        }
+
+        $check = $pdo->prepare("SELECT id FROM account_types WHERE slug = ?");
+        $check->execute([$slug]);
+        if ($check->fetch()) {
+            http_response_code(409);
+            echo json_encode(["error" => "An account type with this slug already exists."]);
+            exit;
+        }
+
+        $id = 'type_' . $slug;
+        $stmt = $pdo->prepare("INSERT INTO account_types (id, name, slug, icon, description, status, sort_order) VALUES (?, ?, ?, ?, ?, ?, ?)");
+        $stmt->execute([$id, $name, $slug, $icon, $description, $status, $sortOrder]);
+
+        echo json_encode(["success" => true, "message" => "Account type created successfully.", "id" => $id]);
+        exit;
+    }
+
+    // 8.12d Update Account Type: PUT /api/admin/account-types/:id
+    if (preg_match('#^/api/admin/account-types/([^/]+)$#', $basePath, $m) && $method === 'PUT') {
+        $typeId = $m[1];
+        $name = trim($body['name'] ?? '');
+        $slug = strtolower(trim(preg_replace('/[^a-zA-Z0-9_-]/', '', str_replace(' ', '-', $body['slug'] ?? ''))));
+        $icon = trim($body['icon'] ?? '🚀') ?: '🚀';
+        $description = trim($body['description'] ?? '');
+        $status = $body['status'] ?? 'active';
+        $sortOrder = (int)($body['sort_order'] ?? 0);
+
+        if (!$name || !$slug) {
+            http_response_code(400);
+            echo json_encode(["error" => "Name and slug are required."]);
+            exit;
+        }
+
+        $check = $pdo->prepare("SELECT id FROM account_types WHERE slug = ? AND id != ?");
+        $check->execute([$slug, $typeId]);
+        if ($check->fetch()) {
+            http_response_code(409);
+            echo json_encode(["error" => "Another account type with this slug already exists."]);
+            exit;
+        }
+
+        $stmt = $pdo->prepare("UPDATE account_types SET name = ?, slug = ?, icon = ?, description = ?, status = ?, sort_order = ? WHERE id = ?");
+        $stmt->execute([$name, $slug, $icon, $description, $status, $sortOrder, $typeId]);
+
+        echo json_encode(["success" => true, "message" => "Account type updated successfully."]);
+        exit;
+    }
+
+    // 8.12e Delete Account Type: DELETE /api/admin/account-types/:id
+    if (preg_match('#^/api/admin/account-types/([^/]+)$#', $basePath, $m) && $method === 'DELETE') {
+        $typeId = $m[1];
+        $pdo->prepare("UPDATE shared_accounts SET account_type_id = NULL WHERE account_type_id = ?")->execute([$typeId]);
+        $pdo->prepare("DELETE FROM account_types WHERE id = ?")->execute([$typeId]);
+        echo json_encode(["success" => true, "message" => "Account type deleted."]);
+        exit;
+    }
+
     // 8.13 Shared Accounts: GET /api/admin/accounts
     if (preg_match('#^/api/admin/accounts$#', $basePath) && $method === 'GET') {
-        $accounts = $pdo->query("SELECT * FROM shared_accounts ORDER BY created_at DESC")->fetchAll();
+        $accounts = $pdo->query("SELECT sa.*, at.name AS account_type_name, at.slug AS account_type_slug, at.icon AS account_type_icon 
+            FROM shared_accounts sa 
+            LEFT JOIN account_types at ON sa.account_type_id = at.id 
+            ORDER BY sa.created_at DESC")->fetchAll();
         $formatted = array_map(function($acc) {
             $parsedCookies = json_decode($acc['cookies'] ?? '[]', true) ?: [];
             $acc['cookieCount'] = count($parsedCookies);
@@ -793,6 +877,7 @@ if (preg_match('#^/api/admin/#', $basePath)) {
     if (preg_match('#^/api/admin/accounts$#', $basePath) && $method === 'POST') {
         $serviceName = trim($body['service_name'] ?? '');
         $targetUrl = trim($body['target_url'] ?? '');
+        $accountTypeId = trim($body['account_type_id'] ?? '') ?: null;
         $description = trim($body['description'] ?? '');
         $cookies = is_array($body['cookies'] ?? null) ? json_encode($body['cookies']) : ($body['cookies'] ?? '[]');
         $status = $body['status'] ?? 'active';
@@ -800,8 +885,8 @@ if (preg_match('#^/api/admin/#', $basePath)) {
         $maxUsers = (int)($body['max_users'] ?? 100);
         $id = 'acc_' . time() . '_' . substr(md5(rand()), 0, 5);
 
-        $stmt = $pdo->prepare("INSERT INTO shared_accounts (id, service_name, target_url, description, cookies, cookie_version, status, allowed_plans, max_users) VALUES (?, ?, ?, ?, ?, 1, ?, ?, ?)");
-        $stmt->execute([$id, $serviceName, $targetUrl, $description, $cookies, $status, $allowed, $maxUsers]);
+        $stmt = $pdo->prepare("INSERT INTO shared_accounts (id, service_name, target_url, account_type_id, description, cookies, cookie_version, status, allowed_plans, max_users) VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?, ?)");
+        $stmt->execute([$id, $serviceName, $targetUrl, $accountTypeId, $description, $cookies, $status, $allowed, $maxUsers]);
 
         echo json_encode(["success" => true, "message" => "Account created successfully.", "accountId" => $id]);
         exit;
@@ -812,14 +897,15 @@ if (preg_match('#^/api/admin/#', $basePath)) {
         $accId = $m[1];
         $serviceName = trim($body['service_name'] ?? '');
         $targetUrl = trim($body['target_url'] ?? '');
+        $accountTypeId = trim($body['account_type_id'] ?? '') ?: null;
         $description = trim($body['description'] ?? '');
         $cookies = is_array($body['cookies'] ?? null) ? json_encode($body['cookies']) : ($body['cookies'] ?? '[]');
         $status = $body['status'] ?? 'active';
         $allowed = json_encode($body['allowed_plans'] ?? ['plan_pro']);
         $maxUsers = (int)($body['max_users'] ?? 100);
 
-        $stmt = $pdo->prepare("UPDATE shared_accounts SET service_name=?, target_url=?, description=?, cookies=?, cookie_version = cookie_version + 1, status=?, allowed_plans=?, max_users=? WHERE id=?");
-        $stmt->execute([$serviceName, $targetUrl, $description, $cookies, $status, $allowed, $maxUsers, $accId]);
+        $stmt = $pdo->prepare("UPDATE shared_accounts SET service_name=?, target_url=?, account_type_id=?, description=?, cookies=?, cookie_version = cookie_version + 1, status=?, allowed_plans=?, max_users=? WHERE id=?");
+        $stmt->execute([$serviceName, $targetUrl, $accountTypeId, $description, $cookies, $status, $allowed, $maxUsers, $accId]);
 
         echo json_encode(["success" => true, "message" => "Account updated successfully."]);
         exit;
@@ -1129,8 +1215,23 @@ if (preg_match('#^/api/user/#', $basePath)) {
         $accStmt = $pdo->query("SELECT COUNT(*) FROM shared_accounts WHERE status = 'active'");
         $availableTools = (int)$accStmt->fetchColumn();
 
-        $recentAccountsStmt = $pdo->query("SELECT id, service_name, service_name AS name, service_name AS service, target_url, description, status FROM shared_accounts WHERE status = 'active' ORDER BY updated_at DESC LIMIT 5");
+        $recentAccountsStmt = $pdo->query("SELECT sa.id, sa.service_name, sa.service_name AS name, sa.service_name AS service, sa.target_url, sa.description, sa.status, sa.account_type_id, at.name AS account_type_name, at.slug AS account_type_slug, at.icon AS account_type_icon 
+            FROM shared_accounts sa 
+            LEFT JOIN account_types at ON sa.account_type_id = at.id 
+            WHERE sa.status = 'active' 
+            ORDER BY sa.updated_at DESC LIMIT 5");
         $recentAccounts = $recentAccountsStmt->fetchAll();
+
+        $accountTypesStmt = $pdo->query("SELECT at.id, at.name, at.slug, at.icon, at.description,
+            (SELECT COUNT(*) FROM shared_accounts sa WHERE sa.account_type_id = at.id AND sa.status = 'active') AS accounts_count
+            FROM account_types at
+            WHERE at.status = 'active'
+            ORDER BY at.sort_order ASC, at.name ASC");
+        $accountTypes = $accountTypesStmt->fetchAll();
+
+        // Active release version info
+        $relRow = $pdo->query("SELECT version FROM extension_releases WHERE is_active = 1 ORDER BY created_at DESC LIMIT 1")->fetch();
+        $extVersion = $relRow ? $relRow['version'] : '1.0.4';
 
         echo json_encode([
             "success" => true,
@@ -1138,6 +1239,8 @@ if (preg_match('#^/api/user/#', $basePath)) {
             "activeSessionsCount" => $activeSessions,
             "projectsCount" => $projectCount,
             "recentAccounts" => $recentAccounts,
+            "accountTypes" => $accountTypes,
+            "extensionVersion" => $extVersion,
             "stats" => [
                 "activeSessions" => $activeSessions,
                 "projectCount" => $projectCount,
@@ -1154,10 +1257,33 @@ if (preg_match('#^/api/user/#', $basePath)) {
         exit;
     }
 
+    // 10.1b User Account Types: GET /api/user/account-types
+    if (preg_match('#^/api/user/account-types$#', $basePath) && $method === 'GET') {
+        $stmt = $pdo->query("SELECT at.id, at.name, at.slug, at.icon, at.description,
+            (SELECT COUNT(*) FROM shared_accounts sa WHERE sa.account_type_id = at.id AND sa.status = 'active') AS accounts_count
+            FROM account_types at
+            WHERE at.status = 'active'
+            ORDER BY at.sort_order ASC, at.name ASC");
+        echo json_encode(["success" => true, "account_types" => $stmt->fetchAll()]);
+        exit;
+    }
+
     // 10.2 User Resources / Shared Accounts: GET /api/user/resources
     if (preg_match('#^/api/user/resources#', $basePath) && $method === 'GET') {
-        $accounts = $pdo->query("SELECT id, service_name, service_name AS name, service_name AS service, target_url, description, status FROM shared_accounts WHERE status = 'active' ORDER BY updated_at DESC")->fetchAll();
-        echo json_encode(["success" => true, "resources" => $accounts]);
+        $typeParam = $_GET['type'] ?? null;
+        $sql = "SELECT sa.id, sa.service_name, sa.service_name AS name, sa.service_name AS service, sa.target_url, sa.description, sa.status, sa.account_type_id, at.name as account_type_name, at.slug as account_type_slug, at.icon as account_type_icon 
+            FROM shared_accounts sa 
+            LEFT JOIN account_types at ON sa.account_type_id = at.id 
+            WHERE sa.status = 'active'";
+        $params = [];
+        if ($typeParam && $typeParam !== 'all') {
+            $sql .= " AND (sa.account_type_id = ? OR at.slug = ?)";
+            $params = [$typeParam, $typeParam];
+        }
+        $sql .= " ORDER BY sa.updated_at DESC";
+        $stmt = $pdo->prepare($sql);
+        $stmt->execute($params);
+        echo json_encode(["success" => true, "resources" => $stmt->fetchAll()]);
         exit;
     }
 

@@ -1,15 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { API_BASE } from '../../apiConfig';
 
-function UserResources() {
+function UserResources({ accountType }) {
   const [resources, setResources] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
-  const [activeFilter, setActiveFilter] = useState('all');
   const [launchingId, setLaunchingId] = useState(null);
 
   const getAuthHeaders = () => {
-    const token = localStorage.getItem('ccna_auth_token');
+    const token = localStorage.getItem('ccna_auth_token') || localStorage.getItem('flow_token') || '';
     return {
       'Content-Type': 'application/json',
       ...(token ? { Authorization: `Bearer ${token}` } : {})
@@ -19,13 +18,17 @@ function UserResources() {
   const fetchResources = async () => {
     try {
       setLoading(true);
-      const res = await fetch(`${API_BASE}/user/resources`, { headers: getAuthHeaders() });
+      const queryParam = accountType?.slug ? `?type=${encodeURIComponent(accountType.slug)}` : '';
+      const res = await fetch(`${API_BASE}/user/resources${queryParam}`, { headers: getAuthHeaders() });
       const data = await res.json();
       if (data.resources) {
         setResources(data.resources);
+      } else {
+        setResources([]);
       }
     } catch (e) {
       console.warn('User resources API notice:', e);
+      setResources([]);
     } finally {
       setLoading(false);
     }
@@ -34,22 +37,22 @@ function UserResources() {
   useEffect(() => {
     fetchResources();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [accountType?.id, accountType?.slug]);
 
   const handleLaunch = async (resource) => {
     setLaunchingId(resource.id);
     try {
-      // 1. Dispatch custom bridge event for FlowByDcx Extension
+      // 1. Dispatch custom bridge event for Chrome Extension
       window.dispatchEvent(new CustomEvent('__flow_launch_account__', {
         detail: {
           accountId: resource.id,
-          service: resource.service,
+          service: resource.service || resource.service_name,
           targetUrl: resource.target_url
         }
       }));
 
-      // 2. Open target URL directly in new tab (no alert dialog)
-      const url = resource.target_url || 'https://labs.google/fx/tools/flow';
+      // 2. Open target URL directly in new tab
+      const url = resource.target_url || 'https://flow.google.com/';
       window.open(url, '_blank', 'noopener,noreferrer');
     } catch (e) {
       console.error('Launch failed:', e);
@@ -59,46 +62,40 @@ function UserResources() {
   };
 
   const filteredResources = resources.filter((item) => {
-    const itemName = item.service_name || item.name || item.service || '';
-    const itemService = item.service || item.service_name || '';
-    const matchesSearch = !search ||
+    const itemName = item.service_name || item.name || '';
+    const itemUrl = item.target_url || '';
+    return !search ||
       itemName.toLowerCase().includes(search.toLowerCase()) ||
-      itemService.toLowerCase().includes(search.toLowerCase());
-    if (!matchesSearch) return false;
-    if (activeFilter === 'all') return true;
-    return itemService.toLowerCase() === activeFilter.toLowerCase();
+      itemUrl.toLowerCase().includes(search.toLowerCase());
   });
 
-  const servicesList = Array.from(new Set(resources.map((r) => r.service || r.service_name).filter(Boolean)));
+  const categoryName = accountType?.name || 'Available';
+  const categoryIcon = accountType?.icon || '🚀';
+  const categoryDesc = accountType?.description || 'Select an active server to launch with 1-click automatic extension session access.';
 
   return (
     <div className="admin-accounts-view">
-      {/* FILTER & SEARCH TOOLBAR */}
+      {/* CATEGORY HEADER & SEARCH TOOLBAR */}
       <div className="admin-card">
-        <div className="admin-card-header">
-          <h3 className="admin-card-title">
-            <span>🚀</span> My Shared Tools & Accounts ({resources.length})
-          </h3>
+        <div className="admin-card-header" style={{ flexWrap: 'wrap', gap: '12px' }}>
+          <div>
+            <h3 className="admin-card-title">
+              <span>{categoryIcon}</span> {categoryName} Accounts ({filteredResources.length})
+            </h3>
+            <p style={{ margin: '4px 0 0', fontSize: '13px', color: '#94a3b8' }}>
+              {categoryDesc}
+            </p>
+          </div>
 
           <div className="admin-card-actions">
             <input
               type="text"
               className="admin-search-input"
-              placeholder="Search tools & accounts..."
+              placeholder={`Search ${categoryName} servers...`}
               value={search}
               onChange={(e) => setSearch(e.target.value)}
+              style={{ minWidth: '220px' }}
             />
-
-            <select
-              className="admin-select"
-              value={activeFilter}
-              onChange={(e) => setActiveFilter(e.target.value)}
-            >
-              <option value="all">All Services</option>
-              {servicesList.map((srv) => (
-                <option key={srv} value={srv}>{srv}</option>
-              ))}
-            </select>
           </div>
         </div>
 
@@ -107,7 +104,7 @@ function UserResources() {
           <table className="admin-table">
             <thead>
               <tr>
-                <th>Service Name</th>
+                <th>Server / Account Name</th>
                 <th>Target Platform URL</th>
                 <th>Status</th>
                 <th>Description</th>
@@ -117,25 +114,31 @@ function UserResources() {
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan="5" style={{ textAlign: 'center', padding: '32px', color: '#64748b' }}>
-                    Loading tools...
+                  <td colSpan="5" style={{ textAlign: 'center', padding: '36px', color: '#64748b' }}>
+                    Loading accounts...
                   </td>
                 </tr>
               ) : filteredResources.length === 0 ? (
                 <tr>
-                  <td colSpan="5" style={{ textAlign: 'center', padding: '32px', color: '#64748b' }}>
-                    No tools available on your subscription tier.
+                  <td colSpan="5" style={{ textAlign: 'center', padding: '40px', color: '#64748b' }}>
+                    <div style={{ fontSize: '28px', marginBottom: '8px' }}>{categoryIcon}</div>
+                    <div style={{ fontSize: '15px', fontWeight: 600, color: '#f8fafc' }}>
+                      No {categoryName} accounts currently assigned.
+                    </div>
+                    <p style={{ fontSize: '13px', marginTop: '4px', color: '#94a3b8' }}>
+                      New accounts added by your administrator will automatically appear here.
+                    </p>
                   </td>
                 </tr>
               ) : (
                 filteredResources.map((res) => (
                   <tr key={res.id}>
                     <td>
-                      <div style={{ fontWeight: 600, color: '#f8fafc', fontSize: '15px' }}>
-                        {res.service_name || res.name || res.service || 'Active Account'}
+                      <div style={{ fontWeight: 700, color: '#f8fafc', fontSize: '15px' }}>
+                        {res.service_name || res.name || 'Server'}
                       </div>
-                      <div style={{ fontSize: '13px', color: '#64748b' }}>
-                        {res.service || res.service_name || 'Active Tool'}
+                      <div style={{ fontSize: '12px', color: '#64748b', marginTop: '2px' }}>
+                        ID: {res.id}
                       </div>
                     </td>
                     <td>
@@ -143,28 +146,31 @@ function UserResources() {
                         href={res.target_url}
                         target="_blank"
                         rel="noreferrer"
-                        style={{ color: '#38bdf8', textDecoration: 'none', fontSize: '14px' }}
+                        style={{ color: '#38bdf8', textDecoration: 'none', fontSize: '14px', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
                       >
-                        {res.target_url || 'https://google.com'} ↗
+                        <span>🔗</span>
+                        <span>{res.target_url || 'https://google.com'}</span>
+                        <span style={{ fontSize: '12px' }}>↗</span>
                       </a>
                     </td>
                     <td>
-                      <span className="badge-pill badge-green">Active</span>
+                      <span className="badge-pill badge-green">Active & Ready</span>
                     </td>
                     <td>
-                      <span style={{ fontSize: '14px', color: '#94a3b8' }}>
-                        {res.description || 'Shared high-tier account pool'}
+                      <span style={{ fontSize: '13px', color: '#94a3b8' }}>
+                        {res.description || `${categoryName} shared workspace server`}
                       </span>
                     </td>
                     <td style={{ textAlign: 'right' }}>
                       <button
                         type="button"
                         className="btn-admin-primary"
-                        style={{ padding: '8px 18px', fontSize: '14px' }}
+                        style={{ padding: '8px 20px', fontSize: '14px', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
                         disabled={launchingId === res.id}
                         onClick={() => handleLaunch(res)}
                       >
-                        {launchingId === res.id ? 'Launching...' : '🚀 Launch Tool'}
+                        <span>{launchingId === res.id ? '⏳' : '🚀'}</span>
+                        <span>{launchingId === res.id ? 'Connecting...' : 'Launch Server'}</span>
                       </button>
                     </td>
                   </tr>

@@ -6,6 +6,8 @@ function AdminAccounts() {
   const { confirm, alert: showCustomAlert } = useDialog();
   const [accounts, setAccounts] = useState([]);
   const [availablePlans, setAvailablePlans] = useState([]);
+  const [accountTypes, setAccountTypes] = useState([]);
+  const [filterType, setFilterType] = useState('all');
   const [loading, setLoading] = useState(true);
   const [filterStatus, setFilterStatus] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
@@ -23,6 +25,20 @@ function AdminAccounts() {
       headers['x-auth-token'] = token;
     }
     return headers;
+  };
+
+  const fetchAccountTypes = async () => {
+    try {
+      const res = await authFetch(`${API_BASE}/admin/account-types`, {
+        headers: getAuthHeaders()
+      });
+      const data = await res.json();
+      if (data.success && Array.isArray(data.account_types)) {
+        setAccountTypes(data.account_types);
+      }
+    } catch (e) {
+      console.warn('Could not fetch account types in Accounts view:', e);
+    }
   };
 
   const fetchPlans = async () => {
@@ -64,6 +80,7 @@ function AdminAccounts() {
   useEffect(() => {
     fetchAccounts();
     fetchPlans();
+    fetchAccountTypes();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -192,6 +209,7 @@ function AdminAccounts() {
         body: JSON.stringify({
           service_name: editingAccount.service_name,
           target_url: editingAccount.target_url,
+          account_type_id: editingAccount.account_type_id || null,
           description: editingAccount.description,
           cookies: editingAccount.cookies,
           status: editingAccount.status || 'active',
@@ -221,6 +239,7 @@ function AdminAccounts() {
     setEditingAccount({
       service_name: '',
       target_url: 'https://flow.google.com/',
+      account_type_id: accountTypes[0]?.id || '',
       description: '',
       status: 'active',
       allowed_plans: ['plan_pro', 'plan_unlimited'],
@@ -253,6 +272,7 @@ function AdminAccounts() {
 
     setEditingAccount({
       ...acc,
+      account_type_id: acc.account_type_id || '',
       cookies: cookieStr,
       allowed_plans: Array.isArray(acc.allowed_plans) ? acc.allowed_plans : ['plan_pro', 'plan_unlimited']
     });
@@ -272,9 +292,11 @@ function AdminAccounts() {
 
   const filteredAccounts = accounts.filter(acc => {
     const matchesSearch = acc.service_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                          acc.target_url.toLowerCase().includes(searchQuery.toLowerCase());
+                          acc.target_url.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                          (acc.account_type_name && acc.account_type_name.toLowerCase().includes(searchQuery.toLowerCase()));
     const matchesStatus = filterStatus === 'all' || acc.status === filterStatus;
-    return matchesSearch && matchesStatus;
+    const matchesType = filterType === 'all' || acc.account_type_id === filterType;
+    return matchesSearch && matchesStatus && matchesType;
   });
 
   const totalCookies = accounts.reduce((sum, a) => sum + (a.cookieCount || 0), 0);
@@ -339,6 +361,17 @@ function AdminAccounts() {
             <option value="active">Active Only</option>
             <option value="paused">Paused Only</option>
           </select>
+
+          <select
+            value={filterType}
+            onChange={(e) => setFilterType(e.target.value)}
+            style={{ padding: '10px 14px', borderRadius: '8px', background: '#161926', border: '1px solid #2e344d', color: '#f3f4f6' }}
+          >
+            <option value="all">All Account Types</option>
+            {accountTypes.map((at) => (
+              <option key={at.id} value={at.id}>{at.icon} {at.name}</option>
+            ))}
+          </select>
         </div>
 
         <button
@@ -369,7 +402,8 @@ function AdminAccounts() {
           <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
             <thead>
               <tr style={{ background: '#1c2030', borderBottom: '1px solid #2e344d', color: '#9ca3af', fontSize: '12px', textTransform: 'uppercase' }}>
-                <th style={{ padding: '14px 16px' }}>Service / Account</th>
+                <th style={{ padding: '14px 16px' }}>Service / Server</th>
+                <th style={{ padding: '14px 16px' }}>Account Type</th>
                 <th style={{ padding: '14px 16px' }}>Target URL</th>
                 <th style={{ padding: '14px 16px' }}>Allowed Plans</th>
                 <th style={{ padding: '14px 16px' }}>Status</th>
@@ -384,6 +418,23 @@ function AdminAccounts() {
                     {acc.description && (
                       <div style={{ fontSize: '12px', color: '#9ca3af', marginTop: '3px', maxWidth: '280px' }}>{acc.description}</div>
                     )}
+                  </td>
+                  <td style={{ padding: '14px 16px' }}>
+                    <span style={{
+                      background: 'rgba(56, 189, 248, 0.12)',
+                      border: '1px solid rgba(56, 189, 248, 0.25)',
+                      color: '#38bdf8',
+                      padding: '4px 10px',
+                      borderRadius: '8px',
+                      fontSize: '12px',
+                      fontWeight: 700,
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '6px'
+                    }}>
+                      <span>{acc.account_type_icon || '🚀'}</span>
+                      <span>{acc.account_type_name || 'Unassigned'}</span>
+                    </span>
                   </td>
                   <td style={{ padding: '14px 16px' }}>
                     <a
@@ -538,17 +589,48 @@ function AdminAccounts() {
             <form onSubmit={handleSaveAccount}>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '14px' }}>
                 <div>
-                  <label style={{ display: 'block', fontSize: '12px', fontWeight: 700, color: '#9ca3af', marginBottom: '6px' }}>Service Name *</label>
+                  <label style={{ display: 'block', fontSize: '12px', fontWeight: 700, color: '#9ca3af', marginBottom: '6px' }}>Service / Server Name *</label>
                   <input
                     type="text"
                     required
                     value={editingAccount.service_name}
                     onChange={(e) => setEditingAccount({ ...editingAccount, service_name: e.target.value })}
-                    placeholder="e.g. Google Flow Primary"
+                    placeholder="e.g. Server 1 or Google Flow Primary"
                     style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', background: '#0f121d', border: '1px solid #2e344d', color: '#fff' }}
                   />
                 </div>
 
+                <div>
+                  <label style={{ display: 'block', fontSize: '12px', fontWeight: 700, color: '#9ca3af', marginBottom: '6px' }}>Account Type / Category *</label>
+                  <select
+                    required
+                    value={editingAccount.account_type_id || ''}
+                    onChange={(e) => {
+                      const selId = e.target.value;
+                      const matched = accountTypes.find(at => at.id === selId);
+                      let newUrl = editingAccount.target_url;
+                      if (!newUrl || newUrl === 'https://flow.google.com/') {
+                        if (matched?.slug === 'chatgpt') newUrl = 'https://chatgpt.com/';
+                        else if (matched?.slug === 'claude') newUrl = 'https://claude.ai/';
+                        else if (matched?.slug === 'flow') newUrl = 'https://flow.google.com/';
+                      }
+                      setEditingAccount({
+                        ...editingAccount,
+                        account_type_id: selId,
+                        target_url: newUrl
+                      });
+                    }}
+                    style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', background: '#0f121d', border: '1px solid #2e344d', color: '#fff' }}
+                  >
+                    <option value="">-- Select Category --</option>
+                    {accountTypes.map(at => (
+                      <option key={at.id} value={at.id}>{at.icon} {at.name}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '14px' }}>
                 <div>
                   <label style={{ display: 'block', fontSize: '12px', fontWeight: 700, color: '#9ca3af', marginBottom: '6px' }}>Target Platform URL *</label>
                   <input
@@ -559,6 +641,18 @@ function AdminAccounts() {
                     placeholder="https://flow.google.com/"
                     style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', background: '#0f121d', border: '1px solid #2e344d', color: '#fff' }}
                   />
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', fontSize: '12px', fontWeight: 700, color: '#9ca3af', marginBottom: '6px' }}>Account Status</label>
+                  <select
+                    value={editingAccount.status || 'active'}
+                    onChange={(e) => setEditingAccount({ ...editingAccount, status: e.target.value })}
+                    style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', background: '#0f121d', border: '1px solid #2e344d', color: '#fff' }}
+                  >
+                    <option value="active">Active (Injects into extension)</option>
+                    <option value="paused">Paused (Temporarily disabled)</option>
+                  </select>
                 </div>
               </div>
 
@@ -573,30 +667,17 @@ function AdminAccounts() {
                 />
               </div>
 
-              {/* STATUS & ALLOWED PLANS */}
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '16px' }}>
-                <div>
-                  <label style={{ display: 'block', fontSize: '12px', fontWeight: 700, color: '#9ca3af', marginBottom: '6px' }}>Account Status</label>
-                  <select
-                    value={editingAccount.status || 'active'}
-                    onChange={(e) => setEditingAccount({ ...editingAccount, status: e.target.value })}
-                    style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', background: '#0f121d', border: '1px solid #2e344d', color: '#fff' }}
-                  >
-                    <option value="active">Active (Injects into extension)</option>
-                    <option value="paused">Paused (Temporarily disabled)</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label style={{ display: 'block', fontSize: '12px', fontWeight: 700, color: '#9ca3af', marginBottom: '6px' }}>Allowed Subscription Plans</label>
-                  <div style={{ display: 'flex', gap: '10px', marginTop: '6px', flexWrap: 'wrap' }}>
-                    {(availablePlans.length > 0
-                      ? availablePlans.map(p => ({ id: p.id, label: p.name }))
-                      : [
-                          { id: 'plan_pro', label: 'Flow Ultra' },
-                          { id: 'plan_unlimited', label: 'Flow Max' },
-                          { id: 'plan_free', label: 'Flow Basic' }
-                        ]
+              {/* ALLOWED PLANS */}
+              <div style={{ marginBottom: '16px' }}>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: 700, color: '#9ca3af', marginBottom: '6px' }}>Allowed Subscription Plans</label>
+                <div style={{ display: 'flex', gap: '10px', marginTop: '6px', flexWrap: 'wrap' }}>
+                  {(availablePlans.length > 0
+                    ? availablePlans.map(p => ({ id: p.id, label: p.name }))
+                    : [
+                        { id: 'plan_pro', label: 'Flow Ultra' },
+                        { id: 'plan_unlimited', label: 'Flow Max' },
+                        { id: 'plan_free', label: 'Flow Basic' }
+                      ]
                     ).map(p => (
                       <label key={p.id} style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '12px', cursor: 'pointer' }}>
                         <input
@@ -609,7 +690,6 @@ function AdminAccounts() {
                     ))}
                   </div>
                 </div>
-              </div>
 
               {/* COOKIES JSON TEXTAREA */}
               <div style={{ marginBottom: '16px' }}>

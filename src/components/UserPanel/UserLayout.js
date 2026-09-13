@@ -13,17 +13,23 @@ function UserLayout({ currentUser, onExitUserPanel, onSwitchPortal, onLogout }) 
     const tabParam = search.get('tab');
     if (tabParam) return tabParam;
     if (path.includes('/user/projects') || path.includes('/projects')) return 'projects';
-    if (path.includes('/user/resources') || path.includes('/tools')) return 'resources';
     if (path.includes('/user/sessions') || path.includes('/devices')) return 'sessions';
+    if (path.includes('/user/account-')) {
+      const match = path.match(/\/user\/(account-[a-z0-9_-]+)/);
+      if (match) return match[1];
+    }
     return 'dashboard';
   };
 
   const [activeTab, setActiveTab] = useState(getInitialTab);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [dashboardData, setDashboardData] = useState(null);
+  const [accountTypes, setAccountTypes] = useState([]);
+  const [selectedAccountType, setSelectedAccountType] = useState(null);
 
-  const switchTab = (tab) => {
+  const switchTab = (tab, accType = null) => {
     setActiveTab(tab);
+    if (accType) setSelectedAccountType(accType);
     setMobileOpen(false);
     const targetUrl = tab === 'dashboard' ? '/dashboard' : `/user/${tab}`;
     if (window.location.pathname !== targetUrl) {
@@ -39,11 +45,27 @@ function UserLayout({ currentUser, onExitUserPanel, onSwitchPortal, onLogout }) 
     return () => window.removeEventListener('popstate', handlePop);
   }, []);
 
-
+  const fetchAccountTypes = async () => {
+    try {
+      const token = localStorage.getItem('ccna_auth_token') || localStorage.getItem('flow_token') || '';
+      const res = await fetch(`${API_BASE}/user/account-types`, {
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {})
+        }
+      });
+      const data = await res.json();
+      if (data.success && Array.isArray(data.account_types)) {
+        setAccountTypes(data.account_types);
+      }
+    } catch (e) {
+      console.warn('User account types notice:', e);
+    }
+  };
 
   const fetchDashboard = async () => {
     try {
-      const token = localStorage.getItem('ccna_auth_token');
+      const token = localStorage.getItem('ccna_auth_token') || localStorage.getItem('flow_token') || '';
       const res = await authFetch(`${API_BASE}/user/dashboard`, {
         headers: {
           'Content-Type': 'application/json',
@@ -57,6 +79,9 @@ function UserLayout({ currentUser, onExitUserPanel, onSwitchPortal, onLogout }) 
       }
       if (data.user || data.sharedAccountsCount !== undefined) {
         setDashboardData(data);
+        if (data.accountTypes && Array.isArray(data.accountTypes)) {
+          setAccountTypes(data.accountTypes);
+        }
       }
     } catch (e) {
       console.warn('User dashboard API notice:', e);
@@ -65,17 +90,20 @@ function UserLayout({ currentUser, onExitUserPanel, onSwitchPortal, onLogout }) 
 
   useEffect(() => {
     fetchDashboard();
+    fetchAccountTypes();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab]);
 
   const getPageTitle = () => {
-    switch (activeTab) {
-      case 'dashboard': return '⚡ User Dashboard';
-      case 'projects': return '🎬 My Saved Projects';
-      case 'resources': return '🚀 Shared Tools & Accounts';
-      case 'sessions': return '💻 Connected Devices';
-      default: return 'User Portal';
+    if (activeTab === 'dashboard') return '⚡ User Dashboard';
+    if (activeTab === 'projects') return '🎬 My Saved Projects';
+    if (activeTab === 'sessions') return '💻 Connected Devices';
+    if (activeTab.startsWith('account-')) {
+      const slug = activeTab.replace('account-', '');
+      const matched = accountTypes.find(at => at.slug === slug) || selectedAccountType;
+      return `${matched?.icon || '🚀'} ${matched?.name || 'Account'} Servers`;
     }
+    return 'User Portal';
   };
 
   return (
@@ -137,15 +165,34 @@ function UserLayout({ currentUser, onExitUserPanel, onSwitchPortal, onLogout }) 
             )}
           </button>
 
-          <div className="admin-nav-section-title">Resources</div>
-          <button
-            type="button"
-            className={`admin-nav-item ${activeTab === 'resources' ? 'active' : ''}`}
-            onClick={() => switchTab('resources')}
-          >
-            <span className="admin-nav-icon">🚀</span>
-            <span>Shared Tools</span>
-          </button>
+          <div className="admin-nav-section-title">Tools & Accounts</div>
+          {accountTypes.map((at) => {
+            const isTabActive = activeTab === `account-${at.slug}`;
+            return (
+              <button
+                type="button"
+                key={at.id}
+                className={`admin-nav-item ${isTabActive ? 'active' : ''}`}
+                onClick={() => switchTab(`account-${at.slug}`, at)}
+              >
+                <span className="admin-nav-icon">{at.icon || '🚀'}</span>
+                <span>{at.name}</span>
+                {at.accounts_count > 0 && (
+                  <span style={{
+                    marginLeft: 'auto',
+                    background: isTabActive ? 'rgba(34, 197, 94, 0.25)' : 'rgba(56, 189, 248, 0.15)',
+                    color: isTabActive ? '#4ade80' : '#38bdf8',
+                    padding: '2px 8px',
+                    borderRadius: '10px',
+                    fontSize: '11px',
+                    fontWeight: 700
+                  }}>
+                    {at.accounts_count}
+                  </span>
+                )}
+              </button>
+            );
+          })}
 
           <div className="admin-nav-section-title">Devices</div>
           <button
@@ -281,7 +328,7 @@ function UserLayout({ currentUser, onExitUserPanel, onSwitchPortal, onLogout }) 
           {activeTab === 'dashboard' && (
             <UserDashboard
               dashboardData={dashboardData}
-              onNavigate={(tab) => switchTab(tab)}
+              onNavigate={(tab, accType) => switchTab(tab, accType)}
               onLaunchResource={(acc) => {
                 const url = acc?.target_url || 'https://flow.google.com/';
                 window.dispatchEvent(new CustomEvent('__flow_launch_account__', {
@@ -294,7 +341,9 @@ function UserLayout({ currentUser, onExitUserPanel, onSwitchPortal, onLogout }) 
 
           {activeTab === 'projects' && <UserProjects />}
 
-          {activeTab === 'resources' && <UserResources />}
+          {(activeTab.startsWith('account-') || activeTab === 'resources') && (
+            <UserResources accountType={selectedAccountType || (accountTypes.find(at => `account-${at.slug}` === activeTab) || accountTypes[0])} />
+          )}
 
           {activeTab === 'sessions' && <UserSessions />}
         </div>

@@ -205,7 +205,7 @@ export default function LandingPage({ currentUser, onOpenAuth, onNavigate, onLog
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                   <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
                 </svg>
-                Companion Extension
+                Chrome Extension
               </button>
             )}
             {currentUser && (
@@ -356,7 +356,7 @@ export default function LandingPage({ currentUser, onOpenAuth, onNavigate, onLog
               </div>
               <h3 className="landing-feature-title">Instant 1-Click Access</h3>
               <p className="landing-feature-desc">
-                No manual copying of credentials or complex configurations. The companion extension handles automated, secure 1-click account access directly.
+                No manual copying of credentials or complex configurations. The browser extension handles automated, secure 1-click account access directly.
               </p>
             </div>
 
@@ -381,7 +381,7 @@ export default function LandingPage({ currentUser, onOpenAuth, onNavigate, onLog
               </div>
               <h3 className="landing-feature-title">Secure & Instant Access</h3>
               <p className="landing-feature-desc">
-                Your personal credentials are safe and secure. Access premium accounts and creative tools instantly through our secure browser companion without manual configuration.
+                Your personal credentials are safe and secure. Access premium accounts and creative tools instantly through our secure browser extension without manual configuration.
               </p>
             </div>
 
@@ -424,7 +424,7 @@ export default function LandingPage({ currentUser, onOpenAuth, onNavigate, onLog
 
             <div className="landing-step-card">
               <div className="landing-step-num">02</div>
-              <h3 className="landing-step-title">Install Companion Extension</h3>
+              <h3 className="landing-step-title">Install Chrome Extension</h3>
               <p className="landing-step-desc">
                 Add the ToolsByDcx Chrome Extension to your browser. It links automatically to your active dashboard session.
               </p>
