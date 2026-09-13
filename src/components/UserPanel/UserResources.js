@@ -63,8 +63,7 @@ function UserResources() {
     const itemService = item.service || item.service_name || '';
     const matchesSearch = !search ||
       itemName.toLowerCase().includes(search.toLowerCase()) ||
-      itemService.toLowerCase().includes(search.toLowerCase()) ||
-      (item.description && item.description.toLowerCase().includes(search.toLowerCase()));
+      itemService.toLowerCase().includes(search.toLowerCase());
     if (!matchesSearch) return false;
     if (activeFilter === 'all') return true;
     return itemService.toLowerCase() === activeFilter.toLowerCase();
@@ -136,9 +135,7 @@ function UserResources() {
                         {res.service_name || res.name || res.service || 'Active Account'}
                       </div>
                       <div style={{ fontSize: '13px', color: '#64748b' }}>
-                        {res.service && res.service !== (res.service_name || res.name)
-                          ? res.service
-                          : (res.target_url ? res.target_url.replace(/^https?:\/\//, '').split('/')[0] : 'Shared Tool')}
+                        {res.service || res.service_name || 'Active Tool'}
                       </div>
                     </td>
                     <td>
