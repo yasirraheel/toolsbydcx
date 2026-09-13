@@ -84,7 +84,7 @@ function UserDashboard({ dashboardData, onNavigate, onLaunchResource }) {
       <div className="admin-card">
         <div className="admin-card-header">
           <h3 className="admin-card-title">
-            <span>🚀</span> Available Accounts & Servers
+            <span>🚀</span> Available Accounts
           </h3>
           {dashboardData?.accountTypes?.length > 0 && (
             <button
@@ -102,7 +102,7 @@ function UserDashboard({ dashboardData, onNavigate, onLaunchResource }) {
           <table className="admin-table">
             <thead>
               <tr>
-                <th>Server Name</th>
+                <th>Account Name</th>
                 <th>Category</th>
                 <th>Target Platform</th>
                 <th>Status</th>
@@ -120,7 +120,7 @@ function UserDashboard({ dashboardData, onNavigate, onLaunchResource }) {
                 recentAccounts.map((acc) => (
                   <tr key={acc.id}>
                     <td>
-                      <div style={{ fontWeight: 600, color: '#f8fafc', fontSize: '14px' }}>{acc.service_name || acc.name || 'Shared Server'}</div>
+                      <div style={{ fontWeight: 600, color: '#f8fafc', fontSize: '14px' }}>{acc.service_name || acc.name || 'Shared Account'}</div>
                       {acc.description && <div style={{ fontSize: '12px', color: '#64748b' }}>{acc.description}</div>}
                     </td>
                     <td>

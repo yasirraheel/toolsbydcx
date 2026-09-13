@@ -101,7 +101,7 @@ function UserLayout({ currentUser, onExitUserPanel, onSwitchPortal, onLogout }) 
     if (activeTab.startsWith('account-')) {
       const slug = activeTab.replace('account-', '');
       const matched = accountTypes.find(at => at.slug === slug) || selectedAccountType;
-      return `${matched?.icon || '🚀'} ${matched?.name || 'Account'} Servers`;
+      return `${matched?.icon || '🚀'} ${matched?.name || 'Account'}`;
     }
     return 'User Portal';
   };

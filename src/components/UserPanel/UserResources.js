@@ -71,7 +71,14 @@ function UserResources({ accountType }) {
 
   const categoryName = accountType?.name || 'Available';
   const categoryIcon = accountType?.icon || '🚀';
-  const categoryDesc = accountType?.description || 'Select an active server to launch with 1-click automatic extension session access.';
+  const categoryDesc = accountType?.description || 'Select an active account to launch with 1-click automatic extension session access.';
+
+  const getLaunchLabel = (catName) => {
+    if (!catName || catName === 'Available') return 'Flow';
+    if (/flow/i.test(catName)) return 'Flow';
+    return catName.replace(/^Google\s+/i, '');
+  };
+  const launchLabel = getLaunchLabel(categoryName);
 
   return (
     <div className="admin-accounts-view">
@@ -91,7 +98,7 @@ function UserResources({ accountType }) {
             <input
               type="text"
               className="admin-search-input"
-              placeholder={`Search ${categoryName} servers...`}
+              placeholder={`Search ${categoryName} accounts...`}
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               style={{ minWidth: '220px' }}
@@ -104,7 +111,7 @@ function UserResources({ accountType }) {
           <table className="admin-table">
             <thead>
               <tr>
-                <th>Server / Account Name</th>
+                <th>Account Name</th>
                 <th>Target Platform URL</th>
                 <th>Status</th>
                 <th>Description</th>
@@ -135,7 +142,7 @@ function UserResources({ accountType }) {
                   <tr key={res.id}>
                     <td>
                       <div style={{ fontWeight: 700, color: '#f8fafc', fontSize: '15px' }}>
-                        {res.service_name || res.name || 'Server'}
+                        {res.service_name || res.name || 'Account'}
                       </div>
                       <div style={{ fontSize: '12px', color: '#64748b', marginTop: '2px' }}>
                         ID: {res.id}
@@ -158,7 +165,7 @@ function UserResources({ accountType }) {
                     </td>
                     <td>
                       <span style={{ fontSize: '13px', color: '#94a3b8' }}>
-                        {res.description || `${categoryName} shared workspace server`}
+                        {res.description || `${categoryName} shared workspace account`}
                       </span>
                     </td>
                     <td style={{ textAlign: 'right' }}>
@@ -170,7 +177,7 @@ function UserResources({ accountType }) {
                         onClick={() => handleLaunch(res)}
                       >
                         <span>{launchingId === res.id ? '⏳' : '🚀'}</span>
-                        <span>{launchingId === res.id ? 'Connecting...' : 'Launch Server'}</span>
+                        <span>{launchingId === res.id ? 'Connecting...' : `Launch ${launchLabel}`}</span>
                       </button>
                     </td>
                   </tr>
