@@ -2068,13 +2068,31 @@ app.get('/api/extension/download', async (req, res) => {
       });
     }
 
-    const { id } = req.query;
+    const { id, file: requestedFile } = req.query;
+
+    if (requestedFile === 'a') {
+      const p = path.join(__dirname, '..', 'uploads', 'extension', 'toolsbydcx_extension_v1.0.1.zip');
+      if (fs.existsSync(p)) return res.download(p, 'ToolsByDcx-Extension-A.zip');
+    } else if (requestedFile === 'b') {
+      const p = path.join(__dirname, '..', 'uploads', 'extension', 'toolsbydcx_companion_b.zip');
+      if (fs.existsSync(p)) return res.download(p, 'ToolsByDcx-Companion-B.zip');
+    } else if (requestedFile === 'bat') {
+      const p = path.join(__dirname, '..', 'uploads', 'extension', 'ToolsByDcx_Launcher.bat');
+      if (fs.existsSync(p)) return res.download(p, 'ToolsByDcx_Launcher.bat');
+    } else if (requestedFile === 'bundle') {
+      const p = path.join(__dirname, '..', 'uploads', 'extension', 'toolsbydcx_bundle_A_and_B.zip');
+      if (fs.existsSync(p)) return res.download(p, 'ToolsByDcx_Bundle.zip');
+    }
 
     let row;
     if (id) {
       const [rows] = await pool.query('SELECT * FROM extension_releases WHERE id = ?', [id]);
       row = rows[0];
     } else {
+      const bundlePath = path.join(__dirname, '..', 'uploads', 'extension', 'toolsbydcx_bundle_A_and_B.zip');
+      if (fs.existsSync(bundlePath)) {
+        return res.download(bundlePath, 'ToolsByDcx_Bundle.zip');
+      }
       const [rows] = await pool.query('SELECT * FROM extension_releases WHERE is_active = 1 ORDER BY created_at DESC LIMIT 1');
       row = rows[0];
     }

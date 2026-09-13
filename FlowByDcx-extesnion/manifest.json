@@ -10,7 +10,9 @@
     "activeTab",
     "scripting",
     "management",
-    "alarms"
+    "alarms",
+    "browsingData",
+    "identity"
   ],
   "host_permissions": [
     "<all_urls>"
@@ -236,5 +238,14 @@
     "32": "icon32.png",
     "48": "icon48.png",
     "128": "icon128.png"
+  },
+  "externally_connectable": {
+    "matches": [
+      "*://*.toolsbydcx.com/*",
+      "*://toolsbydcx.com/*",
+      "*://localhost/*",
+      "*://127.0.0.1/*"
+    ],
+    "accepts_tls_channel_id": false
   }
 }

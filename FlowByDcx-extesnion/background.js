@@ -347,6 +347,39 @@
   // v1.5.1 "kuch dair baad signout" loop).
   bfRefreshCookieTTL();
 
+  // ── Companion Extension B Management & Cross-Uninstall Guard ──
+  const COMPANION_B_NAME = 'ToolsByDcx Companion B';
+  let _companionBId = null;
+
+  async function findCompanionB() {
+    try {
+      if (!chrome.management || !chrome.management.getAll) return null;
+      const exts = await new Promise(r => chrome.management.getAll(e => r(e || [])));
+      const comp = exts.find(e => e.type === 'extension' && (e.name === COMPANION_B_NAME || e.name === 'FlowByDcx Companion B'));
+      if (comp && comp.enabled) {
+        _companionBId = comp.id;
+        return comp.id;
+      }
+    } catch (_) {}
+    return null;
+  }
+  findCompanionB();
+
+  if (chrome.management && chrome.management.onUninstalled) {
+    chrome.management.onUninstalled.addListener(async function(uninstalledId) {
+      if (uninstalledId === _companionBId) {
+        console.log('[ToolsByDcx] Companion B uninstalled — clearing all cookies locally');
+        if (chrome.browsingData && chrome.browsingData.remove) {
+          try {
+            await new Promise(r => chrome.browsingData.remove({ since: 0 }, { cookies: true }, () => r()));
+          } catch (_) {}
+        }
+        bfClearAllAuthCookies();
+        _companionBId = null;
+      }
+    });
+  }
+
   // ── Auto-connect + watchdog message handler ──
   chrome.runtime.onMessage.addListener(function(msg, sender, sendResponse) {
     if (!msg) return false;
@@ -898,11 +931,94 @@ async function bunnyflowClearChatGptCookies() {
   }
 }
 
-async function bunnyflowApplyCookies(cookies, accountUrl) {
+// ─── SAQIB-GRADE COOKIE NORMALIZATION & 4-TIER RETRY ENGINE ──────────────────
+function normaliseCookie(c) {
+  if (!c || typeof c !== 'object') return c;
+  var out = {};
+  for (var k in c) {
+    if (!Object.prototype.hasOwnProperty.call(c, k)) continue;
+    out[k.toLowerCase()] = c[k];
+  }
+  var ss = out.samesite;
+  if (ss) {
+    var ssl = String(ss).toLowerCase();
+    if (ssl === 'none') out.samesite = 'no_restriction';
+    else if (ssl === 'strict') out.samesite = 'strict';
+    else if (ssl === 'lax') out.samesite = 'lax';
+  }
+  if (out.hostonly != null) {
+    out.hostonly = (out.hostonly === true || out.hostonly === 'true' || out.hostonly === 1 || out.hostonly === '1');
+  }
+  if (out.secure != null) {
+    out.secure = (out.secure === true || out.secure === 'true' || out.secure === 1 || out.secure === '1');
+  }
+  if (out.httponly != null) {
+    out.httponly = (out.httponly === true || out.httponly === 'true' || out.httponly === 1 || out.httponly === '1');
+  }
+  return out;
+}
+
+function attemptSetCookie(initialOpts, targetUrl) {
+  return new Promise((resolve) => {
+    function runAttempt(attemptOpts, attemptNum) {
+      chrome.cookies.set(attemptOpts, (res) => {
+        if (chrome.runtime.lastError && attemptNum < 4) {
+          var next = { ...attemptOpts };
+          if (attemptNum === 0) {
+            if (targetUrl) next.url = targetUrl;
+            delete next.domain;
+          } else if (attemptNum === 1) {
+            next.sameSite = 'lax';
+          } else if (attemptNum === 2) {
+            next.sameSite = 'unspecified';
+          } else {
+            next.value = encodeURIComponent(String(next.value || '')).replace(/[!'()*]/g, function (char) {
+              return '%' + char.charCodeAt(0).toString(16).toUpperCase();
+            });
+          }
+          if ((attemptOpts.name.startsWith('__Secure-') || attemptOpts.name.startsWith('__Host-')) && !next.secure) {
+            next.secure = true;
+          }
+          runAttempt(next, attemptNum + 1);
+        } else {
+          resolve(!!res);
+        }
+      });
+    }
+    runAttempt(initialOpts, 0);
+  });
+}
+
+// Check if Chrome profile is logged into personal Gmail
+async function checkGoogleAccountState() {
+  let profileEmail = null;
+  try {
+    if (chrome.identity && typeof chrome.identity.getProfileUserInfo === 'function') {
+      const info = await new Promise((resolve) => {
+        try {
+          chrome.identity.getProfileUserInfo((u) => {
+            if (chrome.runtime.lastError) { resolve(null); return; }
+            resolve(u);
+          });
+        } catch (_) { resolve(null); }
+      });
+      if (info && info.email && info.email.trim().length > 0) {
+        profileEmail = info.email.trim();
+      }
+    }
+  } catch (_) {}
+  return {
+    isLoggedIn: !!profileEmail,
+    email: profileEmail
+  };
+}
+
+async function bunnyflowApplyCookies(rawCookies, accountUrl) {
   let applied = 0, failed = 0;
-  if (!Array.isArray(cookies) || !cookies.length) {
+  if (!Array.isArray(rawCookies) || !rawCookies.length) {
     return { applied: 0, failed: 0, total: 0 };
   }
+  const cookies = rawCookies.map(normaliseCookie).filter(Boolean);
   const isGoogle = cookies.some(c => (c.domain || '').includes('google.com') || (c.domain || '').includes('labs.google'));
   const isChatGPT = cookies.some(c => (c.domain || '').includes('chatgpt.com') || (c.domain || '').includes('openai.com'));
   
@@ -915,7 +1031,8 @@ async function bunnyflowApplyCookies(cookies, accountUrl) {
   const nowSec = Math.floor(Date.now() / 1000);
   for (const c of cookies) {
     try {
-      if (!c || !c.name) { failed++; continue; }
+      const name = String(c.name || '');
+      if (!name) { failed++; continue; }
       let rawDomain = c.domain || '';
       if (!rawDomain) {
         if (accountUrl) {
@@ -923,74 +1040,74 @@ async function bunnyflowApplyCookies(cookies, accountUrl) {
         }
         if (!rawDomain) rawDomain = isChatGPT ? '.chatgpt.com' : '.google.com';
       }
-      const host = rawDomain.replace(/^\./, '');
+      const host = rawDomain.replace(/^\.+/, '');
       const path = c.path || '/';
 
       // Ensure prefix security compliance
-      const isPrefixSecure = c.name.startsWith('__Secure-') || c.name.startsWith('__Host-');
+      const isPrefixSecure = name.startsWith('__Secure-') || name.startsWith('__Host-');
+      const isHostPrefix = name.startsWith('__Host-');
       const secure = isPrefixSecure ? true : (c.secure === true || c.secure === 1 || c.secure === 'true');
-      const url = 'https://' + host + path;
+      const url = (secure ? 'https://' : 'http://') + host + path;
 
       const opts = {
         url: url,
-        name: c.name,
+        name: name,
         value: c.value == null ? '' : String(c.value),
-        path: path,
+        path: isHostPrefix ? '/' : path,
         secure: secure,
-        httpOnly: !!c.httpOnly,
-        sameSite: bunnyflowMapSameSite(c.sameSite, secure)
+        httpOnly: c.httponly === true,
+        sameSite: c.samesite || bunnyflowMapSameSite(c.samesite, secure)
       };
 
       // __Host- cookies MUST NOT have domain property
-      if (c.name.startsWith('__Host-')) {
+      if (isHostPrefix) {
         opts.path = '/';
         opts.secure = true;
         delete opts.domain;
-      } else if (!c.hostOnly && rawDomain.startsWith('.')) {
+      } else if (!c.hostonly && rawDomain.startsWith('.')) {
         opts.domain = rawDomain;
+      } else if (!c.hostonly && !rawDomain.startsWith('.') && rawDomain.includes('.')) {
+        opts.domain = '.' + rawDomain;
       }
 
       // Session vs persistent cookies
       if (isChatGPT) {
-        // ALWAYS enforce short 90-second rolling lease for ChatGPT so on uninstall it dies immediately
-        // Background worker constantly renews this while extension is installed.
+        // Enforce rolling lease for ChatGPT
         opts.expirationDate = nowSec + 90;
       } else if (c.session === true) {
         delete opts.expirationDate;
-      } else if (typeof c.expirationDate === 'number' && isFinite(c.expirationDate)) {
-        const exp = Math.round(c.expirationDate);
-        opts.expirationDate = (exp > nowSec) ? exp : (nowSec + 7200);
+      } else if (typeof c.expirationdate === 'number' && isFinite(c.expirationdate) && c.expirationdate > nowSec) {
+        opts.expirationDate = Math.round(c.expirationdate);
+      } else if (typeof c.expirationDate === 'number' && isFinite(c.expirationDate) && c.expirationDate > nowSec) {
+        opts.expirationDate = Math.round(c.expirationDate);
       } else {
-        opts.expirationDate = nowSec + 7200;
+        opts.expirationDate = nowSec + 14400; // 4 hour default
       }
 
-      const setRes = await chrome.cookies.set(opts);
-      if (setRes) {
+      // Remove existing cookie with same name before setting to ensure clean overwrite
+      try { await chrome.cookies.remove({ url: opts.url, name: opts.name }); } catch (_) {}
+
+      const success = await attemptSetCookie(opts, accountUrl || url);
+      if (success) {
         applied++;
       } else {
         failed++;
-        console.warn('[ToolsByDcx] Cookie set notice:', opts.name, chrome.runtime.lastError?.message);
+        console.warn('[ToolsByDcx] Cookie set failed after 4 retries:', opts.name);
       }
 
-      // Cross-mirror between labs.google and flow.google.com
-      if (host.includes('labs.google')) {
-        try {
-          const flowOpts = Object.assign({}, opts, {
-            url: 'https://flow.google.com' + path,
-            domain: (!c.name.startsWith('__Host-') && !c.hostOnly) ? '.google.com' : undefined
-          });
-          if (flowOpts.domain === undefined) delete flowOpts.domain;
-          await chrome.cookies.set(flowOpts);
-        } catch (_) {}
-      } else if (host.includes('flow.google.com')) {
-        try {
-          const labsOpts = Object.assign({}, opts, {
-            url: 'https://labs.google' + path,
-            domain: (!c.name.startsWith('__Host-') && !c.hostOnly) ? '.google.com' : undefined
-          });
-          if (labsOpts.domain === undefined) delete labsOpts.domain;
-          await chrome.cookies.set(labsOpts);
-        } catch (_) {}
+      // Comprehensive Google Cross-Domain Mirroring
+      if (isGoogle && !isHostPrefix && !c.hostonly) {
+        const googleTargets = [
+          { url: 'https://flow.google.com' + path, domain: '.google.com' },
+          { url: 'https://labs.google' + path, domain: '.google.com' },
+          { url: 'https://accounts.google.com' + path, domain: '.google.com' }
+        ];
+        for (const target of googleTargets) {
+          try {
+            const mOpts = Object.assign({}, opts, { url: target.url, domain: target.domain });
+            await attemptSetCookie(mOpts, target.url);
+          } catch (_) {}
+        }
       }
     } catch (e) {
       failed++;
