@@ -1409,30 +1409,56 @@ if (preg_match('#^/api/extension(2)?/#', $basePath)) {
             exit;
         }
 
-        $id = $_GET['id'] ?? null;
-        if ($id) {
-            $stmt = $pdo->prepare("SELECT * FROM extension_releases WHERE id = ?");
-            $stmt->execute([$id]);
-            $row = $stmt->fetch();
-        } else {
-            $row = $pdo->query("SELECT * FROM extension_releases WHERE is_active = 1 ORDER BY created_at DESC LIMIT 1")->fetch();
-        }
-        if (!$row) {
-            http_response_code(404);
-            echo json_encode(["error" => "No extension package available."]);
-            exit;
+        $fileParam = $_GET['file'] ?? null;
+        $filePath = null;
+        $downloadName = null;
+        $contentType = 'application/zip';
+
+        if ($fileParam === 'bundle') {
+            $filePath = __DIR__ . '/uploads/extension/toolsbydcx_bundle_A_and_B.zip';
+            $downloadName = 'ToolsByDcx_Bundle.zip';
+        } else if ($fileParam === 'a') {
+            $filePath = __DIR__ . '/uploads/extension/toolsbydcx_extension_v1.0.1.zip';
+            $downloadName = 'ToolsByDcx-Extension-A.zip';
+        } else if ($fileParam === 'b') {
+            $filePath = __DIR__ . '/uploads/extension/toolsbydcx_companion_b.zip';
+            $downloadName = 'ToolsByDcx-Companion-B.zip';
+        } else if ($fileParam === 'bat') {
+            $filePath = __DIR__ . '/uploads/extension/ToolsByDcx_Launcher.bat';
+            $downloadName = 'ToolsByDcx_Launcher.bat';
+            $contentType = 'application/x-bat';
         }
 
-        $filePath = __DIR__ . '/' . $row['file_path'];
-        if (!file_exists($filePath)) {
+        if (!$filePath || !file_exists($filePath)) {
+            $id = $_GET['id'] ?? null;
+            if ($id) {
+                $stmt = $pdo->prepare("SELECT * FROM extension_releases WHERE id = ?");
+                $stmt->execute([$id]);
+                $row = $stmt->fetch();
+            } else {
+                $bundleP = __DIR__ . '/uploads/extension/toolsbydcx_bundle_A_and_B.zip';
+                if (file_exists($bundleP)) {
+                    $filePath = $bundleP;
+                    $downloadName = 'ToolsByDcx_Bundle.zip';
+                } else {
+                    $row = $pdo->query("SELECT * FROM extension_releases WHERE is_active = 1 ORDER BY created_at DESC LIMIT 1")->fetch();
+                }
+            }
+            if (!$filePath && $row) {
+                $filePath = __DIR__ . '/' . $row['file_path'];
+                $downloadName = basename($row['file_name']);
+            }
+        }
+
+        if (!$filePath || !file_exists($filePath)) {
             http_response_code(404);
-            echo json_encode(["error" => "Package file not found on disk."]);
+            echo json_encode(["error" => "No extension package available on disk."]);
             exit;
         }
 
         header('Content-Description: File Transfer');
-        header('Content-Type: application/zip');
-        header('Content-Disposition: attachment; filename="' . basename($row['file_name']) . '"');
+        header('Content-Type: ' . $contentType);
+        header('Content-Disposition: attachment; filename="' . $downloadName . '"');
         header('Expires: 0');
         header('Cache-Control: must-revalidate');
         header('Pragma: public');
