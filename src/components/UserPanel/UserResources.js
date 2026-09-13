@@ -59,15 +59,18 @@ function UserResources() {
   };
 
   const filteredResources = resources.filter((item) => {
+    const itemName = item.service_name || item.name || item.service || '';
+    const itemService = item.service || item.service_name || '';
     const matchesSearch = !search ||
-      (item.name && item.name.toLowerCase().includes(search.toLowerCase())) ||
-      (item.service && item.service.toLowerCase().includes(search.toLowerCase()));
+      itemName.toLowerCase().includes(search.toLowerCase()) ||
+      itemService.toLowerCase().includes(search.toLowerCase()) ||
+      (item.description && item.description.toLowerCase().includes(search.toLowerCase()));
     if (!matchesSearch) return false;
     if (activeFilter === 'all') return true;
-    return item.service?.toLowerCase() === activeFilter.toLowerCase();
+    return itemService.toLowerCase() === activeFilter.toLowerCase();
   });
 
-  const servicesList = Array.from(new Set(resources.map((r) => r.service).filter(Boolean)));
+  const servicesList = Array.from(new Set(resources.map((r) => r.service || r.service_name).filter(Boolean)));
 
   return (
     <div className="admin-accounts-view">
@@ -130,10 +133,12 @@ function UserResources() {
                   <tr key={res.id}>
                     <td>
                       <div style={{ fontWeight: 600, color: '#f8fafc', fontSize: '15px' }}>
-                        {res.name || res.service}
+                        {res.service_name || res.name || res.service || 'Active Account'}
                       </div>
                       <div style={{ fontSize: '13px', color: '#64748b' }}>
-                        {res.service || 'Active Tool'}
+                        {res.service && res.service !== (res.service_name || res.name)
+                          ? res.service
+                          : (res.target_url ? res.target_url.replace(/^https?:\/\//, '').split('/')[0] : 'Shared Tool')}
                       </div>
                     </td>
                     <td>

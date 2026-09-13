@@ -157,8 +157,12 @@ function UserDashboard({ dashboardData, onNavigate, onLaunchResource }) {
                 recentAccounts.map((acc) => (
                   <tr key={acc.id}>
                     <td>
-                      <div style={{ fontWeight: 600, color: '#f8fafc' }}>{acc.name || acc.service}</div>
-                      <div style={{ fontSize: '13px', color: '#64748b' }}>{acc.service || 'Shared Resource'}</div>
+                      <div style={{ fontWeight: 600, color: '#f8fafc' }}>{acc.service_name || acc.name || acc.service || 'Shared Resource'}</div>
+                      <div style={{ fontSize: '13px', color: '#64748b' }}>
+                        {acc.service && acc.service !== (acc.service_name || acc.name)
+                          ? acc.service
+                          : (acc.target_url ? acc.target_url.replace(/^https?:\/\//, '').split('/')[0] : 'Shared Resource')}
+                      </div>
                     </td>
                     <td>
                       <span style={{ fontSize: '14px', color: '#38bdf8' }}>

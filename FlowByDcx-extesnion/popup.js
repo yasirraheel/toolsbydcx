@@ -377,7 +377,8 @@ $('inject-btn')?.addEventListener('click', () => {
         }, 2500);
       } else {
         btn.disabled = false;
-        btn.textContent = 'Failed: ' + ((resp && (resp.reason || resp.error)) || 'Retry');
+        const err = (resp && (resp.reason || resp.error || resp.message)) || (chrome.runtime.lastError && chrome.runtime.lastError.message) || 'Retry';
+        btn.textContent = 'Failed: ' + err;
         setTimeout(() => {
           btn.textContent = '⚡ Inject Session';
         }, 3000);

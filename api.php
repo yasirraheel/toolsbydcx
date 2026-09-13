@@ -1129,8 +1129,15 @@ if (preg_match('#^/api/user/#', $basePath)) {
         $accStmt = $pdo->query("SELECT COUNT(*) FROM shared_accounts WHERE status = 'active'");
         $availableTools = (int)$accStmt->fetchColumn();
 
+        $recentAccountsStmt = $pdo->query("SELECT id, service_name, service_name AS name, service_name AS service, target_url, description, status FROM shared_accounts WHERE status = 'active' ORDER BY updated_at DESC LIMIT 5");
+        $recentAccounts = $recentAccountsStmt->fetchAll();
+
         echo json_encode([
             "success" => true,
+            "sharedAccountsCount" => $availableTools,
+            "activeSessionsCount" => $activeSessions,
+            "projectsCount" => $projectCount,
+            "recentAccounts" => $recentAccounts,
             "stats" => [
                 "activeSessions" => $activeSessions,
                 "projectCount" => $projectCount,
@@ -1149,7 +1156,7 @@ if (preg_match('#^/api/user/#', $basePath)) {
 
     // 10.2 User Resources / Shared Accounts: GET /api/user/resources
     if (preg_match('#^/api/user/resources#', $basePath) && $method === 'GET') {
-        $accounts = $pdo->query("SELECT id, service_name, target_url, description, status FROM shared_accounts WHERE status = 'active'")->fetchAll();
+        $accounts = $pdo->query("SELECT id, service_name, service_name AS name, service_name AS service, target_url, description, status FROM shared_accounts WHERE status = 'active' ORDER BY updated_at DESC")->fetchAll();
         echo json_encode(["success" => true, "resources" => $accounts]);
         exit;
     }
