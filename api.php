@@ -1416,44 +1416,64 @@ if (preg_match('#^/api/extension(2)?/#', $basePath)) {
             exit;
         }
 
+        $id = $_GET['id'] ?? null;
         $fileParam = $_GET['file'] ?? null;
+
+        // Query requested or latest active release from database
+        $row = null;
+        if ($id) {
+            $stmt = $pdo->prepare("SELECT * FROM extension_releases WHERE id = ?");
+            $stmt->execute([$id]);
+            $row = $stmt->fetch();
+        }
+        if (!$row) {
+            $row = $pdo->query("SELECT * FROM extension_releases WHERE is_active = 1 ORDER BY created_at DESC LIMIT 1")->fetch();
+        }
+        if (!$row) {
+            $row = $pdo->query("SELECT * FROM extension_releases ORDER BY created_at DESC LIMIT 1")->fetch();
+        }
+
+        $activeVersion = $row ? $row['version'] : '1.0.4';
+        $activeFileName = $row ? basename($row['file_name']) : "toolsbydcx_extension_v{$activeVersion}.zip";
+
         $filePath = null;
         $downloadName = null;
         $contentType = 'application/zip';
 
         if ($fileParam === 'bundle') {
             $filePath = __DIR__ . '/uploads/extension/toolsbydcx_bundle_A_and_B.zip';
-            $downloadName = 'ToolsByDcx_Bundle.zip';
-        } else if ($fileParam === 'a') {
-            $filePath = __DIR__ . '/uploads/extension/toolsbydcx_extension_v1.0.1.zip';
-            $downloadName = 'ToolsByDcx-Extension-A.zip';
+            $downloadName = "ToolsByDcx_Bundle_v{$activeVersion}.zip";
         } else if ($fileParam === 'b') {
             $filePath = __DIR__ . '/uploads/extension/toolsbydcx_companion_b.zip';
-            $downloadName = 'ToolsByDcx-Companion-B.zip';
+            $downloadName = "ToolsByDcx_Companion_B_v{$activeVersion}.zip";
         } else if ($fileParam === 'bat') {
             $filePath = __DIR__ . '/uploads/extension/ToolsByDcx_Launcher.bat';
             $downloadName = 'ToolsByDcx_Launcher.bat';
             $contentType = 'application/x-bat';
+        } else {
+            // Default or file=a: serve the exact uploaded release with its versioned name!
+            if ($row) {
+                $candidatePath = __DIR__ . '/' . $row['file_path'];
+                if (file_exists($candidatePath)) {
+                    $filePath = $candidatePath;
+                    $downloadName = $activeFileName;
+                }
+            }
+            if (!$filePath) {
+                $altPath = __DIR__ . "/uploads/extension/{$activeFileName}";
+                if (file_exists($altPath)) {
+                    $filePath = $altPath;
+                    $downloadName = $activeFileName;
+                }
+            }
         }
 
         if (!$filePath || !file_exists($filePath)) {
-            $id = $_GET['id'] ?? null;
-            if ($id) {
-                $stmt = $pdo->prepare("SELECT * FROM extension_releases WHERE id = ?");
-                $stmt->execute([$id]);
-                $row = $stmt->fetch();
-            } else {
-                $bundleP = __DIR__ . '/uploads/extension/toolsbydcx_bundle_A_and_B.zip';
-                if (file_exists($bundleP)) {
-                    $filePath = $bundleP;
-                    $downloadName = 'ToolsByDcx_Bundle.zip';
-                } else {
-                    $row = $pdo->query("SELECT * FROM extension_releases WHERE is_active = 1 ORDER BY created_at DESC LIMIT 1")->fetch();
-                }
-            }
-            if (!$filePath && $row) {
-                $filePath = __DIR__ . '/' . $row['file_path'];
-                $downloadName = basename($row['file_name']);
+            // Fallback to bundle if individual file not found
+            $bundleP = __DIR__ . '/uploads/extension/toolsbydcx_bundle_A_and_B.zip';
+            if (file_exists($bundleP)) {
+                $filePath = $bundleP;
+                $downloadName = "toolsbydcx_extension_v{$activeVersion}.zip";
             }
         }
 

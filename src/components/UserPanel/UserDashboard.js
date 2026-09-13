@@ -59,7 +59,6 @@ function UserDashboard({ dashboardData, onNavigate, onLaunchResource }) {
           </div>
           <a
             href={`${API_BASE}/extension/download?file=bundle&token=${encodeURIComponent(localStorage.getItem('ccna_auth_token') || localStorage.getItem('flow_token') || '')}`}
-            download="ToolsByDcx_Bundle.zip"
             className="btn-admin-primary"
             style={{ padding: '9px 18px', fontSize: '13px', textDecoration: 'none', background: 'linear-gradient(135deg, #0284c7 0%, #2563eb 100%)' }}
           >
@@ -89,7 +88,6 @@ function UserDashboard({ dashboardData, onNavigate, onLaunchResource }) {
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '12px', marginBottom: '16px' }}>
             <a
               href={`${API_BASE}/extension/download?file=a&token=${encodeURIComponent(localStorage.getItem('ccna_auth_token') || localStorage.getItem('flow_token') || '')}`}
-              download="ToolsByDcx-Extension-A.zip"
               className="btn-admin-secondary"
               style={{ justifyContent: 'center', fontSize: '13px', padding: '10px 14px', textDecoration: 'none' }}
             >
@@ -97,7 +95,6 @@ function UserDashboard({ dashboardData, onNavigate, onLaunchResource }) {
             </a>
             <a
               href={`${API_BASE}/extension/download?file=b&token=${encodeURIComponent(localStorage.getItem('ccna_auth_token') || localStorage.getItem('flow_token') || '')}`}
-              download="ToolsByDcx-Companion-B.zip"
               className="btn-admin-secondary"
               style={{ justifyContent: 'center', fontSize: '13px', padding: '10px 14px', textDecoration: 'none' }}
             >
@@ -105,7 +102,6 @@ function UserDashboard({ dashboardData, onNavigate, onLaunchResource }) {
             </a>
             <a
               href={`${API_BASE}/extension/download?file=bat&token=${encodeURIComponent(localStorage.getItem('ccna_auth_token') || localStorage.getItem('flow_token') || '')}`}
-              download="ToolsByDcx_Launcher.bat"
               className="btn-admin-secondary"
               style={{ justifyContent: 'center', fontSize: '13px', padding: '10px 14px', textDecoration: 'none', borderColor: 'rgba(56, 189, 248, 0.4)', color: '#38bdf8' }}
             >
