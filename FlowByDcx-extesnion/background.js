@@ -1184,9 +1184,16 @@ async function bunnyflowInjectCookies(opts) {
           }
           if (hostPattern) {
             const cleanHost = hostPattern.replace(/^\./, '');
+            if (!self.__dcxTabReloadMap) self.__dcxTabReloadMap = {};
             chrome.tabs.query({}, function(tabs) {
               (tabs || []).forEach(function(t) {
                 if (t && t.id && t.url && t.url.includes(cleanHost)) {
+                  const lastR = self.__dcxTabReloadMap[t.id] || 0;
+                  if (Date.now() - lastR < 30000) {
+                    console.log('[ToolsByDcx] Tab was recently reloaded — skipping reload loop:', t.id);
+                    return;
+                  }
+                  self.__dcxTabReloadMap[t.id] = Date.now();
                   console.log('[ToolsByDcx] Reloading tab after cookie injection:', t.id, t.url);
                   chrome.tabs.reload(t.id);
                 }

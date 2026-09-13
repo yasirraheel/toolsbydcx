@@ -59,6 +59,12 @@
 
   function attemptAutoLogin() {
     if (_acted) return;
+    try {
+      if (sessionStorage.getItem('__bf_landing_attempted__')) {
+        return; // Already attempted in this tab session — strictly prevent reload loop
+      }
+      sessionStorage.setItem('__bf_landing_attempted__', '1');
+    } catch (_) {}
     _acted = true;
     try {
       if (typeof chrome === 'undefined' || !chrome.runtime || !chrome.runtime.id) {
