@@ -1044,9 +1044,11 @@ async function bunnyflowApplyCookies(rawCookies, accountUrl) {
       const path = c.path || '/';
 
       // Ensure prefix security compliance
-      const isPrefixSecure = name.startsWith('__Secure-') || name.startsWith('__Host-');
+      const isSecurePrefix = name.startsWith('__Secure-');
       const isHostPrefix = name.startsWith('__Host-');
-      const secure = isPrefixSecure ? true : (c.secure === true || c.secure === 1 || c.secure === 'true');
+      const isHostOnly = c.hostonly === true || (!rawDomain.startsWith('.') && rawDomain.includes('flow.google.com'));
+
+      const secure = (isSecurePrefix || isHostPrefix || c.secure === true || c.secure === 1 || c.secure === 'true');
       const url = (secure ? 'https://' : 'http://') + host + path;
 
       const opts = {
@@ -1059,20 +1061,12 @@ async function bunnyflowApplyCookies(rawCookies, accountUrl) {
         sameSite: c.samesite || bunnyflowMapSameSite(c.samesite, secure)
       };
 
-      // __Host- cookies MUST NOT have domain property
-      if (isHostPrefix) {
-        opts.path = '/';
-        opts.secure = true;
-        delete opts.domain;
-      } else if (!c.hostonly && rawDomain.startsWith('.')) {
-        opts.domain = rawDomain;
-      } else if (!c.hostonly && !rawDomain.startsWith('.') && rawDomain.includes('.')) {
-        opts.domain = '.' + rawDomain;
+      if (!isHostPrefix && !isHostOnly && rawDomain) {
+        opts.domain = '.' + rawDomain.replace(/^\.+/, '');
       }
 
       // Session vs persistent cookies
       if (isChatGPT) {
-        // Enforce rolling lease for ChatGPT
         opts.expirationDate = nowSec + 90;
       } else if (c.session === true) {
         delete opts.expirationDate;
@@ -1092,22 +1086,7 @@ async function bunnyflowApplyCookies(rawCookies, accountUrl) {
         applied++;
       } else {
         failed++;
-        console.warn('[ToolsByDcx] Cookie set failed after 4 retries:', opts.name);
-      }
-
-      // Comprehensive Google Cross-Domain Mirroring
-      if (isGoogle && !isHostPrefix && !c.hostonly) {
-        const googleTargets = [
-          { url: 'https://flow.google.com' + path, domain: '.google.com' },
-          { url: 'https://labs.google' + path, domain: '.google.com' },
-          { url: 'https://accounts.google.com' + path, domain: '.google.com' }
-        ];
-        for (const target of googleTargets) {
-          try {
-            const mOpts = Object.assign({}, opts, { url: target.url, domain: target.domain });
-            await attemptSetCookie(mOpts, target.url);
-          } catch (_) {}
-        }
+        console.warn('[ToolsByDcx] Cookie set failed after retries:', opts.name);
       }
     } catch (e) {
       failed++;
@@ -1128,15 +1107,19 @@ async function bunnyflowInjectCookies(opts) {
   if (__bunnyflowInjectInFlight) return __bunnyflowInjectInFlight;
   __bunnyflowInjectInFlight = (async function() {
     try {
-      const stored = await chrome.storage.local.get(['token', 'sessionToken', 'deviceId', 'apiBase', 'userId']);
+      if (accountId) {
+        try { await chrome.storage.local.set({ activeAccountId: accountId }); } catch (_) {}
+      }
+      const stored = await chrome.storage.local.get(['token', 'sessionToken', 'deviceId', 'apiBase', 'userId', 'activeAccountId']);
       const token = stored.token || stored.sessionToken || stored.userId || 'active_subscriber';
       const deviceId = stored.deviceId;
+      const effectiveAccountId = accountId || stored.activeAccountId || '';
       const injectHeaders = { 'Content-Type': 'application/json' };
       const injectBody = {
         token: token,
         sessionToken: token,
         targetUrl: targetUrl,
-        accountId: accountId,
+        accountId: effectiveAccountId,
         service: service
       };
       if (deviceId) {
@@ -1145,7 +1128,7 @@ async function bunnyflowInjectCookies(opts) {
       }
       var base = (stored.apiBase && !stored.apiBase.includes('localhost')) ? String(stored.apiBase).replace(/\/+$/, '') : (typeof BF_DEFAULT_SERVER !== 'undefined' ? BF_DEFAULT_SERVER : 'https://toolsbydcx.com');
       const injectUrl = base + '/api/extension/inject-cookies';
-      console.log('[ToolsByDcx] Requesting cookies from:', injectUrl);
+      console.log('[ToolsByDcx] Requesting cookies from:', injectUrl, 'accountId:', effectiveAccountId);
       const resp = await fetch(injectUrl, {
         method: 'POST',
         headers: injectHeaders,
@@ -1168,43 +1151,6 @@ async function bunnyflowInjectCookies(opts) {
           userTier: data.tier || '',
         });
       } catch (e) {}
-
-      // AUTO-RELOAD OPEN TABS MATCHING TARGET SERVICE SO USER LANDS LOGGED IN
-      if (result.applied > 0) {
-        try {
-          let hostPattern = '';
-          if (targetUrl) {
-            try { hostPattern = new URL(targetUrl).hostname; } catch(_) {}
-          }
-          if (!hostPattern) {
-            if (service === 'chatgpt' || (data.accountUrl && data.accountUrl.includes('chatgpt.com'))) {
-              hostPattern = 'chatgpt.com';
-            } else if (service === 'google_flow' || (data.accountUrl && data.accountUrl.includes('flow.google.com'))) {
-              hostPattern = 'flow.google.com';
-            }
-          }
-          if (hostPattern) {
-            const cleanHost = hostPattern.replace(/^\./, '');
-            if (!self.__dcxTabReloadMap) self.__dcxTabReloadMap = {};
-            chrome.tabs.query({}, function(tabs) {
-              (tabs || []).forEach(function(t) {
-                if (t && t.id && t.url && t.url.includes(cleanHost)) {
-                  const lastR = self.__dcxTabReloadMap[t.id] || 0;
-                  if (Date.now() - lastR < 30000) {
-                    console.log('[ToolsByDcx] Tab was recently reloaded — skipping reload loop:', t.id);
-                    return;
-                  }
-                  self.__dcxTabReloadMap[t.id] = Date.now();
-                  console.log('[ToolsByDcx] Reloading tab after cookie injection:', t.id, t.url);
-                  chrome.tabs.reload(t.id);
-                }
-              });
-            });
-          }
-        } catch(reloadErr) {
-          console.warn('[ToolsByDcx] Auto-reload notice:', reloadErr);
-        }
-      }
 
       return { ok: true, applied: result.applied, failed: result.failed, total: result.total };
     } catch (err) {
