@@ -199,6 +199,79 @@ function getNextSemverPhp($currentVer) {
     return $clean . '.1';
 }
 
+// Helper: Flatten extension ZIP so manifest.json is at root (eliminates nested folder-in-folder)
+function flattenExtensionZip($zipPath) {
+    if (!file_exists($zipPath) || !class_exists('ZipArchive')) {
+        return false;
+    }
+
+    $zip = new ZipArchive();
+    if ($zip->open($zipPath) !== true) {
+        return false;
+    }
+
+    $manifestPath = null;
+    $prefix = '';
+    for ($i = 0; $i < $zip->numFiles; $i++) {
+        $name = $zip->getNameIndex($i);
+        if ($name === 'manifest.json') {
+            $manifestPath = $name;
+            $prefix = '';
+            break;
+        } elseif (preg_match('#(^|/)(manifest\\.json)$#i', $name)) {
+            $manifestPath = $name;
+            $prefix = substr($name, 0, strlen($name) - strlen('manifest.json'));
+            break;
+        }
+    }
+
+    if (!$manifestPath || $prefix === '') {
+        $zip->close();
+        return true;
+    }
+
+    $tempZipPath = $zipPath . '.clean.tmp.zip';
+    $newZip = new ZipArchive();
+    if ($newZip->open($tempZipPath, ZipArchive::CREATE | ZipArchive::OVERWRITE) !== true) {
+        $zip->close();
+        return false;
+    }
+
+    for ($i = 0; $i < $zip->numFiles; $i++) {
+        $name = $zip->getNameIndex($i);
+
+        if (strpos($name, '__MACOSX/') === 0 || basename($name) === '.DS_Store' || basename($name) === 'Thumbs.db') {
+            continue;
+        }
+
+        if (strpos($name, $prefix) === 0) {
+            $relName = substr($name, strlen($prefix));
+            if ($relName === '' || $relName === false) {
+                continue;
+            }
+
+            if (substr($relName, -1) === '/') {
+                $newZip->addEmptyDir($relName);
+            } else {
+                $content = $zip->getFromIndex($i);
+                if ($content !== false) {
+                    $newZip->addFromString($relName, $content);
+                }
+            }
+        }
+    }
+
+    $zip->close();
+    $newZip->close();
+
+    if (file_exists($tempZipPath)) {
+        @unlink($zipPath);
+        rename($tempZipPath, $zipPath);
+    }
+
+    return true;
+}
+
 // Helper: Email template
 function getEmailTemplate($title, $greetingName, $leadText, $otpCode, $expiryText = "Valid for 15 minutes.", $isWarning = false) {
     $accentColor = $isWarning ? "#ef4444" : "#3b82f6";
@@ -1008,6 +1081,9 @@ if (preg_match('#^/api/admin/#', $basePath)) {
             echo json_encode(["error" => "Failed to save extension package to server disk."]);
             exit;
         }
+
+        // Auto-flatten ZIP so manifest.json and extension files are in a single root folder (no nested folder-in-folder)
+        flattenExtensionZip($targetDiskPath);
 
         $fileSize = filesize($targetDiskPath);
         $relativePath = 'uploads/extension/' . $standardFileName;
