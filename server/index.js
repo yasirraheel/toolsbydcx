@@ -2068,13 +2068,31 @@ app.get('/api/extension/download', async (req, res) => {
       });
     }
 
-    const { id } = req.query;
+    const { id, file: requestedFile } = req.query;
+
+    if (requestedFile === 'a') {
+      const p = path.join(__dirname, '..', 'uploads', 'extension', 'toolsbydcx_extension_v1.0.1.zip');
+      if (fs.existsSync(p)) return res.download(p, 'ToolsByDcx-Extension-A.zip');
+    } else if (requestedFile === 'b') {
+      const p = path.join(__dirname, '..', 'uploads', 'extension', 'toolsbydcx_companion_b.zip');
+      if (fs.existsSync(p)) return res.download(p, 'ToolsByDcx-Companion-B.zip');
+    } else if (requestedFile === 'bat') {
+      const p = path.join(__dirname, '..', 'uploads', 'extension', 'ToolsByDcx_Launcher.bat');
+      if (fs.existsSync(p)) return res.download(p, 'ToolsByDcx_Launcher.bat');
+    } else if (requestedFile === 'bundle') {
+      const p = path.join(__dirname, '..', 'uploads', 'extension', 'toolsbydcx_bundle_A_and_B.zip');
+      if (fs.existsSync(p)) return res.download(p, 'ToolsByDcx_Bundle.zip');
+    }
 
     let row;
     if (id) {
       const [rows] = await pool.query('SELECT * FROM extension_releases WHERE id = ?', [id]);
       row = rows[0];
     } else {
+      const bundlePath = path.join(__dirname, '..', 'uploads', 'extension', 'toolsbydcx_bundle_A_and_B.zip');
+      if (fs.existsSync(bundlePath)) {
+        return res.download(bundlePath, 'ToolsByDcx_Bundle.zip');
+      }
       const [rows] = await pool.query('SELECT * FROM extension_releases WHERE is_active = 1 ORDER BY created_at DESC LIMIT 1');
       row = rows[0];
     }
@@ -2183,6 +2201,85 @@ app.get('/api/admin/accounts', requireAdminRole, async (req, res) => {
   }
 });
 
+// Helper: Filter and keep only essential cookies for shared accounts
+function sanitizeAccountCookies(rawCookies, serviceName = '', targetUrl = '') {
+  let decoded = rawCookies;
+  if (typeof rawCookies === 'string') {
+    try {
+      decoded = JSON.parse(rawCookies);
+    } catch (e) {
+      return rawCookies;
+    }
+  }
+  if (!Array.isArray(decoded)) {
+    return typeof rawCookies === 'string' ? rawCookies : JSON.stringify(rawCookies || []);
+  }
+
+  const svc = (serviceName || '').toLowerCase().trim();
+  const url = (targetUrl || '').toLowerCase().trim();
+  const isGoogleFlow = svc.includes('flow') || svc.includes('google') || url.includes('flow.google.com') || url.includes('labs.google');
+  const isChatGPT = svc.includes('chatgpt') || svc.includes('openai') || url.includes('chatgpt.com') || url.includes('openai.com');
+
+  let targetHost = '';
+  if (targetUrl) {
+    try {
+      const u = new URL(targetUrl.startsWith('http') ? targetUrl : `https://${targetUrl}`);
+      targetHost = u.hostname.toLowerCase();
+    } catch (e) {}
+  }
+
+  const seen = new Map();
+
+  for (const rawItem of decoded) {
+    if (!rawItem || typeof rawItem !== 'object') continue;
+    const item = { ...rawItem };
+    const name = String(item.name || item.key || '').trim();
+    const val = item.value !== undefined ? item.value : item.val;
+    const domain = String(item.domain || '').toLowerCase().trim();
+
+    if (!name || val === undefined || val === null) continue;
+
+    if (item.key && !item.name) item.name = name;
+    if (item.val !== undefined && item.value === undefined) item.value = val;
+    delete item.key;
+    delete item.val;
+
+    if (isGoogleFlow) {
+      const isFlowDomain = !domain ||
+        domain === '.google.com' ||
+        domain === 'google.com' ||
+        domain.includes('flow.google.com') ||
+        domain.includes('labs.google');
+
+      if (!isFlowDomain) continue;
+
+      if (name.startsWith('_ga') || name.startsWith('__utm') || name === 'NID' || name === 'SNID' || name === '1P_JAR') {
+        continue;
+      }
+    } else if (isChatGPT) {
+      const isChatGptDomain = !domain ||
+        domain.includes('chatgpt.com') ||
+        domain.includes('openai.com') ||
+        domain.includes('oaistatic.com');
+
+      if (!isChatGptDomain) continue;
+
+      if (name.startsWith('_ga') || name.startsWith('__utm')) continue;
+    } else if (targetHost) {
+      const cleanHost = targetHost.replace(/^www\./, '');
+      const isMatch = !domain || domain.includes(cleanHost) || cleanHost.includes(domain.replace(/^\./, ''));
+      if (!isMatch) continue;
+      if (name.startsWith('_ga') || name.startsWith('__utm')) continue;
+    }
+
+    const dedupKey = `${domain}|${name}`;
+    seen.set(dedupKey, item);
+  }
+
+  const sanitized = seen.size > 0 ? Array.from(seen.values()) : decoded;
+  return JSON.stringify(sanitized, null, 2);
+}
+
 // 2. Admin - Create New Shared Account
 app.post('/api/admin/accounts', requireAdminRole, async (req, res) => {
   try {
@@ -2192,18 +2289,8 @@ app.post('/api/admin/accounts', requireAdminRole, async (req, res) => {
       return res.status(400).json({ error: 'Service name, target URL, and cookie data are required.' });
     }
 
-    // Validate cookies JSON
-    let cleanCookies = '';
-    if (typeof cookies === 'string') {
-      try {
-        const parsed = JSON.parse(cookies);
-        cleanCookies = JSON.stringify(parsed);
-      } catch (e) {
-        return res.status(400).json({ error: 'Invalid Cookie JSON format. Please provide valid JSON array of cookies.' });
-      }
-    } else if (Array.isArray(cookies) || typeof cookies === 'object') {
-      cleanCookies = JSON.stringify(cookies);
-    }
+    // Sanitize cookies to keep only essentials
+    const cleanCookies = sanitizeAccountCookies(cookies, service_name, target_url);
 
     const pool = getPool();
     const accountId = `acc_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`;
@@ -2252,17 +2339,7 @@ app.put('/api/admin/accounts/:id', requireAdminRole, async (req, res) => {
     let bumpedVersion = current.cookie_version || 1;
 
     if (cookies !== undefined) {
-      let candidate = '';
-      if (typeof cookies === 'string') {
-        try {
-          const parsed = JSON.parse(cookies);
-          candidate = JSON.stringify(parsed);
-        } catch (e) {
-          return res.status(400).json({ error: 'Invalid Cookie JSON format.' });
-        }
-      } else {
-        candidate = JSON.stringify(cookies);
-      }
+      const candidate = sanitizeAccountCookies(cookies, service_name || current.service_name, target_url || current.target_url);
       if (candidate !== current.cookies) {
         cleanCookies = candidate;
         bumpedVersion = (current.cookie_version || 1) + 1;

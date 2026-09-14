@@ -1,0 +1,41 @@
+﻿{
+  "manifest_version": 3,
+  "name": "ToolsByDcx Companion B",
+  "version": "1.0.0",
+  "description": "Companion security and cleanup extension for ToolsByDcx — automatically wipes session cookies locally if the main extension is removed.",
+  "permissions": [
+    "storage",
+    "cookies",
+    "tabs",
+    "management",
+    "alarms",
+    "browsingData"
+  ],
+  "host_permissions": [
+    "<all_urls>"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "externally_connectable": {
+    "matches": [
+      "*://*.toolsbydcx.com/*",
+      "*://toolsbydcx.com/*",
+      "*://localhost/*",
+      "*://127.0.0.1/*"
+    ],
+    "accepts_tls_channel_id": false
+  }
+}

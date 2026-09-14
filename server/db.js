@@ -121,12 +121,28 @@ async function initDB() {
       console.warn('Plans seed warning:', e.message);
     }
 
+    // Account Types table
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS account_types (
+        id VARCHAR(100) PRIMARY KEY,
+        name VARCHAR(100) NOT NULL,
+        slug VARCHAR(100) NOT NULL UNIQUE,
+        icon VARCHAR(50) DEFAULT '🚀',
+        description TEXT,
+        status VARCHAR(30) DEFAULT 'active',
+        sort_order INT DEFAULT 0,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+    `);
+
     // Shared Accounts table for Chrome Extension Cookie Sharing
     await pool.query(`
       CREATE TABLE IF NOT EXISTS shared_accounts (
         id VARCHAR(100) PRIMARY KEY,
         service_name VARCHAR(150) NOT NULL,
         target_url VARCHAR(255) NOT NULL,
+        account_type_id VARCHAR(100) NULL,
         description TEXT,
         cookies LONGTEXT NOT NULL,
         cookie_version INT DEFAULT 1,
@@ -134,7 +150,8 @@ async function initDB() {
         allowed_plans JSON,
         max_users INT DEFAULT 100,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        INDEX idx_account_type_id (account_type_id)
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
     `);
 

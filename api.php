@@ -199,6 +199,79 @@ function getNextSemverPhp($currentVer) {
     return $clean . '.1';
 }
 
+// Helper: Flatten extension ZIP so manifest.json is at root (eliminates nested folder-in-folder)
+function flattenExtensionZip($zipPath) {
+    if (!file_exists($zipPath) || !class_exists('ZipArchive')) {
+        return false;
+    }
+
+    $zip = new ZipArchive();
+    if ($zip->open($zipPath) !== true) {
+        return false;
+    }
+
+    $manifestPath = null;
+    $prefix = '';
+    for ($i = 0; $i < $zip->numFiles; $i++) {
+        $name = $zip->getNameIndex($i);
+        if ($name === 'manifest.json') {
+            $manifestPath = $name;
+            $prefix = '';
+            break;
+        } elseif (preg_match('#(^|/)(manifest\\.json)$#i', $name)) {
+            $manifestPath = $name;
+            $prefix = substr($name, 0, strlen($name) - strlen('manifest.json'));
+            break;
+        }
+    }
+
+    if (!$manifestPath || $prefix === '') {
+        $zip->close();
+        return true;
+    }
+
+    $tempZipPath = $zipPath . '.clean.tmp.zip';
+    $newZip = new ZipArchive();
+    if ($newZip->open($tempZipPath, ZipArchive::CREATE | ZipArchive::OVERWRITE) !== true) {
+        $zip->close();
+        return false;
+    }
+
+    for ($i = 0; $i < $zip->numFiles; $i++) {
+        $name = $zip->getNameIndex($i);
+
+        if (strpos($name, '__MACOSX/') === 0 || basename($name) === '.DS_Store' || basename($name) === 'Thumbs.db') {
+            continue;
+        }
+
+        if (strpos($name, $prefix) === 0) {
+            $relName = substr($name, strlen($prefix));
+            if ($relName === '' || $relName === false) {
+                continue;
+            }
+
+            if (substr($relName, -1) === '/') {
+                $newZip->addEmptyDir($relName);
+            } else {
+                $content = $zip->getFromIndex($i);
+                if ($content !== false) {
+                    $newZip->addFromString($relName, $content);
+                }
+            }
+        }
+    }
+
+    $zip->close();
+    $newZip->close();
+
+    if (file_exists($tempZipPath)) {
+        @unlink($zipPath);
+        rename($tempZipPath, $zipPath);
+    }
+
+    return true;
+}
+
 // Helper: Email template
 function getEmailTemplate($title, $greetingName, $leadText, $otpCode, $expiryText = "Valid for 15 minutes.", $isWarning = false) {
     $accentColor = $isWarning ? "#ef4444" : "#3b82f6";
@@ -776,9 +849,174 @@ if (preg_match('#^/api/admin/#', $basePath)) {
         exit;
     }
 
+    // 8.12b Admin Account Types: GET /api/admin/account-types
+    if (preg_match('#^/api/admin/account-types$#', $basePath) && $method === 'GET') {
+        $stmt = $pdo->query("SELECT at.*, 
+            (SELECT COUNT(*) FROM shared_accounts sa WHERE sa.account_type_id = at.id) AS accounts_count 
+            FROM account_types at 
+            ORDER BY at.sort_order ASC, at.created_at ASC");
+        echo json_encode(["success" => true, "account_types" => $stmt->fetchAll()]);
+        exit;
+    }
+
+    // 8.12c Create Account Type: POST /api/admin/account-types
+    if (preg_match('#^/api/admin/account-types$#', $basePath) && $method === 'POST') {
+        $name = trim($body['name'] ?? '');
+        $slug = strtolower(trim(preg_replace('/[^a-zA-Z0-9_-]/', '', str_replace(' ', '-', $body['slug'] ?? $body['name'] ?? ''))));
+        $icon = trim($body['icon'] ?? '🚀') ?: '🚀';
+        $description = trim($body['description'] ?? '');
+        $status = $body['status'] ?? 'active';
+        $sortOrder = (int)($body['sort_order'] ?? 0);
+
+        if (!$name || !$slug) {
+            http_response_code(400);
+            echo json_encode(["error" => "Name and slug are required."]);
+            exit;
+        }
+
+        $check = $pdo->prepare("SELECT id FROM account_types WHERE slug = ?");
+        $check->execute([$slug]);
+        if ($check->fetch()) {
+            http_response_code(409);
+            echo json_encode(["error" => "An account type with this slug already exists."]);
+            exit;
+        }
+
+        $id = 'type_' . $slug;
+        $stmt = $pdo->prepare("INSERT INTO account_types (id, name, slug, icon, description, status, sort_order) VALUES (?, ?, ?, ?, ?, ?, ?)");
+        $stmt->execute([$id, $name, $slug, $icon, $description, $status, $sortOrder]);
+
+        echo json_encode(["success" => true, "message" => "Account type created successfully.", "id" => $id]);
+        exit;
+    }
+
+    // 8.12d Update Account Type: PUT /api/admin/account-types/:id
+    if (preg_match('#^/api/admin/account-types/([^/]+)$#', $basePath, $m) && $method === 'PUT') {
+        $typeId = $m[1];
+        $name = trim($body['name'] ?? '');
+        $slug = strtolower(trim(preg_replace('/[^a-zA-Z0-9_-]/', '', str_replace(' ', '-', $body['slug'] ?? ''))));
+        $icon = trim($body['icon'] ?? '🚀') ?: '🚀';
+        $description = trim($body['description'] ?? '');
+        $status = $body['status'] ?? 'active';
+        $sortOrder = (int)($body['sort_order'] ?? 0);
+
+        if (!$name || !$slug) {
+            http_response_code(400);
+            echo json_encode(["error" => "Name and slug are required."]);
+            exit;
+        }
+
+        $check = $pdo->prepare("SELECT id FROM account_types WHERE slug = ? AND id != ?");
+        $check->execute([$slug, $typeId]);
+        if ($check->fetch()) {
+            http_response_code(409);
+            echo json_encode(["error" => "Another account type with this slug already exists."]);
+            exit;
+        }
+
+        $stmt = $pdo->prepare("UPDATE account_types SET name = ?, slug = ?, icon = ?, description = ?, status = ?, sort_order = ? WHERE id = ?");
+        $stmt->execute([$name, $slug, $icon, $description, $status, $sortOrder, $typeId]);
+
+        echo json_encode(["success" => true, "message" => "Account type updated successfully."]);
+        exit;
+    }
+
+    // 8.12e Delete Account Type: DELETE /api/admin/account-types/:id
+    if (preg_match('#^/api/admin/account-types/([^/]+)$#', $basePath, $m) && $method === 'DELETE') {
+        $typeId = $m[1];
+        $pdo->prepare("UPDATE shared_accounts SET account_type_id = NULL WHERE account_type_id = ?")->execute([$typeId]);
+        $pdo->prepare("DELETE FROM account_types WHERE id = ?")->execute([$typeId]);
+        echo json_encode(["success" => true, "message" => "Account type deleted."]);
+        exit;
+    }
+
+    // Helper: Filter and keep only essential cookies for shared accounts
+    function sanitizeAccountCookies($rawCookies, $serviceName = '', $targetUrl = '') {
+        $decoded = is_string($rawCookies) ? json_decode($rawCookies, true) : $rawCookies;
+        if (!is_array($decoded)) {
+            return is_string($rawCookies) ? $rawCookies : json_encode($rawCookies ?? []);
+        }
+
+        $svc = strtolower(trim($serviceName));
+        $url = strtolower(trim($targetUrl));
+        $isGoogleFlow = str_contains($svc, 'flow') || str_contains($svc, 'google') || str_contains($url, 'flow.google.com') || str_contains($url, 'labs.google');
+        $isChatGPT = str_contains($svc, 'chatgpt') || str_contains($svc, 'openai') || str_contains($url, 'chatgpt.com') || str_contains($url, 'openai.com');
+
+        $targetHost = '';
+        if (!empty($targetUrl)) {
+            $parsedUrl = parse_url($targetUrl);
+            $targetHost = strtolower($parsedUrl['host'] ?? '');
+        }
+
+        $seen = [];
+
+        foreach ($decoded as $item) {
+            if (!is_array($item) && !is_object($item)) continue;
+            $item = (array) $item;
+            $name = trim($item['name'] ?? $item['key'] ?? '');
+            $val  = $item['value'] ?? $item['val'] ?? null;
+            $domain = strtolower(trim($item['domain'] ?? ''));
+
+            if ($name === '' || $val === null) continue;
+
+            if (isset($item['key']) && !isset($item['name'])) $item['name'] = $name;
+            if (isset($item['val']) && !isset($item['value'])) $item['value'] = $val;
+            unset($item['key'], $item['val']);
+
+            if ($isGoogleFlow) {
+                // Keep ONLY .google.com, google.com, or subdomains matching flow.google.com / labs.google
+                $isFlowDomain = empty($domain)
+                    || $domain === '.google.com'
+                    || $domain === 'google.com'
+                    || str_contains($domain, 'flow.google.com')
+                    || str_contains($domain, 'labs.google');
+
+                if (!$isFlowDomain) {
+                    continue;
+                }
+
+                // Discard telemetry & advertising trackers
+                if (str_starts_with($name, '_ga') || str_starts_with($name, '__utm') || $name === 'NID' || $name === 'SNID' || $name === '1P_JAR') {
+                    continue;
+                }
+            } elseif ($isChatGPT) {
+                $isChatGptDomain = empty($domain)
+                    || str_contains($domain, 'chatgpt.com')
+                    || str_contains($domain, 'openai.com')
+                    || str_contains($domain, 'oaistatic.com');
+
+                if (!$isChatGptDomain) {
+                    continue;
+                }
+
+                if (str_starts_with($name, '_ga') || str_starts_with($name, '__utm')) {
+                    continue;
+                }
+            } elseif (!empty($targetHost)) {
+                $cleanHost = preg_replace('/^www\./', '', $targetHost);
+                $isMatch = empty($domain) || str_contains($domain, $cleanHost) || str_contains($cleanHost, ltrim($domain, '.'));
+                if (!$isMatch) {
+                    continue;
+                }
+                if (str_starts_with($name, '_ga') || str_starts_with($name, '__utm')) {
+                    continue;
+                }
+            }
+
+            $dedupKey = $domain . '|' . $name;
+            $seen[$dedupKey] = $item;
+        }
+
+        $sanitized = !empty($seen) ? array_values($seen) : $decoded;
+        return json_encode($sanitized, JSON_UNESCAPED_SLASHES | JSON_PRETTY_PRINT);
+    }
+
     // 8.13 Shared Accounts: GET /api/admin/accounts
     if (preg_match('#^/api/admin/accounts$#', $basePath) && $method === 'GET') {
-        $accounts = $pdo->query("SELECT * FROM shared_accounts ORDER BY created_at DESC")->fetchAll();
+        $accounts = $pdo->query("SELECT sa.*, at.name AS account_type_name, at.slug AS account_type_slug, at.icon AS account_type_icon 
+            FROM shared_accounts sa 
+            LEFT JOIN account_types at ON sa.account_type_id = at.id 
+            ORDER BY sa.created_at DESC")->fetchAll();
         $formatted = array_map(function($acc) {
             $parsedCookies = json_decode($acc['cookies'] ?? '[]', true) ?: [];
             $acc['cookieCount'] = count($parsedCookies);
@@ -793,15 +1031,17 @@ if (preg_match('#^/api/admin/#', $basePath)) {
     if (preg_match('#^/api/admin/accounts$#', $basePath) && $method === 'POST') {
         $serviceName = trim($body['service_name'] ?? '');
         $targetUrl = trim($body['target_url'] ?? '');
+        $accountTypeId = trim($body['account_type_id'] ?? '') ?: null;
         $description = trim($body['description'] ?? '');
-        $cookies = is_array($body['cookies'] ?? null) ? json_encode($body['cookies']) : ($body['cookies'] ?? '[]');
+        $rawCookies = $body['cookies'] ?? '[]';
+        $cookies = sanitizeAccountCookies($rawCookies, $serviceName, $targetUrl);
         $status = $body['status'] ?? 'active';
         $allowed = json_encode($body['allowed_plans'] ?? ['plan_pro']);
         $maxUsers = (int)($body['max_users'] ?? 100);
         $id = 'acc_' . time() . '_' . substr(md5(rand()), 0, 5);
 
-        $stmt = $pdo->prepare("INSERT INTO shared_accounts (id, service_name, target_url, description, cookies, cookie_version, status, allowed_plans, max_users) VALUES (?, ?, ?, ?, ?, 1, ?, ?, ?)");
-        $stmt->execute([$id, $serviceName, $targetUrl, $description, $cookies, $status, $allowed, $maxUsers]);
+        $stmt = $pdo->prepare("INSERT INTO shared_accounts (id, service_name, target_url, account_type_id, description, cookies, cookie_version, status, allowed_plans, max_users) VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?, ?)");
+        $stmt->execute([$id, $serviceName, $targetUrl, $accountTypeId, $description, $cookies, $status, $allowed, $maxUsers]);
 
         echo json_encode(["success" => true, "message" => "Account created successfully.", "accountId" => $id]);
         exit;
@@ -812,14 +1052,16 @@ if (preg_match('#^/api/admin/#', $basePath)) {
         $accId = $m[1];
         $serviceName = trim($body['service_name'] ?? '');
         $targetUrl = trim($body['target_url'] ?? '');
+        $accountTypeId = trim($body['account_type_id'] ?? '') ?: null;
         $description = trim($body['description'] ?? '');
-        $cookies = is_array($body['cookies'] ?? null) ? json_encode($body['cookies']) : ($body['cookies'] ?? '[]');
+        $rawCookies = $body['cookies'] ?? '[]';
+        $cookies = sanitizeAccountCookies($rawCookies, $serviceName, $targetUrl);
         $status = $body['status'] ?? 'active';
         $allowed = json_encode($body['allowed_plans'] ?? ['plan_pro']);
         $maxUsers = (int)($body['max_users'] ?? 100);
 
-        $stmt = $pdo->prepare("UPDATE shared_accounts SET service_name=?, target_url=?, description=?, cookies=?, cookie_version = cookie_version + 1, status=?, allowed_plans=?, max_users=? WHERE id=?");
-        $stmt->execute([$serviceName, $targetUrl, $description, $cookies, $status, $allowed, $maxUsers, $accId]);
+        $stmt = $pdo->prepare("UPDATE shared_accounts SET service_name=?, target_url=?, account_type_id=?, description=?, cookies=?, cookie_version = cookie_version + 1, status=?, allowed_plans=?, max_users=? WHERE id=?");
+        $stmt->execute([$serviceName, $targetUrl, $accountTypeId, $description, $cookies, $status, $allowed, $maxUsers, $accId]);
 
         echo json_encode(["success" => true, "message" => "Account updated successfully."]);
         exit;
@@ -922,6 +1164,9 @@ if (preg_match('#^/api/admin/#', $basePath)) {
             echo json_encode(["error" => "Failed to save extension package to server disk."]);
             exit;
         }
+
+        // Auto-flatten ZIP so manifest.json and extension files are in a single root folder (no nested folder-in-folder)
+        flattenExtensionZip($targetDiskPath);
 
         $fileSize = filesize($targetDiskPath);
         $relativePath = 'uploads/extension/' . $standardFileName;
@@ -1129,8 +1374,32 @@ if (preg_match('#^/api/user/#', $basePath)) {
         $accStmt = $pdo->query("SELECT COUNT(*) FROM shared_accounts WHERE status = 'active'");
         $availableTools = (int)$accStmt->fetchColumn();
 
+        $recentAccountsStmt = $pdo->query("SELECT sa.id, sa.service_name, sa.service_name AS name, sa.service_name AS service, sa.target_url, sa.description, sa.status, sa.account_type_id, at.name AS account_type_name, at.slug AS account_type_slug, at.icon AS account_type_icon 
+            FROM shared_accounts sa 
+            LEFT JOIN account_types at ON sa.account_type_id = at.id 
+            WHERE sa.status = 'active' 
+            ORDER BY sa.updated_at DESC LIMIT 5");
+        $recentAccounts = $recentAccountsStmt->fetchAll();
+
+        $accountTypesStmt = $pdo->query("SELECT at.id, at.name, at.slug, at.icon, at.description,
+            (SELECT COUNT(*) FROM shared_accounts sa WHERE sa.account_type_id = at.id AND sa.status = 'active') AS accounts_count
+            FROM account_types at
+            WHERE at.status = 'active'
+            ORDER BY at.sort_order ASC, at.name ASC");
+        $accountTypes = $accountTypesStmt->fetchAll();
+
+        // Active release version info
+        $relRow = $pdo->query("SELECT version FROM extension_releases WHERE is_active = 1 ORDER BY created_at DESC LIMIT 1")->fetch();
+        $extVersion = $relRow ? $relRow['version'] : '1.0.4';
+
         echo json_encode([
             "success" => true,
+            "sharedAccountsCount" => $availableTools,
+            "activeSessionsCount" => $activeSessions,
+            "projectsCount" => $projectCount,
+            "recentAccounts" => $recentAccounts,
+            "accountTypes" => $accountTypes,
+            "extensionVersion" => $extVersion,
             "stats" => [
                 "activeSessions" => $activeSessions,
                 "projectCount" => $projectCount,
@@ -1147,10 +1416,33 @@ if (preg_match('#^/api/user/#', $basePath)) {
         exit;
     }
 
+    // 10.1b User Account Types: GET /api/user/account-types
+    if (preg_match('#^/api/user/account-types$#', $basePath) && $method === 'GET') {
+        $stmt = $pdo->query("SELECT at.id, at.name, at.slug, at.icon, at.description,
+            (SELECT COUNT(*) FROM shared_accounts sa WHERE sa.account_type_id = at.id AND sa.status = 'active') AS accounts_count
+            FROM account_types at
+            WHERE at.status = 'active'
+            ORDER BY at.sort_order ASC, at.name ASC");
+        echo json_encode(["success" => true, "account_types" => $stmt->fetchAll()]);
+        exit;
+    }
+
     // 10.2 User Resources / Shared Accounts: GET /api/user/resources
     if (preg_match('#^/api/user/resources#', $basePath) && $method === 'GET') {
-        $accounts = $pdo->query("SELECT id, service_name, target_url, description, status FROM shared_accounts WHERE status = 'active'")->fetchAll();
-        echo json_encode(["success" => true, "resources" => $accounts]);
+        $typeParam = $_GET['type'] ?? null;
+        $sql = "SELECT sa.id, sa.service_name, sa.service_name AS name, sa.service_name AS service, sa.target_url, sa.description, sa.status, sa.account_type_id, at.name as account_type_name, at.slug as account_type_slug, at.icon as account_type_icon 
+            FROM shared_accounts sa 
+            LEFT JOIN account_types at ON sa.account_type_id = at.id 
+            WHERE sa.status = 'active'";
+        $params = [];
+        if ($typeParam && $typeParam !== 'all') {
+            $sql .= " AND (sa.account_type_id = ? OR at.slug = ?)";
+            $params = [$typeParam, $typeParam];
+        }
+        $sql .= " ORDER BY sa.updated_at DESC";
+        $stmt = $pdo->prepare($sql);
+        $stmt->execute($params);
+        echo json_encode(["success" => true, "resources" => $stmt->fetchAll()]);
         exit;
     }
 
@@ -1410,29 +1702,75 @@ if (preg_match('#^/api/extension(2)?/#', $basePath)) {
         }
 
         $id = $_GET['id'] ?? null;
+        $fileParam = $_GET['file'] ?? null;
+
+        // Query requested or latest active release from database
+        $row = null;
         if ($id) {
             $stmt = $pdo->prepare("SELECT * FROM extension_releases WHERE id = ?");
             $stmt->execute([$id]);
             $row = $stmt->fetch();
-        } else {
+        }
+        if (!$row) {
             $row = $pdo->query("SELECT * FROM extension_releases WHERE is_active = 1 ORDER BY created_at DESC LIMIT 1")->fetch();
         }
         if (!$row) {
-            http_response_code(404);
-            echo json_encode(["error" => "No extension package available."]);
-            exit;
+            $row = $pdo->query("SELECT * FROM extension_releases ORDER BY created_at DESC LIMIT 1")->fetch();
         }
 
-        $filePath = __DIR__ . '/' . $row['file_path'];
-        if (!file_exists($filePath)) {
+        $activeVersion = $row ? $row['version'] : '1.0.4';
+        $activeFileName = $row ? basename($row['file_name']) : "toolsbydcx_extension_v{$activeVersion}.zip";
+
+        $filePath = null;
+        $downloadName = null;
+        $contentType = 'application/zip';
+
+        if ($fileParam === 'bundle') {
+            $filePath = __DIR__ . '/uploads/extension/toolsbydcx_bundle_A_and_B.zip';
+            $downloadName = "ToolsByDcx_Bundle_v{$activeVersion}.zip";
+        } else if ($fileParam === 'b') {
+            $filePath = __DIR__ . '/uploads/extension/toolsbydcx_companion_b.zip';
+            $downloadName = "ToolsByDcx_Companion_B_v{$activeVersion}.zip";
+        } else if ($fileParam === 'bat') {
+            $filePath = __DIR__ . '/uploads/extension/ToolsByDcx_Launcher.bat';
+            $downloadName = 'ToolsByDcx_Launcher.bat';
+            $contentType = 'application/x-bat';
+        } else {
+            // Default or file=a: serve the exact uploaded release with its versioned name!
+            if ($row) {
+                $candidatePath = __DIR__ . '/' . $row['file_path'];
+                if (file_exists($candidatePath)) {
+                    $filePath = $candidatePath;
+                    $downloadName = $activeFileName;
+                }
+            }
+            if (!$filePath) {
+                $altPath = __DIR__ . "/uploads/extension/{$activeFileName}";
+                if (file_exists($altPath)) {
+                    $filePath = $altPath;
+                    $downloadName = $activeFileName;
+                }
+            }
+        }
+
+        if (!$filePath || !file_exists($filePath)) {
+            // Fallback to bundle if individual file not found
+            $bundleP = __DIR__ . '/uploads/extension/toolsbydcx_bundle_A_and_B.zip';
+            if (file_exists($bundleP)) {
+                $filePath = $bundleP;
+                $downloadName = "toolsbydcx_extension_v{$activeVersion}.zip";
+            }
+        }
+
+        if (!$filePath || !file_exists($filePath)) {
             http_response_code(404);
-            echo json_encode(["error" => "Package file not found on disk."]);
+            echo json_encode(["error" => "No extension package available on disk."]);
             exit;
         }
 
         header('Content-Description: File Transfer');
-        header('Content-Type: application/zip');
-        header('Content-Disposition: attachment; filename="' . basename($row['file_name']) . '"');
+        header('Content-Type: ' . $contentType);
+        header('Content-Disposition: attachment; filename="' . $downloadName . '"');
         header('Expires: 0');
         header('Cache-Control: must-revalidate');
         header('Pragma: public');

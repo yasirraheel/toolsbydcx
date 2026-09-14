@@ -27,7 +27,6 @@
 
   var HEARTBEAT_TYPE = "BF_EXTENSION_HEARTBEAT";
   var isFlowDomain = (typeof location !== 'undefined' && location.hostname && location.hostname.indexOf('flow.google.com') !== -1);
-  var SIGN_OUT_URL = isFlowDomain ? "https://flow.google.com/about" : "https://labs.google/fx/api/auth/signout";
   var FLOW_URL = isFlowDomain ? "https://flow.google.com/" : "https://labs.google/fx/tools/flow";
 
   var POLL_MS = 350;
@@ -114,68 +113,19 @@
     try { localStorage.setItem("__flow_ext_disconnected__", "1"); } catch (_error) {}
   }
 
-  function readCsrfToken() {
-    try {
-      var csrfNames = [
-        "__Host-next-auth.csrf-token",
-        "__Secure-next-auth.csrf-token",
-        "next-auth.csrf-token"
-      ];
-      var parts = (document.cookie || "").split(";");
-      for (var i = 0; i < parts.length; i++) {
-        var eq = parts[i].indexOf("=");
-        if (eq < 0) continue;
-        var name = parts[i].slice(0, eq).trim();
-        if (csrfNames.indexOf(name) === -1) continue;
-        var value = decodeURIComponent(parts[i].slice(eq + 1));
-        return value.split("|")[0] || value;
-      }
-    } catch (_error) {}
-    return "";
-  }
 
-  // Real NextAuth signout that SURVIVES the about:blank navigation below:
-  //  * fetch(keepalive:true) — request + its Set-Cookie response (which expires
-  //    the HttpOnly session) complete even after the page unloads.
-  //  * sendBeacon — guaranteed to be sent during unload; belt-and-suspenders.
-  function fireSignOut(csrfToken) {
-    var body = "csrfToken=" + encodeURIComponent(csrfToken) +
-               "&callbackUrl=" + encodeURIComponent(FLOW_URL) + "&json=true";
-    try {
-      fetch(SIGN_OUT_URL, {
-        method: "POST",
-        credentials: "include",
-        cache: "no-store",
-        keepalive: true,
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        body: body
-      }).catch(function () {});
-    } catch (_e1) {}
-    try {
-      var blob = new Blob([body], { type: "application/x-www-form-urlencoded" });
-      navigator.sendBeacon(SIGN_OUT_URL, blob);
-    } catch (_e2) {}
-  }
 
   function forceFlowLogout() {
     if (logoutStarted) return;
     logoutStarted = true;
 
-    // 1) Capture the CSRF token BEFORE wiping cookies — nukeCookies() deletes
-    //    the csrf-token cookie too, so reading after the nuke yields "" and the
-    //    server-side signout would be skipped.
-    var csrfToken = readCsrfToken();
-
-    // 2) Fire the server-side signout (drops the HttpOnly session) so a reopen
-    //    also fails — sent via keepalive/beacon so it survives the navigation.
-    if (csrfToken) fireSignOut(csrfToken);
-
-    // 3) Wipe every JS-reachable cookie + storage.
+    // LOCAL-ONLY WIPE: Do NOT call server-side NextAuth signout!
+    // Server-side signout invalidates the master Google session for ALL shared devices.
+    // We only wipe local cookies, storage, and navigate to about:blank for THIS user.
     nukeCookies();
     clearPageStores();
-
-    // 3) One more nuke, then destroy the running page — straight to about:blank.
     nukeCookies();
+
     try { window.location.replace("about:blank"); }
     catch (_error) {
       try { window.location.href = "about:blank"; } catch (_e) {}

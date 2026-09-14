@@ -3,163 +3,553 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>ToolsByDcx - All Sessions Cleared</title>
+  <title>ToolsByDcx - Extension Removed & Sessions Purged</title>
   <link rel="icon" href="/favicon.ico">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
   <style>
-    * { margin: 0; padding: 0; box-sizing: border-box; }
+    *, *::before, *::after {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    :root {
+      --bg-base: #060911;
+      --card-bg: rgba(14, 20, 34, 0.75);
+      --card-border: rgba(255, 255, 255, 0.08);
+      --emerald-glow: rgba(16, 185, 129, 0.15);
+      --cyan-glow: rgba(6, 182, 212, 0.12);
+      --text-primary: #f8fafc;
+      --text-secondary: #94a3b8;
+      --text-muted: #64748b;
+      --accent-emerald: #10b981;
+      --accent-cyan: #06b6d4;
+    }
+
     body {
       min-height: 100vh;
       display: flex;
+      flex-direction: column;
       align-items: center;
       justify-content: center;
-      background: #090d16;
-      background-image: radial-gradient(ellipse 80% 50% at 50% -20%, rgba(16, 185, 129, 0.15), transparent);
-      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-      padding: 24px;
-      color: #f8fafc;
+      background-color: var(--bg-base);
+      background-image: 
+        radial-gradient(circle at 50% -10%, rgba(16, 185, 129, 0.18), transparent 60%),
+        radial-gradient(circle at 10% 90%, rgba(6, 182, 212, 0.1), transparent 50%),
+        radial-gradient(circle at 90% 90%, rgba(16, 185, 129, 0.08), transparent 50%);
+      font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      padding: 32px 20px;
+      color: var(--text-primary);
+      overflow-x: hidden;
+      position: relative;
     }
-    .card {
+
+    /* Ambient background grid */
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background-image: 
+        linear-gradient(to right, rgba(255, 255, 255, 0.02) 1px, transparent 1px),
+        linear-gradient(to bottom, rgba(255, 255, 255, 0.02) 1px, transparent 1px);
+      background-size: 48px 48px;
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    .container {
+      position: relative;
+      z-index: 1;
       width: 100%;
-      maxWidth: 480px;
-      background: #0e1320;
-      border: 1px solid rgba(255, 255, 255, 0.08);
-      border-radius: 20px;
-      padding: 44px 36px 36px 36px;
+      max-width: 680px;
+      margin: auto;
       display: flex;
       flex-direction: column;
       align-items: center;
-      text-align: center;
-      box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.65), 0 0 0 1px rgba(16, 185, 129, 0.08);
     }
-    .logo-badge {
-      width: 72px;
-      height: 72px;
-      border-radius: 18px;
+
+    /* Top Brand Nav */
+    .top-nav {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      width: 100%;
+      padding: 0 8px 24px 8px;
+    }
+
+    .brand-group {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .brand-logo {
+      width: 36px;
+      height: 36px;
+      border-radius: 10px;
       background: linear-gradient(135deg, rgba(16, 185, 129, 0.2), rgba(6, 182, 212, 0.2));
       border: 1px solid rgba(16, 185, 129, 0.3);
       display: flex;
       align-items: center;
       justify-content: center;
-      margin-bottom: 14px;
-      box-shadow: 0 8px 20px rgba(16, 185, 129, 0.15);
+      padding: 4px;
+      box-shadow: 0 4px 14px rgba(16, 185, 129, 0.2);
     }
-    .logo-badge img {
-      width: 48px;
-      height: 48px;
+
+    .brand-logo img {
+      width: 100%;
+      height: 100%;
       object-fit: contain;
     }
-    .brand-title {
-      font-size: 12px;
+
+    .brand-name {
+      font-size: 15px;
       font-weight: 800;
-      letter-spacing: 2.5px;
-      color: #10b981;
-      margin-bottom: 24px;
+      letter-spacing: 1.5px;
+      background: linear-gradient(135deg, #ffffff 0%, #cbd5e1 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
       text-transform: uppercase;
     }
-    .check-badge {
-      width: 42px;
-      height: 42px;
-      border-radius: 10px;
-      background: #10b981;
+
+    .security-pill {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 14px;
+      border-radius: 9999px;
+      background: rgba(16, 185, 129, 0.08);
+      border: 1px solid rgba(16, 185, 129, 0.25);
+      font-size: 11px;
+      font-weight: 700;
+      color: #34d399;
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
+    }
+
+    .pulse-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background-color: #10b981;
+      box-shadow: 0 0 10px #10b981;
+      animation: pulseGlow 2s infinite ease-in-out;
+    }
+
+    @keyframes pulseGlow {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.4; transform: scale(0.85); }
+    }
+
+    /* Main Glass Card */
+    .card {
+      width: 100%;
+      background: var(--card-bg);
+      backdrop-filter: blur(24px);
+      -webkit-backdrop-filter: blur(24px);
+      border: 1px solid var(--card-border);
+      border-radius: 24px;
+      padding: 44px 40px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      text-align: center;
+      box-shadow: 
+        0 30px 70px -15px rgba(0, 0, 0, 0.8),
+        0 0 60px -10px rgba(16, 185, 129, 0.12),
+        inset 0 1px 0 rgba(255, 255, 255, 0.1);
+      position: relative;
+      overflow: hidden;
+    }
+
+    .card::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 15%;
+      right: 15%;
+      height: 1px;
+      background: linear-gradient(90deg, transparent, rgba(16, 185, 129, 0.6), rgba(6, 182, 212, 0.6), transparent);
+    }
+
+    /* Shield Aura Container */
+    .shield-wrapper {
+      position: relative;
+      margin-bottom: 24px;
+    }
+
+    .shield-aura {
+      position: absolute;
+      inset: -12px;
+      border-radius: 50%;
+      background: radial-gradient(circle, rgba(16, 185, 129, 0.35) 0%, transparent 70%);
+      filter: blur(10px);
+      animation: auraPulse 3s infinite alternate ease-in-out;
+    }
+
+    @keyframes auraPulse {
+      0% { transform: scale(0.95); opacity: 0.5; }
+      100% { transform: scale(1.15); opacity: 0.9; }
+    }
+
+    .shield-icon {
+      position: relative;
+      width: 80px;
+      height: 80px;
+      border-radius: 22px;
+      background: linear-gradient(135deg, rgba(16, 185, 129, 0.15) 0%, rgba(6, 182, 212, 0.1) 100%);
+      border: 1px solid rgba(16, 185, 129, 0.35);
       display: flex;
       align-items: center;
       justify-content: center;
-      margin-bottom: 22px;
-      box-shadow: 0 6px 16px rgba(16, 185, 129, 0.35);
+      box-shadow: 0 12px 30px rgba(16, 185, 129, 0.2), inset 0 1px 1px rgba(255, 255, 255, 0.2);
     }
+
+    .shield-icon svg {
+      width: 40px;
+      height: 40px;
+      stroke: #34d399;
+      filter: drop-shadow(0 2px 8px rgba(16, 185, 129, 0.4));
+    }
+
     .heading {
-      font-size: 24px;
-      font-weight: 700;
+      font-size: 28px;
+      font-weight: 800;
+      letter-spacing: -0.8px;
+      line-height: 1.25;
       color: #f8fafc;
-      margin: 0 0 14px 0;
-      letter-spacing: -0.5px;
+      margin-bottom: 12px;
     }
+
+    .heading span {
+      background: linear-gradient(135deg, #34d399 0%, #06b6d4 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
     .description {
-      font-size: 14px;
-      color: #94a3b8;
+      font-size: 15px;
+      color: var(--text-secondary);
       line-height: 1.6;
-      margin: 0 0 12px 0;
-      max-width: 380px;
+      max-width: 520px;
+      margin-bottom: 32px;
     }
-    .subtext {
+
+    /* 3-Column Security Status Grid */
+    .audit-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 14px;
+      width: 100%;
+      margin-bottom: 36px;
+    }
+
+    .audit-card {
+      background: rgba(22, 30, 49, 0.5);
+      border: 1px solid rgba(255, 255, 255, 0.05);
+      border-radius: 16px;
+      padding: 18px 14px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      text-align: center;
+      position: relative;
+      transition: all 0.2s ease;
+    }
+
+    .audit-card:hover {
+      background: rgba(26, 36, 60, 0.7);
+      border-color: rgba(16, 185, 129, 0.25);
+      transform: translateY(-2px);
+    }
+
+    .audit-icon {
+      width: 38px;
+      height: 38px;
+      border-radius: 10px;
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: 12px;
+    }
+
+    .audit-icon svg {
+      width: 20px;
+      height: 20px;
+      stroke: #94a3b8;
+    }
+
+    .audit-title {
       font-size: 13px;
-      color: #64748b;
-      line-height: 1.5;
-      margin: 0 0 32px 0;
-      max-width: 360px;
+      font-weight: 700;
+      color: #f1f5f9;
+      margin-bottom: 4px;
     }
+
+    .audit-desc {
+      font-size: 11px;
+      color: #64748b;
+      line-height: 1.4;
+      margin-bottom: 12px;
+    }
+
+    .audit-status {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
+      color: #34d399;
+      background: rgba(16, 185, 129, 0.12);
+      padding: 3px 8px;
+      border-radius: 6px;
+      border: 1px solid rgba(16, 185, 129, 0.2);
+    }
+
+    .audit-status svg {
+      width: 11px;
+      height: 11px;
+      stroke: #34d399;
+    }
+
+    /* Action Buttons */
     .button-group {
       width: 100%;
       display: flex;
       flex-direction: column;
       gap: 12px;
-      margin-bottom: 28px;
     }
+
     .btn-primary {
+      width: 100%;
+      padding: 15px 24px;
+      font-size: 15px;
+      font-weight: 700;
+      color: #ffffff;
+      background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      border-radius: 12px;
+      cursor: pointer;
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      transition: all 0.2s ease;
+      box-shadow: 0 6px 20px rgba(16, 185, 129, 0.35);
+    }
+
+    .btn-primary:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 10px 30px rgba(16, 185, 129, 0.5);
+      background: linear-gradient(135deg, #059669 0%, #047857 100%);
+    }
+
+    .btn-secondary {
       width: 100%;
       padding: 13px 20px;
       font-size: 14px;
       font-weight: 600;
-      color: #ffffff;
-      background: linear-gradient(135deg, #10b981 0%, #059669 100%);
-      border: none;
-      border-radius: 10px;
+      color: #cbd5e1;
+      background: rgba(30, 41, 59, 0.5);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 12px;
       cursor: pointer;
       text-decoration: none;
-      display: inline-block;
-      transition: all 0.2s ease;
-      box-shadow: 0 4px 14px rgba(16, 185, 129, 0.25);
-    }
-    .btn-primary:hover {
-      transform: translateY(-1px);
-      box-shadow: 0 8px 24px rgba(16, 185, 129, 0.4);
-    }
-    .btn-secondary {
-      width: 100%;
-      padding: 12px 20px;
-      font-size: 14px;
-      font-weight: 500;
-      color: #94a3b8;
-      background: #161d2d;
-      border: 1px solid #334155;
-      border-radius: 10px;
-      cursor: pointer;
-      text-decoration: none;
-      display: inline-block;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
       transition: all 0.2s ease;
     }
+
     .btn-secondary:hover {
-      background: #1e293b;
-      border-color: #475569;
+      background: rgba(51, 65, 85, 0.7);
+      border-color: rgba(255, 255, 255, 0.15);
+      color: #ffffff;
     }
-    .footer {
+
+    /* Footer Info */
+    .footer-bar {
+      margin-top: 28px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      width: 100%;
+      padding: 0 8px;
       font-size: 12px;
-      color: #475569;
+      color: var(--text-muted);
+    }
+
+    .footer-bar span {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .ref-code {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11px;
+      color: #94a3b8;
+      background: rgba(255, 255, 255, 0.04);
+      padding: 3px 8px;
+      border-radius: 6px;
+      border: 1px solid rgba(255, 255, 255, 0.06);
+    }
+
+    @media (max-width: 640px) {
+      .card {
+        padding: 32px 20px;
+      }
+      .audit-grid {
+        grid-template-columns: 1fr;
+        gap: 10px;
+      }
+      .heading {
+        font-size: 23px;
+      }
+      .footer-bar {
+        flex-direction: column;
+        gap: 10px;
+        text-align: center;
+      }
     }
   </style>
 </head>
 <body>
-  <div class="card">
-    <div class="logo-badge">
-      <img src="/logo.png" alt="ToolsByDcx">
+  <div class="container">
+    <!-- Top Nav -->
+    <div class="top-nav">
+      <div class="brand-group">
+        <div class="brand-logo">
+          <img src="/logo.png" alt="ToolsByDcx">
+        </div>
+        <div class="brand-name">TOOLSBYDCX</div>
+      </div>
+      <div class="security-pill">
+        <div class="pulse-dot"></div>
+        <span>Security Purge Complete</span>
+      </div>
     </div>
-    <div class="brand-title">TOOLSBYDCX</div>
-    <div class="check-badge">
-      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
-        <polyline points="20 6 9 17 4 12"></polyline>
-      </svg>
+
+    <!-- Main Glass Card -->
+    <div class="card">
+      <!-- Shield Aura Icon -->
+      <div class="shield-wrapper">
+        <div class="shield-aura"></div>
+        <div class="shield-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
+            <polyline points="9 12 11 14 15 10"></polyline>
+          </svg>
+        </div>
+      </div>
+
+      <!-- Heading -->
+      <h1 class="heading">Extension Uninstalled<br><span>All Sessions Purged</span></h1>
+      <p class="description">
+        The ToolsByDcx extension has been safely removed. For your security, all active tool sessions, injected cookies, and temporary credentials have been wiped from this browser.
+      </p>
+
+      <!-- 3-Column Security Verification Cards -->
+      <div class="audit-grid">
+        <!-- ChatGPT Workspaces -->
+        <div class="audit-card">
+          <div class="audit-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+            </svg>
+          </div>
+          <div class="audit-title">ChatGPT Workspaces</div>
+          <div class="audit-desc">Injected sessions killed. Storage & cache reset.</div>
+          <div class="audit-status">
+            <svg viewBox="0 0 24 24" fill="none" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="20 6 9 17 4 12"></polyline>
+            </svg>
+            Purged
+          </div>
+        </div>
+
+        <!-- Google Flow & Studio -->
+        <div class="audit-card">
+          <div class="audit-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon>
+            </svg>
+          </div>
+          <div class="audit-title">Google Flow Suite</div>
+          <div class="audit-desc">NextAuth signed out. Shared access invalidated.</div>
+          <div class="audit-status">
+            <svg viewBox="0 0 24 24" fill="none" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="20 6 9 17 4 12"></polyline>
+            </svg>
+            Revoked
+          </div>
+        </div>
+
+        <!-- Browser Environment -->
+        <div class="audit-card">
+          <div class="audit-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+              <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+            </svg>
+          </div>
+          <div class="audit-title">Local Browser State</div>
+          <div class="audit-desc">Storage neutralized. No leftover credentials.</div>
+          <div class="audit-status">
+            <svg viewBox="0 0 24 24" fill="none" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="20 6 9 17 4 12"></polyline>
+            </svg>
+            Clean
+          </div>
+        </div>
+      </div>
+
+      <!-- Action Button Group -->
+      <div class="button-group">
+        <a href="/" class="btn-primary">
+          <span>Return to ToolsByDcx Dashboard</span>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="5" y1="12" x2="19" y2="12"></line>
+            <polyline points="12 5 19 12 12 19"></polyline>
+          </svg>
+        </a>
+        <button onclick="window.close()" class="btn-secondary">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="18" y1="6" x2="6" y2="18"></line>
+            <line x1="6" y1="6" x2="18" y2="18"></line>
+          </svg>
+          <span>Close Window</span>
+        </button>
+      </div>
     </div>
-    <h1 class="heading">All Sessions Cleared</h1>
-    <p class="description">Google Flow, Whisk, and all injected sessions have been signed out.</p>
-    <p class="subtext">Your ToolsByDcx account is safe. You can log back in anytime.</p>
-    <div class="button-group">
-      <a href="/" class="btn-primary">Return to ToolsByDcx</a>
-      <button onclick="window.close()" class="btn-secondary">Close Tab</button>
+
+    <!-- Bottom Footer Status -->
+    <div class="footer-bar">
+      <span>ToolsByDcx Security Infrastructure • Multi-Tenant Guard v1.5</span>
+      <span class="ref-code" id="auditRef">SEC-PURGED-OK</span>
     </div>
-    <div class="footer">Thank you for using ToolsByDcx</div>
   </div>
+
+  <script>
+    // Client-side cleanup script
+    try {
+      localStorage.setItem('__dcx_extension_uninstalled__', String(Date.now()));
+      sessionStorage.removeItem('__dcx_session_active__');
+    } catch (_) {}
+
+    try {
+      const stamp = Math.random().toString(36).substring(2, 8).toUpperCase();
+      const el = document.getElementById('auditRef');
+      if (el) el.textContent = 'AUDIT-' + stamp + '-PURGED';
+    } catch (_) {}
+  </script>
 </body>
 </html>

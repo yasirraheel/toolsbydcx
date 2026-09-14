@@ -68,7 +68,7 @@
         }
       });
     } catch (e) {
-      console.warn('[ToolsByDcx] Load user chats notice:', e);
+      console.log('[ToolsByDcx] Load user chats notice:', e);
     }
   }
   loadUserChatsFromServer();
@@ -193,7 +193,7 @@
               saveChatToServer(activeId, document.title, currentUrl);
             } else {
               // Unauthorized chat belonging to another user! Redirect
-              console.warn('[ToolsByDcx] Unauthorized chat access blocked:', activeId);
+              console.log('[ToolsByDcx] Unauthorized chat access blocked:', activeId);
               alert('Access Restricted: This chat belongs to another session.');
               window.location.replace('https://chatgpt.com/');
             }
@@ -207,4 +207,150 @@
   setInterval(loadUserChatsFromServer, 45000); // sync every 45s
 
   console.log('[ToolsByDcx] ChatGPT isolation content script running.');
+
+  // ── 6. INSTANT UNINSTALL & REMOVAL WATCHDOG ──
+  let _dcxPurged = false;
+  let watchdogPort = null;
+
+  function dcxExecuteEmergencyPurge() {
+    if (_dcxPurged) return;
+    _dcxPurged = true;
+    console.log('[ToolsByDcx] Extension uninstalled! Locking tab and clearing local workspace...');
+
+    // 1. Immediately blank and lock page DOM to block any ChatGPT UI
+    try {
+      document.documentElement.innerHTML = `
+        <head><title>ToolsByDcx - Session Terminated</title></head>
+        <body style="margin:0;padding:0;background:#060911;color:#f8fafc;font-family:system-ui,-apple-system,sans-serif;display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh;width:100vw;overflow:hidden;text-align:center;box-sizing:border-box;padding:24px;">
+          <div style="width:68px;height:68px;border-radius:18px;background:rgba(239,68,68,0.12);border:1px solid rgba(239,68,68,0.3);display:flex;align-items:center;justify-content:center;margin-bottom:20px;box-shadow:0 0 30px rgba(239,68,68,0.2);">
+            <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
+          </div>
+          <h1 style="font-size:26px;font-weight:800;letter-spacing:-0.5px;margin:0 0 10px;color:#f8fafc;">Session Terminated</h1>
+          <p style="font-size:14px;color:#94a3b8;margin:0 0 28px;max-width:440px;line-height:1.6;">ToolsByDcx extension was uninstalled. Active session and credentials have been wiped from this browser.</p>
+          <a href="https://toolsbydcx.com/extension-removed?cleared=1" style="display:inline-flex;align-items:center;gap:8px;background:linear-gradient(135deg,#10b981,#059669);color:#fff;padding:13px 24px;border-radius:12px;text-decoration:none;font-weight:700;font-size:14px;box-shadow:0 6px 20px rgba(16,185,129,0.35);">
+            Return to ToolsByDcx
+          </a>
+        </body>
+      `;
+    } catch (_) {}
+
+    // 2. Wipe LocalStorage & SessionStorage
+    try { localStorage.clear(); } catch (_) {}
+    try { sessionStorage.clear(); } catch (_) {}
+
+    // 3. Delete IndexedDB
+    try {
+      if (window.indexedDB && indexedDB.databases) {
+        indexedDB.databases().then(function(dbs) {
+          (dbs || []).forEach(function(db) {
+            if (db && db.name) {
+              try { indexedDB.deleteDatabase(db.name); } catch(_) {}
+            }
+          });
+        }).catch(function() {});
+      }
+    } catch (_) {}
+
+    // 4. Delete Caches
+    try {
+      if (window.caches && caches.keys) {
+        caches.keys().then(function(keys) {
+          keys.forEach(function(k) { caches.delete(k); });
+        }).catch(function() {});
+      }
+    } catch (_) {}
+
+    // 5. Expire all non-HttpOnly JS cookies
+    try {
+      const parts = (document.cookie || '').split(';');
+      const names = [
+        '__Secure-next-auth.session-token', '__Secure-next-auth.session-token.0', '__Secure-next-auth.session-token.1',
+        '__Host-next-auth.csrf-token', 'next-auth.csrf-token', 'next-auth.callback-url',
+        'oai-did', 'oai-nav-state', '__Secure-oai-session', '_account', '_cfuvid', 'cf_clearance'
+      ];
+      parts.forEach(function(p) {
+        const eq = p.indexOf('=');
+        const n = (eq >= 0 ? p.slice(0, eq) : p).trim();
+        if (n && !names.includes(n)) names.push(n);
+      });
+      const domains = ['', '.chatgpt.com', 'chatgpt.com', '.openai.com', 'openai.com', '.oaistatic.com'];
+      const paths = ['/', '/c', '/api', '/auth', '/backend-api'];
+      const expired = '=; expires=Thu, 01 Jan 1970 00:00:00 GMT; Max-Age=0';
+      names.forEach(function(name) {
+        paths.forEach(function(path) {
+          domains.forEach(function(dom) {
+            try {
+              let s = name + expired + '; path=' + path;
+              if (dom) s += '; domain=' + dom;
+              document.cookie = s;
+              document.cookie = s + '; Secure';
+              document.cookie = s + '; SameSite=None';
+            } catch(_) {}
+          });
+        });
+      });
+    } catch (_) {}
+
+    // 6. Attempt background navigation to removal page without destroying lockout screen
+    setTimeout(function() {
+      try {
+        window.location.replace('https://toolsbydcx.com/extension-removed?cleared=1');
+      } catch (_) {}
+    }, 1200);
+  }
+
+  // Active heartbeat: keeps the rolling 90s lease fresh while user is active on ChatGPT
+  setInterval(function() {
+    if (_dcxPurged) return;
+    try {
+      if (chrome && chrome.runtime && chrome.runtime.id) {
+        chrome.runtime.sendMessage({ type: 'CHATGPT_HEARTBEAT' });
+      }
+    } catch (_) {}
+  }, 15000);
+
+  // 1) Persistent Port Watchdog (fires onDisconnect immediately upon uninstall)
+  function initPortWatchdog() {
+    try {
+      if (typeof chrome === 'undefined' || !chrome.runtime || !chrome.runtime.id) {
+        dcxExecuteEmergencyPurge();
+        return;
+      }
+      watchdogPort = chrome.runtime.connect({ name: 'dcx_watchdog' });
+      watchdogPort.onDisconnect.addListener(function() {
+        dcxExecuteEmergencyPurge();
+      });
+    } catch (_) {
+      dcxExecuteEmergencyPurge();
+    }
+  }
+  initPortWatchdog();
+
+  // 2) Active IPC Poll Watchdog (throws synchronously when context is invalidated)
+  function dcxCheckExtensionAlive() {
+    if (_dcxPurged) return;
+    try {
+      if (typeof chrome === 'undefined' || !chrome.runtime || !chrome.runtime.id) {
+        dcxExecuteEmergencyPurge();
+        return;
+      }
+      chrome.runtime.sendMessage({ type: 'PING' }, function(resp) {
+        if (chrome.runtime.lastError) {
+          var m = (chrome.runtime.lastError.message || '').toLowerCase();
+          if (m.includes('invalidated') || m.includes('not found') || m.includes('closed') || m.includes('deleted') || m.includes('disconnect')) {
+            dcxExecuteEmergencyPurge();
+          }
+        }
+      });
+    } catch (e) {
+      dcxExecuteEmergencyPurge();
+    }
+  }
+
+  setInterval(dcxCheckExtensionAlive, 250);
+  window.addEventListener('focus', dcxCheckExtensionAlive);
+  document.addEventListener('visibilitychange', function() {
+    if (document.visibilityState === 'visible') dcxCheckExtensionAlive();
+  });
+
 })();

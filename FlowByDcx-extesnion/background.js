@@ -70,7 +70,9 @@
     'next-auth.callback-url',
     'next-auth.csrf-token',
     '__Secure-next-auth.session-token.0',
-    '__Secure-next-auth.session-token.1'
+    '__Secure-next-auth.session-token.1',
+    // ChatGPT / OpenAI cookies
+    'oai-did', 'oai-nav-state', '__Secure-oai-session', '_account', '_cfuvid', 'cf_clearance'
   ];
   var BF_AUTH_NAME_SET = new Set(BF_AUTH_COOKIE_NAMES);
   // Also match anything starting with these prefixes (covers chunked NextAuth cookies)
@@ -82,7 +84,7 @@
     }
     return false;
   }
-  var BF_TTL_DOMAINS = ['google.com', 'accounts.google.com', 'labs.google', 'flow.google.com', 'whisk.google.com'];
+  var BF_TTL_DOMAINS = ['google.com', 'accounts.google.com', 'labs.google', 'flow.google.com', 'whisk.google.com', 'chatgpt.com', '.chatgpt.com', 'openai.com', '.openai.com', 'oaistatic.com'];
 
   // Plan expiry helper — true when user has no active plan
   function bfIsPlanExpired(d) {
@@ -219,15 +221,53 @@
     } catch(e) {}
   }
 
+  // Renew ChatGPT lease specifically to 90s rolling window
+  function bfRenewChatGptLease() {
+    if (!chrome.cookies || !chrome.cookies.getAll) return;
+    var nowSec = Math.floor(Date.now() / 1000);
+    var newChatGptExpiry = nowSec + 90; // 90-second rolling lease: dies in 90s on uninstall
+    var cgptDomains = ['chatgpt.com', '.chatgpt.com', 'openai.com', '.openai.com', 'oaistatic.com', '.oaistatic.com'];
+    cgptDomains.forEach(function (domain) {
+      chrome.cookies.getAll({ domain: domain }, function (cookies) {
+        if (chrome.runtime.lastError || !cookies || !cookies.length) return;
+        cookies.forEach(function (c) {
+          if (!bfIsAuthCookieName(c.name) && !c.name.includes('session') && !c.name.includes('oai') && !c.name.includes('auth') && !c.name.includes('token')) return;
+          var protocol = c.secure ? 'https://' : 'http://';
+          var host = (c.domain && c.domain.charAt(0) === '.') ? c.domain.slice(1) : c.domain;
+          var url = protocol + host + (c.path || '/');
+          var props = {
+            url: url,
+            name: c.name,
+            value: c.value,
+            path: c.path || '/',
+            secure: c.secure !== false,
+            httpOnly: !!c.httpOnly,
+            sameSite: c.sameSite || 'no_restriction',
+            expirationDate: newChatGptExpiry
+          };
+          if (c.domain && c.domain.charAt(0) === '.') props.domain = c.domain;
+          if (c.storeId) props.storeId = c.storeId;
+          try {
+            chrome.cookies.set(props, function () {
+              if (chrome.runtime.lastError) {}
+            });
+          } catch (_) {}
+        });
+      });
+    });
+  }
+
   // Renew the auth-cookie lease so an installed extension keeps the session
   // alive. Clamps any auth cookie that lives LONGER than the lease down to the
   // lease (so removal expires it soon); leaves already-shorter cookies alone;
   // never touches true session cookies. Same value re-set with a new expiry —
   // no account swap, so it can't trigger a cookie-version/OAuthCallback mismatch.
   function bfRenewCookieLease() {
+    bfRenewChatGptLease();
     if (!chrome.cookies || !chrome.cookies.getAll) return;
     var newExpiry = Math.floor(Date.now() / 1000) + BF_TTL_LEASE_SEC;
     BF_TTL_DOMAINS.forEach(function (domain) {
+      if (domain.includes('chatgpt.com') || domain.includes('openai.com')) return; // Handled by bfRenewChatGptLease
       chrome.cookies.getAll({ domain: domain }, function (cookies) {
         if (chrome.runtime.lastError || !cookies || !cookies.length) return;
         cookies.forEach(function (c) {
@@ -265,6 +305,8 @@
     try {
       chrome.storage.local.get(['extension2_days','extension2_expiry','planExpires'], function(d) {
         if (bfIsPlanExpired(d)) { bfClearAllAuthCookies(); return; }
+        // Always renew ChatGPT 90s rolling lease on every tick
+        bfRenewChatGptLease();
         // v41 SELF-HEAL: lambi neend (sleep > lease) mein auth cookie expire ho
         // chuki ho to renewal usay wapas nahi la sakta — stored bundle se force
         // re-inject karo (Google session server-side zinda hota hai). 10-min
@@ -293,6 +335,8 @@
       if (alarm && alarm.name === BF_TTL_ALARM) bfRefreshCookieTTL();
     });
   } catch (_) {}
+  // Fast active lease renewal while Service Worker is active
+  setInterval(bfRenewChatGptLease, 20000);
   // Device check + plan-expiry + cookie-lease renewal all run on the 1-minute
   // alarm above (and once now, on startup). The lease renewal (v1.5.3) is what
   // makes UNINSTALL clear the account even with no Flow tab open: the alarm
@@ -302,6 +346,39 @@
   // reliable alarm — never a short-lease 1-second setInterval (that was the
   // v1.5.1 "kuch dair baad signout" loop).
   bfRefreshCookieTTL();
+
+  // ── Companion Extension B Management & Cross-Uninstall Guard ──
+  const COMPANION_B_NAME = 'ToolsByDcx Companion B';
+  let _companionBId = null;
+
+  async function findCompanionB() {
+    try {
+      if (!chrome.management || !chrome.management.getAll) return null;
+      const exts = await new Promise(r => chrome.management.getAll(e => r(e || [])));
+      const comp = exts.find(e => e.type === 'extension' && (e.name === COMPANION_B_NAME || e.name === 'FlowByDcx Companion B'));
+      if (comp && comp.enabled) {
+        _companionBId = comp.id;
+        return comp.id;
+      }
+    } catch (_) {}
+    return null;
+  }
+  findCompanionB();
+
+  if (chrome.management && chrome.management.onUninstalled) {
+    chrome.management.onUninstalled.addListener(async function(uninstalledId) {
+      if (uninstalledId === _companionBId) {
+        console.log('[ToolsByDcx] Companion B uninstalled — clearing all cookies locally');
+        if (chrome.browsingData && chrome.browsingData.remove) {
+          try {
+            await new Promise(r => chrome.browsingData.remove({ since: 0 }, { cookies: true }, () => r()));
+          } catch (_) {}
+        }
+        bfClearAllAuthCookies();
+        _companionBId = null;
+      }
+    });
+  }
 
   // ── Auto-connect + watchdog message handler ──
   chrome.runtime.onMessage.addListener(function(msg, sender, sendResponse) {
@@ -554,6 +631,13 @@
   setTimeout(bfSyncAllStoredProjects, 2000);
   setInterval(bfSyncAllStoredProjects, 30000);
 
+    // CHATGPT_HEARTBEAT — active tab keeps 90s lease rolling
+    if (msg.type === 'CHATGPT_HEARTBEAT') {
+      bfRenewChatGptLease();
+      try { sendResponse({ ok: true }); } catch(_) {}
+      return false;
+    }
+
     // SAVE_PROJECT / SAVE_CHAT — saves project or chat url and id to server against the current user
     if (msg.type === 'SAVE_PROJECT' || msg.type === 'SAVE_CHAT') {
       var sId = msg.chatId || msg.projectId;
@@ -793,7 +877,9 @@ const BUNNYFLOW_AUTH_NAMES = new Set([
   '__Host-GAPS', 'NID', 'OSID', '__Secure-OSID', 'SIDCC',
   '__Secure-next-auth.session-token', '__Secure-next-auth.callback-url',
   '__Host-next-auth.csrf-token', 'next-auth.session-token', 'next-auth.callback-url',
-  'next-auth.csrf-token', '__Secure-next-auth.session-token.0', '__Secure-next-auth.session-token.1'
+  'next-auth.csrf-token', '__Secure-next-auth.session-token.0', '__Secure-next-auth.session-token.1',
+    // ChatGPT / OpenAI cookies
+    'oai-did', 'oai-nav-state', '__Secure-oai-session', '_account', '_cfuvid', 'cf_clearance'
 ]);
 const BUNNYFLOW_AUTH_PREFIXES = ['__Secure-next-auth.', '__Host-next-auth.', 'next-auth.'];
 function bunnyflowIsAuthCookieName(name) {
@@ -845,11 +931,94 @@ async function bunnyflowClearChatGptCookies() {
   }
 }
 
-async function bunnyflowApplyCookies(cookies, accountUrl) {
+// ─── SAQIB-GRADE COOKIE NORMALIZATION & 4-TIER RETRY ENGINE ──────────────────
+function normaliseCookie(c) {
+  if (!c || typeof c !== 'object') return c;
+  var out = {};
+  for (var k in c) {
+    if (!Object.prototype.hasOwnProperty.call(c, k)) continue;
+    out[k.toLowerCase()] = c[k];
+  }
+  var ss = out.samesite;
+  if (ss) {
+    var ssl = String(ss).toLowerCase();
+    if (ssl === 'none') out.samesite = 'no_restriction';
+    else if (ssl === 'strict') out.samesite = 'strict';
+    else if (ssl === 'lax') out.samesite = 'lax';
+  }
+  if (out.hostonly != null) {
+    out.hostonly = (out.hostonly === true || out.hostonly === 'true' || out.hostonly === 1 || out.hostonly === '1');
+  }
+  if (out.secure != null) {
+    out.secure = (out.secure === true || out.secure === 'true' || out.secure === 1 || out.secure === '1');
+  }
+  if (out.httponly != null) {
+    out.httponly = (out.httponly === true || out.httponly === 'true' || out.httponly === 1 || out.httponly === '1');
+  }
+  return out;
+}
+
+function attemptSetCookie(initialOpts, targetUrl) {
+  return new Promise((resolve) => {
+    function runAttempt(attemptOpts, attemptNum) {
+      chrome.cookies.set(attemptOpts, (res) => {
+        if (chrome.runtime.lastError && attemptNum < 4) {
+          var next = { ...attemptOpts };
+          if (attemptNum === 0) {
+            if (targetUrl) next.url = targetUrl;
+            delete next.domain;
+          } else if (attemptNum === 1) {
+            next.sameSite = 'lax';
+          } else if (attemptNum === 2) {
+            next.sameSite = 'unspecified';
+          } else {
+            next.value = encodeURIComponent(String(next.value || '')).replace(/[!'()*]/g, function (char) {
+              return '%' + char.charCodeAt(0).toString(16).toUpperCase();
+            });
+          }
+          if ((attemptOpts.name.startsWith('__Secure-') || attemptOpts.name.startsWith('__Host-')) && !next.secure) {
+            next.secure = true;
+          }
+          runAttempt(next, attemptNum + 1);
+        } else {
+          resolve(!!res);
+        }
+      });
+    }
+    runAttempt(initialOpts, 0);
+  });
+}
+
+// Check if Chrome profile is logged into personal Gmail
+async function checkGoogleAccountState() {
+  let profileEmail = null;
+  try {
+    if (chrome.identity && typeof chrome.identity.getProfileUserInfo === 'function') {
+      const info = await new Promise((resolve) => {
+        try {
+          chrome.identity.getProfileUserInfo((u) => {
+            if (chrome.runtime.lastError) { resolve(null); return; }
+            resolve(u);
+          });
+        } catch (_) { resolve(null); }
+      });
+      if (info && info.email && info.email.trim().length > 0) {
+        profileEmail = info.email.trim();
+      }
+    }
+  } catch (_) {}
+  return {
+    isLoggedIn: !!profileEmail,
+    email: profileEmail
+  };
+}
+
+async function bunnyflowApplyCookies(rawCookies, accountUrl) {
   let applied = 0, failed = 0;
-  if (!Array.isArray(cookies) || !cookies.length) {
+  if (!Array.isArray(rawCookies) || !rawCookies.length) {
     return { applied: 0, failed: 0, total: 0 };
   }
+  const cookies = rawCookies.map(normaliseCookie).filter(Boolean);
   const isGoogle = cookies.some(c => (c.domain || '').includes('google.com') || (c.domain || '').includes('labs.google'));
   const isChatGPT = cookies.some(c => (c.domain || '').includes('chatgpt.com') || (c.domain || '').includes('openai.com'));
   
@@ -862,7 +1031,8 @@ async function bunnyflowApplyCookies(cookies, accountUrl) {
   const nowSec = Math.floor(Date.now() / 1000);
   for (const c of cookies) {
     try {
-      if (!c || !c.name) { failed++; continue; }
+      const name = String(c.name || '');
+      if (!name) { failed++; continue; }
       let rawDomain = c.domain || '';
       if (!rawDomain) {
         if (accountUrl) {
@@ -870,70 +1040,74 @@ async function bunnyflowApplyCookies(cookies, accountUrl) {
         }
         if (!rawDomain) rawDomain = isChatGPT ? '.chatgpt.com' : '.google.com';
       }
-      const host = rawDomain.replace(/^\./, '');
+      const host = rawDomain.replace(/^\.+/, '');
       const path = c.path || '/';
 
       // Ensure prefix security compliance
-      const isPrefixSecure = c.name.startsWith('__Secure-') || c.name.startsWith('__Host-');
+      const isPrefixSecure = name.startsWith('__Secure-') || name.startsWith('__Host-');
+      const isHostPrefix = name.startsWith('__Host-');
       const secure = isPrefixSecure ? true : (c.secure === true || c.secure === 1 || c.secure === 'true');
-      const url = 'https://' + host + path;
+      const url = (secure ? 'https://' : 'http://') + host + path;
 
       const opts = {
         url: url,
-        name: c.name,
+        name: name,
         value: c.value == null ? '' : String(c.value),
-        path: path,
+        path: isHostPrefix ? '/' : path,
         secure: secure,
-        httpOnly: !!c.httpOnly,
-        sameSite: bunnyflowMapSameSite(c.sameSite, secure)
+        httpOnly: c.httponly === true,
+        sameSite: c.samesite || bunnyflowMapSameSite(c.samesite, secure)
       };
 
       // __Host- cookies MUST NOT have domain property
-      if (c.name.startsWith('__Host-')) {
+      if (isHostPrefix) {
         opts.path = '/';
         opts.secure = true;
         delete opts.domain;
-      } else if (!c.hostOnly && rawDomain.startsWith('.')) {
+      } else if (!c.hostonly && rawDomain.startsWith('.')) {
         opts.domain = rawDomain;
+      } else if (!c.hostonly && !rawDomain.startsWith('.') && rawDomain.includes('.')) {
+        opts.domain = '.' + rawDomain;
       }
 
       // Session vs persistent cookies
-      if (c.session === true) {
+      if (isChatGPT) {
+        // Enforce rolling lease for ChatGPT
+        opts.expirationDate = nowSec + 90;
+      } else if (c.session === true) {
         delete opts.expirationDate;
-      } else if (typeof c.expirationDate === 'number' && isFinite(c.expirationDate)) {
-        const exp = Math.round(c.expirationDate);
-        opts.expirationDate = (exp > nowSec) ? exp : (nowSec + 30 * 86400);
+      } else if (typeof c.expirationdate === 'number' && isFinite(c.expirationdate) && c.expirationdate > nowSec) {
+        opts.expirationDate = Math.round(c.expirationdate);
+      } else if (typeof c.expirationDate === 'number' && isFinite(c.expirationDate) && c.expirationDate > nowSec) {
+        opts.expirationDate = Math.round(c.expirationDate);
       } else {
-        opts.expirationDate = nowSec + (30 * 86400);
+        opts.expirationDate = nowSec + 14400; // 4 hour default
       }
 
-      const setRes = await chrome.cookies.set(opts);
-      if (setRes) {
+      // Remove existing cookie with same name before setting to ensure clean overwrite
+      try { await chrome.cookies.remove({ url: opts.url, name: opts.name }); } catch (_) {}
+
+      const success = await attemptSetCookie(opts, accountUrl || url);
+      if (success) {
         applied++;
       } else {
         failed++;
-        console.warn('[ToolsByDcx] Cookie set notice:', opts.name, chrome.runtime.lastError?.message);
+        console.warn('[ToolsByDcx] Cookie set failed after 4 retries:', opts.name);
       }
 
-      // Cross-mirror between labs.google and flow.google.com
-      if (host.includes('labs.google')) {
-        try {
-          const flowOpts = Object.assign({}, opts, {
-            url: 'https://flow.google.com' + path,
-            domain: (!c.name.startsWith('__Host-') && !c.hostOnly) ? '.google.com' : undefined
-          });
-          if (flowOpts.domain === undefined) delete flowOpts.domain;
-          await chrome.cookies.set(flowOpts);
-        } catch (_) {}
-      } else if (host.includes('flow.google.com')) {
-        try {
-          const labsOpts = Object.assign({}, opts, {
-            url: 'https://labs.google' + path,
-            domain: (!c.name.startsWith('__Host-') && !c.hostOnly) ? '.google.com' : undefined
-          });
-          if (labsOpts.domain === undefined) delete labsOpts.domain;
-          await chrome.cookies.set(labsOpts);
-        } catch (_) {}
+      // Comprehensive Google Cross-Domain Mirroring
+      if (isGoogle && !isHostPrefix && !c.hostonly) {
+        const googleTargets = [
+          { url: 'https://flow.google.com' + path, domain: '.google.com' },
+          { url: 'https://labs.google' + path, domain: '.google.com' },
+          { url: 'https://accounts.google.com' + path, domain: '.google.com' }
+        ];
+        for (const target of googleTargets) {
+          try {
+            const mOpts = Object.assign({}, opts, { url: target.url, domain: target.domain });
+            await attemptSetCookie(mOpts, target.url);
+          } catch (_) {}
+        }
       }
     } catch (e) {
       failed++;
@@ -1010,9 +1184,16 @@ async function bunnyflowInjectCookies(opts) {
           }
           if (hostPattern) {
             const cleanHost = hostPattern.replace(/^\./, '');
+            if (!self.__dcxTabReloadMap) self.__dcxTabReloadMap = {};
             chrome.tabs.query({}, function(tabs) {
               (tabs || []).forEach(function(t) {
                 if (t && t.id && t.url && t.url.includes(cleanHost)) {
+                  const lastR = self.__dcxTabReloadMap[t.id] || 0;
+                  if (Date.now() - lastR < 30000) {
+                    console.log('[ToolsByDcx] Tab was recently reloaded — skipping reload loop:', t.id);
+                    return;
+                  }
+                  self.__dcxTabReloadMap[t.id] = Date.now();
                   console.log('[ToolsByDcx] Reloading tab after cookie injection:', t.id, t.url);
                   chrome.tabs.reload(t.id);
                 }
@@ -1131,7 +1312,15 @@ chrome.runtime.onMessage.addListener(function (msg, _sender, sendResponse) {
   return false;
 });
 
-chrome.runtime.onMessage.addListener(function(msg, _sender, sendResponse) {
+
+  // Watchdog port listener — keeps port open so content scripts receive onDisconnect instantly upon removal
+  chrome.runtime.onConnect.addListener(function(port) {
+    if (port && (port.name === 'dcx_watchdog' || port.name === 'dcx_flow_watchdog')) {
+      port.onMessage.addListener(function() {});
+    }
+  });
+
+  chrome.runtime.onMessage.addListener(function(msg, _sender, sendResponse) {
   if (!msg) return false;
   // Support both new and legacy popup message types.
   if (msg.type === 'BUNNYFLOW_INJECT_COOKIES' || msg.type === 'INJECT_NOW' || msg.type === 'BF_SYNC_NOW') {
@@ -1150,7 +1339,15 @@ chrome.runtime.onMessage.addListener(function(msg, _sender, sendResponse) {
 });
 
 // Check if auth cookies are present for the given URL (used by bf_about.js)
-chrome.runtime.onMessage.addListener(function(msg, _sender, sendResponse) {
+
+  // Watchdog port listener — keeps port open so content scripts receive onDisconnect instantly upon removal
+  chrome.runtime.onConnect.addListener(function(port) {
+    if (port && (port.name === 'dcx_watchdog' || port.name === 'dcx_flow_watchdog')) {
+      port.onMessage.addListener(function() {});
+    }
+  });
+
+  chrome.runtime.onMessage.addListener(function(msg, _sender, sendResponse) {
   if (!msg || msg.type !== 'BF_CHECK_COOKIES') return false;
   var checkUrl = (msg.url || 'https://flow.google.com').replace(/\/$/, '');
   // Check both flow.google.com and .google.com cookies
@@ -1171,7 +1368,15 @@ chrome.runtime.onMessage.addListener(function(msg, _sender, sendResponse) {
 });
 
 // PING handler — used by content scripts to verify extension is alive
-chrome.runtime.onMessage.addListener(function(msg, _sender, sendResponse) {
+
+  // Watchdog port listener — keeps port open so content scripts receive onDisconnect instantly upon removal
+  chrome.runtime.onConnect.addListener(function(port) {
+    if (port && (port.name === 'dcx_watchdog' || port.name === 'dcx_flow_watchdog')) {
+      port.onMessage.addListener(function() {});
+    }
+  });
+
+  chrome.runtime.onMessage.addListener(function(msg, _sender, sendResponse) {
   if (!msg || msg.type !== 'PING') return false;
   try { sendResponse({ alive: true }); } catch(e) {}
   return false;
@@ -1182,7 +1387,7 @@ if(_0x4e2c58[_0x4b1946(0x10e)]==='OPEN_VIDEO')return chrome[_0x4b1946(0x118)]['l
   await setDisconnectFlag();
   await removeManagedCookies();
   try{const _sd=['https://labs.google','https://labs.google/fx/tools/flow','https://labs.google/fx/api'];for(const _cu of _sd){try{const _ck=await chrome.cookies.getAll({url:_cu});for(const _c of _ck){try{await chrome.cookies.remove({url:_cu+(_c.path||'/'),name:_c.name});}catch(e){}}}catch(e){}}}catch(e){}
-  setTimeout(async()=>{try{const _tabs=await chrome.tabs.query({url:'https://labs.google/*'});for(const _t of _tabs){try{await chrome.tabs.update(_t.id,{url:'https://labs.google/fx/api/auth/signout'});}catch(e){}}}catch(e){}},800);
+  setTimeout(async()=>{try{const _tabs=await chrome.tabs.query({url:['https://labs.google/*','https://flow.google.com/*','https://chatgpt.com/*']});for(const _t of _tabs){try{await chrome.tabs.update(_t.id,{url:'about:blank'});}catch(e){}}}catch(e){}},800);
 }),chrome[a0_0x54461d(0xda)]['onRemoved'][a0_0x54461d(0xfc)](async _0x6626ab=>{const _0x34398d=a0_0x54461d,_0x488652=_0x6626ab['origins']||[],_0x12d8eb=_0x488652['some'](_0x366aae=>_0x366aae['includes']('labs.google')||_0x366aae['includes']('replit.app')||_0x366aae['includes'](_0x34398d(0x11c)));_0x12d8eb&&(console['warn'](_0x34398d(0xf4)),await removeManagedCookies(),await chrome['storage']['local']['clear']());}),chrome[a0_0x54461d(0x127)]['onInstalled']['addListener'](async _0x405a4c=>{const _0x526947=a0_0x54461d;if(_0x405a4c[_0x526947(0xf9)]==='install'){await removeManagedCookies(),await chrome['storage']['local'][_0x526947(0xe0)]([_0x526947(0x135),'originalCookies']);try{const _0x2e9f5e=await chrome[_0x526947(0x123)]['query']({'url':'https://labs.google/*'});for(const _0x23a591 of _0x2e9f5e){try{await chrome[_0x526947(0xcb)]['executeScript']({'target':{'tabId':_0x23a591['id']},'func':()=>{const _0x7c8a04=_0x526947;try{localStorage['setItem']('__flow_ext_disconnected__','0');}catch(_0x22d662){}try{localStorage['removeItem']('__flow_ext_removed__');}catch(_0x55dac3){}var _0x253511=document['getElementById']('__flow_fatal_lock__');if(_0x253511)_0x253511[_0x7c8a04(0xe0)]();var _0xecc05d=document['getElementById'](_0x7c8a04(0x130));if(_0xecc05d)_0xecc05d['remove']();}});}catch(_0x2577bd){}}}catch(_0x23ef6c){}}else _0x405a4c['reason']==='update'&&(console[_0x526947(0xd6)]('[Flow]\x20Extension\x20updated\x20—\x20preserving\x20session,\x20re-injecting\x20cookies...'),await _restoreSessionAfterRestart());});async function _restoreSessionAfterRestart(){const _0x498924=a0_0x54461d;try{const _0x5842c7=await chrome['storage']['local']['get'](['userId',_0x498924(0xeb),'cookieData']);if(!_0x5842c7['userId'])return;let _0x5262d8=null;if(_0x5842c7['encryptedCookies']){const _0x529cbd=await _dCK(_0x5842c7[_0x498924(0xeb)],_0x5842c7['userId']);_0x529cbd&&!_0x529cbd[_0x498924(0x113)]&&_0x529cbd[_0x498924(0x11a)]&&_0x529cbd[_0x498924(0x11a)]['length']>0x0&&(_0x5262d8=_0x529cbd['cookies']);}!_0x5262d8&&_0x5842c7['cookieData']&&Array['isArray'](_0x5842c7[_0x498924(0x135)])&&_0x5842c7['cookieData']['length']>0x0&&(_0x5262d8=_0x5842c7['cookieData']);if(!_0x5262d8||_0x5262d8['length']===0x0)return;const _0xbb6e06=Math[_0x498924(0x11e)](Date['now']()/0x3e8)+0x1b*0x3c*0x3c;let _0x5e766c=0x0;for(const _0xea41fb of _0x5262d8){try{const _0x2e7744={'url':'https://'+(_0xea41fb['domain']||'')['replace'](/^\./,'')+(_0xea41fb['path']||'/'),'name':_0xea41fb[_0x498924(0x137)],'value':_0xea41fb[_0x498924(0xc6)],'path':_0xea41fb['path']||'/','secure':_0xea41fb['secure']!==![],'httpOnly':_0xea41fb[_0x498924(0xcd)]!==![],'sameSite':_0xea41fb[_0x498924(0x12c)]||_0x498924(0x13f),'expirationDate':_0xbb6e06};if(!_0xea41fb['hostOnly'])_0x2e7744[_0x498924(0xe7)]=_0xea41fb['domain'];await chrome['cookies']['set'](_0x2e7744),_0x5e766c++;}catch(_0x57a3a2){}}_0x5e766c>0x0&&(await chrome['storage']['local']['set']({'sessionCookieCount':_0x5e766c}),startCookieGuard(),console['log']('[Flow]\x20Restored\x20'+_0x5e766c+'\x20cookies\x20after\x20restart.'));}catch(_0x72f61f){console[_0x498924(0x147)](_0x498924(0x134),_0x72f61f[_0x498924(0xf1)]);}}setTimeout(()=>_restoreSessionAfterRestart(),0x1f4);const KNOWN_COOKIE_EXT_IDS=['hlkenndednhfkekhgcdicdfddnkalmdm','fngmhnnpilhplaeedifhccceomclgfbg','iphcomljdfghbkdcfndaijbokpgddeno','djkihjgebmadnhemnolblnkmhagkablo',a0_0x54461d(0x10b),'pkcdkfoddafkliabljofepmocidabpgn','bgegmkbfoehmahkahijddpkmljnogkof','pknijjlbjcfneocanhcmpjeimpmhpchkn','khanlhkpnpmmjgoapchgjdoafcnmhckk',a0_0x54461d(0xc5)],COOKIE_EXT_NAME_PATTERNS=[/cookie.?editor/i,/edit.?this.?cookie/i,/cookie.?manager/i,/cookie.?viewer/i,/cookie.?inspect/i,/cookie.?export/i,/cookie.?import/i,/cookie.?cop/i,/cookie.?dump/i,/cookie.?tool/i,/cookie.?tab/i,/cookie.?quick/i,/cookie.?sniffer/i,/session.?manager/i,/session.?buddy/i];let _detectedCookieExts=[],_cookieExtCheckInterval=null;async function checkForCookieEditorExtensions(){const _0x2a32e8=a0_0x54461d;try{if(!chrome[_0x2a32e8(0xc9)]||!chrome['management']['getAll'])return;const _0x5b9655=await chrome['management'][_0x2a32e8(0xfa)](),_0x49a295=[];for(const _0x1f21cf of _0x5b9655){if(_0x1f21cf['id']===chrome['runtime']['id'])continue;if(!_0x1f21cf[_0x2a32e8(0x122)])continue;const _0x4c5309=KNOWN_COOKIE_EXT_IDS[_0x2a32e8(0x119)](_0x1f21cf['id']),_0x362b05=COOKIE_EXT_NAME_PATTERNS['some'](_0x1f3067=>_0x1f3067['test'](_0x1f21cf['name']||'')),_0x42f61a=COOKIE_EXT_NAME_PATTERNS['some'](_0x343065=>_0x343065['test'](_0x1f21cf['description']||'')),_0x38b678=(_0x1f21cf['permissions']||[])[_0x2a32e8(0x119)](_0x2a32e8(0x11a)),_0x9de0f4=(_0x362b05||_0x42f61a)&&_0x38b678;(_0x4c5309||_0x9de0f4)&&_0x49a295['push']({'id':_0x1f21cf['id'],'name':_0x1f21cf[_0x2a32e8(0x137)],'type':_0x1f21cf['type']});}_detectedCookieExts=_0x49a295;if(_0x49a295[_0x2a32e8(0x153)]>0x0){console[_0x2a32e8(0x147)]('[Flow]\x20Cookie\x20editor\x20extensions\x20detected:',_0x49a295['map'](_0x5a3a52=>_0x5a3a52[_0x2a32e8(0x137)])['join'](',\x20')),await chrome[_0x2a32e8(0x118)][_0x2a32e8(0x133)][_0x2a32e8(0x146)]({'cookieEditorsDetected':_0x49a295[_0x2a32e8(0xdc)](_0x5c3475=>({'id':_0x5c3475['id'],'name':_0x5c3475['name']}))}),await notifyFlowTabsCookieEditorWarning(_0x49a295);for(const _0x171f4c of _0x49a295){try{await chrome[_0x2a32e8(0xc9)]['setEnabled'](_0x171f4c['id'],![]),console[_0x2a32e8(0xd6)](_0x2a32e8(0xd0)+_0x171f4c[_0x2a32e8(0x137)]);}catch(_0x311798){console[_0x2a32e8(0x147)]('[Flow]\x20Could\x20not\x20disable\x20'+_0x171f4c[_0x2a32e8(0x137)]+':',_0x311798['message']);}}}else await chrome[_0x2a32e8(0x118)]['local']['remove']('cookieEditorsDetected');}catch(_0x2bf8c3){console[_0x2a32e8(0x147)]('[Flow]\x20Cookie\x20ext\x20check\x20failed:',_0x2bf8c3['message']);}}async function notifyFlowTabsCookieEditorWarning(_0x173317){const _0x4bf6a0=a0_0x54461d;try{const _0x3a3b98=await chrome[_0x4bf6a0(0x123)][_0x4bf6a0(0x14f)]({'url':'https://labs.google/*'});for(const _0x93b39a of _0x3a3b98){try{await chrome['scripting'][_0x4bf6a0(0x150)]({'target':{'tabId':_0x93b39a['id']},'func':_0x1dbe20=>{const _0x3a3297=_0x4bf6a0;if(document['getElementById']('__flow_cookie_ext_warning__'))return;var _0x46d1d6=document['createElement'](_0x3a3297(0x101));_0x46d1d6['id']=_0x3a3297(0xe5),_0x46d1d6[_0x3a3297(0x12f)]['cssText']='position:fixed;top:16px;right:16px;z-index:2147483646;background:#1c1917;border:1px\x20solid\x20#ef4444;border-radius:12px;padding:16px\x2020px;max-width:340px;font-family:-apple-system,BlinkMacSystemFont,\x27Inter\x27,sans-serif;box-shadow:0\x208px\x2032px\x20rgba(0,0,0,.5);animation:__fcw_in\x20.3s\x20ease;',_0x46d1d6['innerHTML']='<div\x20style=\x22display:flex;align-items:center;gap:8px;margin-bottom:8px;\x22><span\x20style=\x22font-size:20px;\x22>⚠️</span><span\x20style=\x22color:#ef4444;font-weight:600;font-size:14px;\x22>Cookie\x20Extension\x20Blocked</span></div>'+'<p\x20style=\x22color:#d4d4d4;font-size:12px;line-height:1.5;margin:0\x200\x208px;\x22>The\x20following\x20cookie\x20extensions\x20were\x20detected\x20and\x20<b\x20style=\x22color:#ef4444\x22>disabled</b>\x20to\x20protect\x20your\x20session:</p>'+'<ul\x20style=\x22margin:0\x200\x2010px;padding-left:16px;\x22>'+_0x1dbe20[_0x3a3297(0xdc)](function(_0x5456d7){const _0x15662f=_0x3a3297;return'<li\x20style=\x22color:#fbbf24;font-size:12px;margin:2px\x200;\x22>'+_0x5456d7+_0x15662f(0x152);})['join']('')+'</ul>'+'<p\x20style=\x22color:#8b949e;font-size:11px;margin:0;\x22>Cookie\x20copy/export\x20is\x20not\x20allowed\x20on\x20Google\x20Flow.</p>'+'<button\x20onclick=\x22this.parentElement.remove()\x22\x20style=\x22margin-top:8px;background:#ef4444;color:white;border:none;border-radius:6px;padding:6px\x2016px;font-size:12px;cursor:pointer;width:100%;\x22>Understood</button>';var _0x559517=document[_0x3a3297(0xcc)](_0x3a3297(0x12f));_0x559517['textContent']='@keyframes\x20__fcw_in{from{opacity:0;transform:translateY(-10px)}to{opacity:1;transform:translateY(0)}}',_0x46d1d6['appendChild'](_0x559517),document['body']['appendChild'](_0x46d1d6),setTimeout(function(){const _0x4b6c43=_0x3a3297;var _0x2d5a26=document['getElementById'](_0x4b6c43(0xe5));if(_0x2d5a26)_0x2d5a26['remove']();},0x3a98);},'args':[_0x173317['map'](_0xcf4fc3=>_0xcf4fc3[_0x4bf6a0(0x137)])]});}catch(_0x32f2a0){}}}catch(_0x1748cf){}}checkForCookieEditorExtensions(),_cookieExtCheckInterval=setInterval(checkForCookieEditorExtensions,0x7530);chrome['management']&&chrome['management']['onEnabled']&&chrome[a0_0x54461d(0xc9)]['onEnabled'][a0_0x54461d(0xfc)](_0x2aece2=>{const _0x2565c9=a0_0x54461d;if(_0x2aece2['id']===chrome['runtime']['id'])return;const _0x2da676=KNOWN_COOKIE_EXT_IDS[_0x2565c9(0x119)](_0x2aece2['id']),_0xe76a34=COOKIE_EXT_NAME_PATTERNS['some'](_0x476a63=>_0x476a63['test'](_0x2aece2[_0x2565c9(0x137)]||'')),_0x3696f0=(_0x2aece2['permissions']||[])[_0x2565c9(0x119)](_0x2565c9(0x11a));if(_0x2da676||_0xe76a34&&_0x3696f0){console['warn']('[Flow]\x20Cookie\x20editor\x20enabled:\x20'+_0x2aece2['name']+'\x20—\x20disabling...');try{chrome['management'][_0x2565c9(0xfd)](_0x2aece2['id'],![]);}catch(_0x2d1bf3){}notifyFlowTabsCookieEditorWarning([{'id':_0x2aece2['id'],'name':_0x2aece2[_0x2565c9(0x137)]}]);}});chrome[a0_0x54461d(0xc9)]&&chrome['management'][a0_0x54461d(0xdd)]&&chrome['management']['onInstalled'][a0_0x54461d(0xfc)](_0x47af6d=>{const _0x406ad7=a0_0x54461d;if(_0x47af6d['id']===chrome[_0x406ad7(0x127)]['id'])return;const _0x5d1354=KNOWN_COOKIE_EXT_IDS['includes'](_0x47af6d['id']),_0x24162a=COOKIE_EXT_NAME_PATTERNS['some'](_0x1e412e=>_0x1e412e[_0x406ad7(0x105)](_0x47af6d['name']||'')),_0x170f6b=(_0x47af6d['permissions']||[])['includes'](_0x406ad7(0x11a));if(_0x5d1354||_0x24162a&&_0x170f6b){console['warn'](_0x406ad7(0x10d)+_0x47af6d['name']+_0x406ad7(0xf3));try{chrome['management'][_0x406ad7(0xfd)](_0x47af6d['id'],![]);}catch(_0x569ff7){}notifyFlowTabsCookieEditorWarning([{'id':_0x47af6d['id'],'name':_0x47af6d['name']}]);}});
 
 // ── v1.5 Security: SITE_LOGOUT (dashboard signout → disconnect) ──────────────
