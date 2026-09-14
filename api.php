@@ -1518,6 +1518,7 @@ if (preg_match('#^/api/extension(2)?/#', $basePath)) {
         $reqAccountId = $body['accountId'] ?? $_GET['accountId'] ?? null;
         $reqService = $body['service'] ?? $_GET['service'] ?? null;
         $reqTargetUrl = $body['targetUrl'] ?? $body['accountUrl'] ?? $_GET['targetUrl'] ?? null;
+        $userKey = $body['userId'] ?? $body['token'] ?? $body['sessionToken'] ?? ($_SERVER['HTTP_X_BF_DEVICE_ID'] ?? null);
 
         $stmt = $pdo->query("SELECT * FROM shared_accounts WHERE status = 'active' ORDER BY updated_at DESC");
         $accounts = $stmt->fetchAll();
@@ -1528,11 +1529,36 @@ if (preg_match('#^/api/extension(2)?/#', $basePath)) {
         }
 
         $acc = null;
+
+        // 1. If explicit account ID requested, use that exact account:
         if ($reqAccountId) {
             foreach ($accounts as $a) {
                 if ($a['id'] === $reqAccountId) { $acc = $a; break; }
             }
         }
+
+        // 2. If no account ID provided, check user's saved active session in DB:
+        if (!$acc && $userKey) {
+            try {
+                $targetUserId = $userKey;
+                $userCheck = $pdo->prepare("SELECT id FROM users WHERE id = ? OR auth_token = ? LIMIT 1");
+                $userCheck->execute([$userKey, $userKey]);
+                $uRow = $userCheck->fetch();
+                if ($uRow) $targetUserId = $uRow['id'];
+
+                $sessStmt = $pdo->prepare("SELECT sa.* FROM extension_sessions es 
+                    JOIN shared_accounts sa ON es.account_id = sa.id 
+                    WHERE es.user_id = ? AND sa.status = 'active' 
+                    ORDER BY es.last_active DESC LIMIT 1");
+                $sessStmt->execute([$targetUserId]);
+                $lastAcc = $sessStmt->fetch();
+                if ($lastAcc) {
+                    $acc = $lastAcc;
+                }
+            } catch (Exception $e) {}
+        }
+
+        // 3. Fallback: match by target URL host:
         if (!$acc && $reqTargetUrl) {
             $uHost = strtolower(parse_url($reqTargetUrl, PHP_URL_HOST) ?? '');
             foreach ($accounts as $a) {
@@ -1543,6 +1569,8 @@ if (preg_match('#^/api/extension(2)?/#', $basePath)) {
                 }
             }
         }
+
+        // 4. Fallback: match by service name:
         if (!$acc && $reqService) {
             $sLower = strtolower($reqService);
             foreach ($accounts as $a) {
@@ -1552,8 +1580,24 @@ if (preg_match('#^/api/extension(2)?/#', $basePath)) {
                 }
             }
         }
+
         if (!$acc) {
             $acc = $accounts[0];
+        }
+
+        // 5. Persist this account as active session for user in DB so refreshes remain on this account:
+        if ($userKey && $acc) {
+            try {
+                $targetUserId = $userKey;
+                $userCheck = $pdo->prepare("SELECT id FROM users WHERE id = ? OR auth_token = ? LIMIT 1");
+                $userCheck->execute([$userKey, $userKey]);
+                $uRow = $userCheck->fetch();
+                if ($uRow) $targetUserId = $uRow['id'];
+
+                $sessId = 'es_' . md5($targetUserId . '_' . ($acc['account_type_id'] ?? 'flow'));
+                $pdo->prepare("REPLACE INTO extension_sessions (id, user_id, account_id, last_active) VALUES (?, ?, ?, NOW())")
+                    ->execute([$sessId, $targetUserId, $acc['id']]);
+            } catch (Exception $e) {}
         }
 
         $parsedCookies = json_decode($acc['cookies'] ?? '[]', true) ?: [];
