@@ -73,6 +73,22 @@ body::-webkit-scrollbar {
   background: transparent !important;
 }
 
+@keyframes dcx-spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+@keyframes dcx-pulse {
+  0%, 100% { transform: scale(1); opacity: 0.9; }
+  50% { transform: scale(1.06); opacity: 1; filter: drop-shadow(0 0 12px rgba(56, 189, 248, 0.45)); }
+}
+
+@keyframes dcx-bar {
+  0% { left: -45%; width: 35%; }
+  50% { width: 65%; }
+  100% { left: 100%; width: 35%; }
+}
+
 .cisco-simulator-root {
   min-height: 100vh;
   display: flex;

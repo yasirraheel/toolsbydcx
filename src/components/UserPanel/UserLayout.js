@@ -342,7 +342,11 @@ function UserLayout({ currentUser, onExitUserPanel, onSwitchPortal, onLogout }) 
           {activeTab === 'projects' && <UserProjects />}
 
           {(activeTab.startsWith('account-') || activeTab === 'resources') && (
-            <UserResources accountType={selectedAccountType || (accountTypes.find(at => `account-${at.slug}` === activeTab) || accountTypes[0])} />
+            <UserResources accountType={selectedAccountType || (accountTypes.find(at => `account-${at.slug}` === activeTab) || (activeTab.startsWith('account-') ? {
+              slug: activeTab.replace('account-', ''),
+              name: activeTab.replace('account-', '').charAt(0).toUpperCase() + activeTab.replace('account-', '').slice(1),
+              icon: activeTab.includes('flow') ? '🌊' : '🚀'
+            } : accountTypes[0]))} />
           )}
 
           {activeTab === 'sessions' && <UserSessions />}

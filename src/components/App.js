@@ -80,6 +80,12 @@ export default function App() {
     }
   });
 
+  const [isAuthInitializing, setIsAuthInitializing] = useState(() => {
+    const token = localStorage.getItem("ccna_auth_token");
+    const stored = localStorage.getItem("ccna_auth_user");
+    return Boolean(token && !stored);
+  });
+
   const [currentView, setCurrentView] = useState(() => {
     const raw = getViewFromUrl();
     const stored = (() => {
@@ -139,6 +145,7 @@ export default function App() {
   }, [currentUser]);
 
   useEffect(() => {
+    if (isAuthInitializing) return;
     if (currentUser) {
       const permitted = getPermittedView(currentView, currentUser);
       if (permitted !== currentView) {
@@ -150,7 +157,7 @@ export default function App() {
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentUser]);
+  }, [currentUser, isAuthInitializing]);
 
   const syncExtensionAuth = (user, token) => {
     if (!user || !token) return;
@@ -228,8 +235,12 @@ export default function App() {
         })
         .catch(() => {
           handleLogout("Your session has expired or account is no longer authorized. Please sign in again.");
+        })
+        .finally(() => {
+          setIsAuthInitializing(false);
         });
     } else {
+      setIsAuthInitializing(false);
       const stored = localStorage.getItem("ccna_auth_user");
       if (stored || currentUser) {
         handleLogout("Session expired. Please sign in to continue.");
@@ -244,10 +255,16 @@ export default function App() {
 
   const handleAuthSuccess = (user, token) => {
     setCurrentUser(user);
+    if (user) {
+      try {
+        localStorage.setItem("ccna_auth_user", JSON.stringify(user));
+      } catch (_) {}
+    }
     if (token) {
       localStorage.setItem("ccna_auth_token", token);
       syncExtensionAuth(user, token);
     }
+    setIsAuthInitializing(false);
     setAuthModal({ isOpen: false, mode: "login", errorMsg: "" });
 
     if (user.role === "admin") {
@@ -258,6 +275,72 @@ export default function App() {
       handleNavigate("user-panel", user);
     }
   };
+
+  if (isAuthInitializing) {
+    return (
+      <div style={{
+        position: 'fixed',
+        top: 0,
+        left: 0,
+        width: '100vw',
+        height: '100vh',
+        background: '#090d16',
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        zIndex: 999999,
+        fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Inter", sans-serif',
+        color: '#f1f5f9'
+      }}>
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', maxWidth: '320px', padding: '24px' }}>
+          <div style={{ position: 'relative', width: '68px', height: '68px', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '18px' }}>
+            <div style={{
+              position: 'absolute',
+              inset: 0,
+              borderRadius: '50%',
+              border: '3px solid rgba(56, 189, 248, 0.15)',
+              borderTopColor: '#22c55e',
+              borderRightColor: '#38bdf8',
+              animation: 'dcx-spin 0.9s cubic-bezier(0.55, 0.15, 0.45, 0.85) infinite'
+            }} />
+            <div style={{
+              width: '42px',
+              height: '42px',
+              borderRadius: '12px',
+              background: 'rgba(34, 197, 94, 0.12)',
+              border: '1px solid rgba(34, 197, 94, 0.28)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontSize: '20px',
+              boxShadow: '0 0 24px rgba(34, 197, 94, 0.25)'
+            }}>
+              ⚡
+            </div>
+          </div>
+          <div style={{ fontSize: '20px', fontWeight: 800, letterSpacing: '-0.4px', color: '#ffffff', marginBottom: '6px' }}>
+            ToolsBy<span style={{ color: '#22c55e' }}>Dcx</span>
+          </div>
+          <div style={{ fontSize: '13px', color: '#94a3b8', marginBottom: '18px', fontWeight: 500 }}>
+            Verifying secure session...
+          </div>
+          <div style={{ width: '160px', height: '3px', background: 'rgba(255, 255, 255, 0.08)', borderRadius: '3px', overflow: 'hidden', position: 'relative' }}>
+            <div style={{
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              height: '100%',
+              width: '45%',
+              background: 'linear-gradient(90deg, #22c55e, #38bdf8)',
+              borderRadius: '3px',
+              animation: 'dcx-bar 1.4s ease-in-out infinite'
+            }} />
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   if (currentView === "admin") {
     if (currentUser?.role === "admin") {
