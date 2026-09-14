@@ -930,6 +930,87 @@ if (preg_match('#^/api/admin/#', $basePath)) {
         exit;
     }
 
+    // Helper: Filter and keep only essential cookies for shared accounts
+    function sanitizeAccountCookies($rawCookies, $serviceName = '', $targetUrl = '') {
+        $decoded = is_string($rawCookies) ? json_decode($rawCookies, true) : $rawCookies;
+        if (!is_array($decoded)) {
+            return is_string($rawCookies) ? $rawCookies : json_encode($rawCookies ?? []);
+        }
+
+        $svc = strtolower(trim($serviceName));
+        $url = strtolower(trim($targetUrl));
+        $isGoogleFlow = str_contains($svc, 'flow') || str_contains($svc, 'google') || str_contains($url, 'flow.google.com') || str_contains($url, 'labs.google');
+        $isChatGPT = str_contains($svc, 'chatgpt') || str_contains($svc, 'openai') || str_contains($url, 'chatgpt.com') || str_contains($url, 'openai.com');
+
+        $targetHost = '';
+        if (!empty($targetUrl)) {
+            $parsedUrl = parse_url($targetUrl);
+            $targetHost = strtolower($parsedUrl['host'] ?? '');
+        }
+
+        $seen = [];
+
+        foreach ($decoded as $item) {
+            if (!is_array($item) && !is_object($item)) continue;
+            $item = (array) $item;
+            $name = trim($item['name'] ?? $item['key'] ?? '');
+            $val  = $item['value'] ?? $item['val'] ?? null;
+            $domain = strtolower(trim($item['domain'] ?? ''));
+
+            if ($name === '' || $val === null) continue;
+
+            if (isset($item['key']) && !isset($item['name'])) $item['name'] = $name;
+            if (isset($item['val']) && !isset($item['value'])) $item['value'] = $val;
+            unset($item['key'], $item['val']);
+
+            if ($isGoogleFlow) {
+                // Keep ONLY .google.com, google.com, or subdomains matching flow.google.com / labs.google
+                $isFlowDomain = empty($domain)
+                    || $domain === '.google.com'
+                    || $domain === 'google.com'
+                    || str_contains($domain, 'flow.google.com')
+                    || str_contains($domain, 'labs.google');
+
+                if (!$isFlowDomain) {
+                    continue;
+                }
+
+                // Discard telemetry & advertising trackers
+                if (str_starts_with($name, '_ga') || str_starts_with($name, '__utm') || $name === 'NID' || $name === 'SNID' || $name === '1P_JAR') {
+                    continue;
+                }
+            } elseif ($isChatGPT) {
+                $isChatGptDomain = empty($domain)
+                    || str_contains($domain, 'chatgpt.com')
+                    || str_contains($domain, 'openai.com')
+                    || str_contains($domain, 'oaistatic.com');
+
+                if (!$isChatGptDomain) {
+                    continue;
+                }
+
+                if (str_starts_with($name, '_ga') || str_starts_with($name, '__utm')) {
+                    continue;
+                }
+            } elseif (!empty($targetHost)) {
+                $cleanHost = preg_replace('/^www\./', '', $targetHost);
+                $isMatch = empty($domain) || str_contains($domain, $cleanHost) || str_contains($cleanHost, ltrim($domain, '.'));
+                if (!$isMatch) {
+                    continue;
+                }
+                if (str_starts_with($name, '_ga') || str_starts_with($name, '__utm')) {
+                    continue;
+                }
+            }
+
+            $dedupKey = $domain . '|' . $name;
+            $seen[$dedupKey] = $item;
+        }
+
+        $sanitized = !empty($seen) ? array_values($seen) : $decoded;
+        return json_encode($sanitized, JSON_UNESCAPED_SLASHES | JSON_PRETTY_PRINT);
+    }
+
     // 8.13 Shared Accounts: GET /api/admin/accounts
     if (preg_match('#^/api/admin/accounts$#', $basePath) && $method === 'GET') {
         $accounts = $pdo->query("SELECT sa.*, at.name AS account_type_name, at.slug AS account_type_slug, at.icon AS account_type_icon 
@@ -952,7 +1033,8 @@ if (preg_match('#^/api/admin/#', $basePath)) {
         $targetUrl = trim($body['target_url'] ?? '');
         $accountTypeId = trim($body['account_type_id'] ?? '') ?: null;
         $description = trim($body['description'] ?? '');
-        $cookies = is_array($body['cookies'] ?? null) ? json_encode($body['cookies']) : ($body['cookies'] ?? '[]');
+        $rawCookies = $body['cookies'] ?? '[]';
+        $cookies = sanitizeAccountCookies($rawCookies, $serviceName, $targetUrl);
         $status = $body['status'] ?? 'active';
         $allowed = json_encode($body['allowed_plans'] ?? ['plan_pro']);
         $maxUsers = (int)($body['max_users'] ?? 100);
@@ -972,7 +1054,8 @@ if (preg_match('#^/api/admin/#', $basePath)) {
         $targetUrl = trim($body['target_url'] ?? '');
         $accountTypeId = trim($body['account_type_id'] ?? '') ?: null;
         $description = trim($body['description'] ?? '');
-        $cookies = is_array($body['cookies'] ?? null) ? json_encode($body['cookies']) : ($body['cookies'] ?? '[]');
+        $rawCookies = $body['cookies'] ?? '[]';
+        $cookies = sanitizeAccountCookies($rawCookies, $serviceName, $targetUrl);
         $status = $body['status'] ?? 'active';
         $allowed = json_encode($body['allowed_plans'] ?? ['plan_pro']);
         $maxUsers = (int)($body['max_users'] ?? 100);

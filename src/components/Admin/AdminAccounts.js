@@ -170,29 +170,151 @@ function AdminAccounts() {
     }
   };
 
+  const sanitizeCookies = (rawText, serviceName = '', targetUrl = '') => {
+    if (!rawText || !rawText.trim()) return { valid: false, message: 'Cookie data cannot be empty.' };
+    try {
+      const parsed = JSON.parse(rawText);
+      if (!Array.isArray(parsed)) {
+        return { valid: false, message: 'Cookies must be a JSON array of cookie objects.' };
+      }
+
+      const svc = (serviceName || '').toLowerCase().trim();
+      const url = (targetUrl || '').toLowerCase().trim();
+      const isGoogleFlow = svc.includes('flow') || svc.includes('google') || url.includes('flow.google.com') || url.includes('labs.google');
+      const isChatGPT = svc.includes('chatgpt') || svc.includes('openai') || url.includes('chatgpt.com') || url.includes('openai.com');
+
+      let targetHost = '';
+      if (targetUrl) {
+        try {
+          const u = new URL(targetUrl.startsWith('http') ? targetUrl : `https://${targetUrl}`);
+          targetHost = u.hostname.toLowerCase();
+        } catch (e) {}
+      }
+
+      const seen = new Map();
+      let originalCount = 0;
+
+      for (const rawItem of parsed) {
+        if (!rawItem || typeof rawItem !== 'object') continue;
+        const item = { ...rawItem };
+        const name = String(item.name || item.key || '').trim();
+        const val = item.value !== undefined ? item.value : item.val;
+        const domain = String(item.domain || '').toLowerCase().trim();
+
+        if (!name || val === undefined || val === null) continue;
+        originalCount++;
+
+        if (item.key && !item.name) item.name = name;
+        if (item.val !== undefined && item.value === undefined) item.value = val;
+        delete item.key;
+        delete item.val;
+
+        if (isGoogleFlow) {
+          const isFlowDomain = !domain ||
+            domain === '.google.com' ||
+            domain === 'google.com' ||
+            domain.includes('flow.google.com') ||
+            domain.includes('labs.google');
+
+          if (!isFlowDomain) continue;
+
+          if (name.startsWith('_ga') || name.startsWith('__utm') || name === 'NID' || name === 'SNID' || name === '1P_JAR') {
+            continue;
+          }
+        } else if (isChatGPT) {
+          const isChatGptDomain = !domain ||
+            domain.includes('chatgpt.com') ||
+            domain.includes('openai.com') ||
+            domain.includes('oaistatic.com');
+
+          if (!isChatGptDomain) continue;
+
+          if (name.startsWith('_ga') || name.startsWith('__utm')) continue;
+        } else if (targetHost) {
+          const cleanHost = targetHost.replace(/^www\./, '');
+          const isMatch = !domain || domain.includes(cleanHost) || cleanHost.includes(domain.replace(/^\./, ''));
+          if (!isMatch) continue;
+          if (name.startsWith('_ga') || name.startsWith('__utm')) continue;
+        }
+
+        const dedupKey = `${domain}|${name}`;
+        seen.set(dedupKey, item);
+      }
+
+      const sanitizedArray = Array.from(seen.values());
+      const sanitizedText = JSON.stringify(sanitizedArray, null, 2);
+      const keptCount = sanitizedArray.length;
+      const removedCount = originalCount - keptCount;
+      const domains = [...new Set(sanitizedArray.map(c => c.domain || 'current domain'))].join(', ');
+
+      return {
+        valid: keptCount > 0,
+        sanitizedText,
+        originalCount,
+        keptCount,
+        removedCount,
+        domains,
+        message: keptCount > 0
+          ? (removedCount > 0
+            ? `Sanitized: Kept ${keptCount} essential cookies (${removedCount} unrelated/tracker cookies filtered out).`
+            : `Valid: ${keptCount} cookie(s) detected.`)
+          : 'No valid essential cookies remained after filtering.'
+      };
+    } catch (e) {
+      return { valid: false, message: `JSON syntax error: ${e.message}` };
+    }
+  };
+
   const handleFormatCookieJson = () => {
     if (!editingAccount || !editingAccount.cookies) return;
-    try {
-      const parsed = JSON.parse(editingAccount.cookies);
-      const formatted = JSON.stringify(parsed, null, 2);
-      setEditingAccount({ ...editingAccount, cookies: formatted });
-      setCookieValidation({ valid: true, count: parsed.length, domains: [...new Set(parsed.map(c => c.domain || 'current domain'))].join(', ') });
-    } catch (e) {
-      setCookieValidation({ valid: false, message: 'Could not auto-format: Invalid JSON.' });
+    const res = sanitizeCookies(editingAccount.cookies, editingAccount.service_name, editingAccount.target_url);
+    if (res.valid) {
+      setEditingAccount({ ...editingAccount, cookies: res.sanitizedText });
+      setCookieValidation({
+        valid: true,
+        count: res.keptCount,
+        domains: res.domains,
+        message: res.message
+      });
+    } else {
+      try {
+        const parsed = JSON.parse(editingAccount.cookies);
+        const formatted = JSON.stringify(parsed, null, 2);
+        setEditingAccount({ ...editingAccount, cookies: formatted });
+        setCookieValidation({ valid: true, count: parsed.length, domains: [...new Set(parsed.map(c => c.domain || 'current domain'))].join(', ') });
+      } catch (e) {
+        setCookieValidation({ valid: false, message: 'Could not auto-format: Invalid JSON.' });
+      }
     }
   };
 
   const handleValidateClick = () => {
     if (!editingAccount) return;
-    const res = validateCookieText(editingAccount.cookies);
-    setCookieValidation(res);
+    const res = sanitizeCookies(editingAccount.cookies, editingAccount.service_name, editingAccount.target_url);
+    if (res.valid) {
+      setCookieValidation({
+        valid: true,
+        count: res.keptCount,
+        domains: res.domains,
+        message: res.removedCount > 0
+          ? `Detected ${res.keptCount} essential cookies (${res.removedCount} unneeded cookies can be filtered with "Filter & Format Essentials"). Domains: ${res.domains}`
+          : `Valid: ${res.keptCount} cookie(s) detected for domain(s): ${res.domains}`
+      });
+    } else {
+      const basic = validateCookieText(editingAccount.cookies);
+      setCookieValidation(basic);
+    }
   };
 
   const handleSaveAccount = async (e) => {
     e.preventDefault();
     if (!editingAccount) return;
 
-    const validation = validateCookieText(editingAccount.cookies);
+    // Automatically filter out unneeded cookies before saving
+    const sanitized = sanitizeCookies(editingAccount.cookies, editingAccount.service_name, editingAccount.target_url);
+    const finalCookies = sanitized.valid ? sanitized.sanitizedText : editingAccount.cookies;
+
+    const validation = validateCookieText(finalCookies);
     if (!validation.valid) {
       setCookieValidation(validation);
       return;
@@ -703,7 +825,7 @@ function AdminAccounts() {
                       onClick={handleFormatCookieJson}
                       style={{ background: '#1e293b', border: '1px solid #334155', color: '#93c5fd', padding: '4px 8px', borderRadius: '6px', fontSize: '11px', cursor: 'pointer' }}
                     >
-                      🧹 Auto-Format JSON
+                      🧹 Filter & Format Essentials
                     </button>
                     <button
                       type="button"
@@ -747,7 +869,7 @@ function AdminAccounts() {
                     color: cookieValidation.valid ? '#6ee7b7' : '#fca5a5'
                   }}>
                     {cookieValidation.valid
-                      ? `✅ Valid: ${cookieValidation.count} cookie(s) detected for domain(s): ${cookieValidation.domains}`
+                      ? `✅ ${cookieValidation.message || `Valid: ${cookieValidation.count} cookie(s) detected for domain(s): ${cookieValidation.domains}`}`
                       : `⚠️ ${cookieValidation.message}`}
                   </div>
                 )}
