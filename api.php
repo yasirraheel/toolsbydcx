@@ -1429,6 +1429,9 @@ if (preg_match('#^/api/user/#', $basePath)) {
 
     // 10.2 User Resources / Shared Accounts: GET /api/user/resources
     if (preg_match('#^/api/user/resources#', $basePath) && $method === 'GET') {
+        header("Cache-Control: no-store, no-cache, must-revalidate, max-age=0");
+        header("Pragma: no-cache");
+        header("Expires: 0");
         $typeParam = $_GET['type'] ?? null;
         $sql = "SELECT sa.id, sa.service_name, sa.service_name AS name, sa.service_name AS service, sa.target_url, sa.description, sa.status, sa.account_type_id, at.name as account_type_name, at.slug as account_type_slug, at.icon as account_type_icon 
             FROM shared_accounts sa 
@@ -1509,6 +1512,9 @@ if (preg_match('#^/api/user/#', $basePath)) {
 if (preg_match('#^/api/extension(2)?/#', $basePath)) {
     // 11.1 Extension Inject Cookies: POST /api/extension/inject-cookies
     if (preg_match('#^/api/extension(2)?/inject-cookies#', $basePath) && $method === 'POST') {
+        header("Cache-Control: no-store, no-cache, must-revalidate, max-age=0");
+        header("Pragma: no-cache");
+        header("Expires: 0");
         $reqAccountId = $body['accountId'] ?? $_GET['accountId'] ?? null;
         $reqService = $body['service'] ?? $_GET['service'] ?? null;
         $reqTargetUrl = $body['targetUrl'] ?? $body['accountUrl'] ?? $_GET['targetUrl'] ?? null;
