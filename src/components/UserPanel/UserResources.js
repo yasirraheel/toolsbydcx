@@ -19,7 +19,11 @@ function UserResources({ accountType }) {
     try {
       setLoading(true);
       const queryParam = accountType?.slug ? `?type=${encodeURIComponent(accountType.slug)}` : '';
-      const res = await fetch(`${API_BASE}/user/resources${queryParam}`, { headers: getAuthHeaders() });
+      const sep = queryParam ? '&' : '?';
+      const res = await fetch(`${API_BASE}/user/resources${queryParam}${sep}_t=${Date.now()}`, {
+        headers: getAuthHeaders(),
+        cache: 'no-store'
+      });
       const data = await res.json();
       if (data.resources) {
         setResources(data.resources);
@@ -47,11 +51,15 @@ function UserResources({ accountType }) {
         detail: {
           accountId: resource.id,
           service: resource.service || resource.service_name,
-          targetUrl: resource.target_url
+          targetUrl: resource.target_url,
+          timestamp: Date.now()
         }
       }));
 
-      // 2. Open target URL directly in new tab
+      // 2. Allow extension to fetch realtime cookies and apply to browser session BEFORE opening the tab
+      await new Promise((resolve) => setTimeout(resolve, 600));
+
+      // 3. Open target URL directly in new tab with fresh cookies already active
       const url = resource.target_url || 'https://flow.google.com/';
       window.open(url, '_blank', 'noopener,noreferrer');
     } catch (e) {
