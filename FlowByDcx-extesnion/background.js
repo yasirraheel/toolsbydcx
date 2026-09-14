@@ -820,17 +820,17 @@ chrome.tabs.onUpdated.addListener(function(tabId, changeInfo, tab) {
   if (url.includes('flow.google.com') || url.includes('labs.google/fx/tools/flow')) {
     if (changeInfo.status === 'loading') {
       const lastInj = __tabInjectedMap.get(tabId) || 0;
-      if (Date.now() - lastInj > 30000) {
+      if (Date.now() - lastInj > 45000) {
         __tabInjectedMap.set(tabId, Date.now());
-        bunnyflowInjectCookies({ force: true, targetUrl: url, service: 'google_flow' });
+        bunnyflowInjectCookies({ force: false, targetUrl: url, service: 'google_flow', skipReloadTabId: tabId });
       }
     }
   } else if (url.includes('chatgpt.com') || url.includes('openai.com')) {
     if (changeInfo.status === 'loading' || changeInfo.status === 'complete') {
       const lastInj = __tabInjectedMap.get(tabId) || 0;
-      if (Date.now() - lastInj > 30000) {
+      if (Date.now() - lastInj > 45000) {
         __tabInjectedMap.set(tabId, Date.now());
-        bunnyflowInjectCookies({ force: true, targetUrl: url, service: 'chatgpt' });
+        bunnyflowInjectCookies({ force: false, targetUrl: url, service: 'chatgpt', skipReloadTabId: tabId });
       }
     }
   } else {
@@ -1121,17 +1121,38 @@ async function bunnyflowInjectCookies(opts) {
   opts = opts || {};
   const force = !!opts.force;
   const targetUrl = opts.targetUrl || '';
-  const accountId = opts.accountId || '';
+  let accountId = opts.accountId || '';
   const service = opts.service || '';
+  const skipReloadTabId = opts.skipReloadTabId || null;
   const now = Date.now();
   if (!force && (now - __bunnyflowLastInjectAt) < 15000) return { ok: false, reason: 'cooldown' };
   if (__bunnyflowInjectInFlight) return __bunnyflowInjectInFlight;
   __bunnyflowInjectInFlight = (async function() {
     try {
-      const stored = await chrome.storage.local.get(['token', 'sessionToken', 'deviceId', 'apiBase', 'userId']);
+      const stored = await chrome.storage.local.get([
+        'token', 'sessionToken', 'deviceId', 'apiBase', 'userId',
+        'active_account_flow', 'active_account_chatgpt', 'active_account_id'
+      ]);
       const token = stored.token || stored.sessionToken || stored.userId;
       if (!token) return { ok: false, reason: 'no_token' };
       const deviceId = stored.deviceId;
+
+      // Determine service key so each tool remembers its selected account
+      let serviceKey = 'active_account_id';
+      if (service === 'google_flow' || (targetUrl && (targetUrl.includes('flow.google.com') || targetUrl.includes('labs.google')))) {
+        serviceKey = 'active_account_flow';
+      } else if (service === 'chatgpt' || (targetUrl && (targetUrl.includes('chatgpt.com') || targetUrl.includes('openai.com')))) {
+        serviceKey = 'active_account_chatgpt';
+      }
+
+      if (accountId) {
+        // Explicit launch or switch: persist this account so refreshes keep it!
+        await chrome.storage.local.set({ [serviceKey]: accountId, active_account_id: accountId });
+      } else {
+        // Refresh or background check: use the saved active account for this service!
+        accountId = stored[serviceKey] || stored.active_account_id || '';
+      }
+
       const injectHeaders = { 'Content-Type': 'application/json' };
       const injectBody = {
         token: token,
@@ -1146,10 +1167,11 @@ async function bunnyflowInjectCookies(opts) {
       }
       const base = stored.apiBase ? String(stored.apiBase).replace(/\/+$/, '') : 'http://localhost:5000';
       const injectUrl = base.includes(':3000') ? 'http://localhost:5000/api/extension/inject-cookies' : (base + '/api/extension/inject-cookies');
-      const resp = await fetch(injectUrl, {
+      const resp = await fetch(injectUrl + '?_t=' + Date.now(), {
         method: 'POST',
         headers: injectHeaders,
         body: JSON.stringify(injectBody),
+        cache: 'no-store'
       });
       const data = await resp.json().catch(function() { return {}; });
       if (!resp.ok || !data.ok || !Array.isArray(data.cookies)) {
@@ -1157,10 +1179,16 @@ async function bunnyflowInjectCookies(opts) {
       }
       const result = await bunnyflowApplyCookies(data.cookies, data.accountUrl || targetUrl);
       __bunnyflowLastInjectAt = Date.now();
+
+      const activeSessionId = data.sessionId || accountId || 0;
+      if (activeSessionId) {
+        chrome.storage.local.set({ [serviceKey]: activeSessionId, active_account_id: activeSessionId });
+      }
+
       try {
         chrome.storage.local.set({
           ext_last_inject_at: __bunnyflowLastInjectAt,
-          ext_session_id: data.sessionId || 0,
+          ext_session_id: activeSessionId,
           ext_session_label: data.sessionLabel || '',
           ext_cookies_applied: result.applied,
           userPlan: (data.plan || '').toLowerCase(),
@@ -1188,6 +1216,10 @@ async function bunnyflowInjectCookies(opts) {
             chrome.tabs.query({}, function(tabs) {
               (tabs || []).forEach(function(t) {
                 if (t && t.id && t.url && t.url.includes(cleanHost)) {
+                  // Skip tab that triggered this injection during its own page reload
+                  if (skipReloadTabId && t.id === skipReloadTabId) {
+                    return;
+                  }
                   const lastR = self.__dcxTabReloadMap[t.id] || 0;
                   if (Date.now() - lastR < 30000) {
                     console.log('[ToolsByDcx] Tab was recently reloaded — skipping reload loop:', t.id);
