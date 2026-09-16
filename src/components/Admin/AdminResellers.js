@@ -573,19 +573,60 @@ function AdminResellers({ currentUser, onViewClients }) {
       {/* EDIT RESELLER MODAL */}
       {editingReseller && (
         <div className="admin-modal-backdrop" onClick={() => setEditingReseller(null)}>
-          <div className="admin-modal-card" onClick={(e) => e.stopPropagation()}>
-            <div className="admin-modal-header">
-              <h4 className="admin-modal-title">Edit Reseller Partner</h4>
+          <div
+            className="admin-modal-card"
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              maxHeight: 'min(90vh, 760px)',
+              display: 'flex',
+              flexDirection: 'column',
+              overflow: 'hidden',
+              background: '#0d1322',
+              borderRadius: '16px',
+              boxShadow: '0 25px 70px rgba(0,0,0,0.85)'
+            }}
+          >
+            <div className="admin-modal-header" style={{ flexShrink: 0, padding: '18px 24px', background: '#111827', borderBottom: '1px solid #1e293b' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <span style={{ fontSize: '20px' }}>⚙️</span>
+                <h4 className="admin-modal-title" style={{ margin: 0, fontSize: '18px', fontWeight: 800, color: '#f8fafc' }}>
+                  Edit Reseller Partner
+                </h4>
+              </div>
               <button
                 type="button"
                 className="admin-modal-close"
                 onClick={() => setEditingReseller(null)}
+                style={{ fontSize: '20px', cursor: 'pointer', color: '#94a3b8', background: 'none', border: 'none' }}
               >
                 ✕
               </button>
             </div>
-            <form onSubmit={handleUpdateReseller}>
-              <div className="admin-modal-body">
+
+            <form
+              onSubmit={handleUpdateReseller}
+              style={{
+                display: 'flex',
+                flexDirection: 'column',
+                flex: 1,
+                minHeight: 0,
+                overflow: 'hidden'
+              }}
+            >
+              <div
+                className="admin-modal-body"
+                style={{
+                  flex: '1 1 auto',
+                  minHeight: 0,
+                  overflowY: 'auto',
+                  padding: '20px 24px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '16px',
+                  scrollbarWidth: 'thin',
+                  scrollbarColor: 'rgba(34, 197, 94, 0.4) #090d16'
+                }}
+              >
                 <div className="admin-form-group">
                   <label className="admin-form-label">Full Name / Company</label>
                   <input
@@ -606,6 +647,69 @@ function AdminResellers({ currentUser, onViewClients }) {
                     onChange={(e) => setEditingReseller({ ...editingReseller, email: e.target.value })}
                     required
                   />
+                </div>
+
+                {/* PROMINENT PER USER PRICE & WALLET BALANCE */}
+                <div style={{
+                  background: 'linear-gradient(135deg, rgba(245, 158, 11, 0.08), rgba(34, 197, 94, 0.08))',
+                  border: '1px solid rgba(245, 158, 11, 0.3)',
+                  borderRadius: '12px',
+                  padding: '16px',
+                  display: 'grid',
+                  gridTemplateColumns: '1fr 1fr',
+                  gap: '16px'
+                }}>
+                  <div className="admin-form-group">
+                    <label className="admin-form-label" style={{ color: '#f59e0b', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <span>💰 Per User Price ($)</span>
+                    </label>
+                    <span style={{ fontSize: '11px', color: '#94a3b8', marginTop: '-4px', marginBottom: '4px' }}>
+                      Wholesale cost charged per user
+                    </span>
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      className="admin-form-input"
+                      style={{ borderColor: '#f59e0b', background: '#0b1120', fontWeight: 700, fontSize: '15px', color: '#f59e0b' }}
+                      value={editingReseller.per_user_cost !== undefined ? editingReseller.per_user_cost : (editingReseller.perUserCost !== undefined ? editingReseller.perUserCost : '0.00')}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setEditingReseller({
+                          ...editingReseller,
+                          per_user_cost: val,
+                          perUserCost: val
+                        });
+                      }}
+                      placeholder="0.00 (Free) or e.g. 1.50"
+                    />
+                  </div>
+
+                  <div className="admin-form-group">
+                    <label className="admin-form-label" style={{ color: '#4ade80', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <span>💳 Wallet Balance ($)</span>
+                    </label>
+                    <span style={{ fontSize: '11px', color: '#94a3b8', marginTop: '-4px', marginBottom: '4px' }}>
+                      Reseller prepaid funds available
+                    </span>
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      className="admin-form-input"
+                      style={{ borderColor: '#22c55e', background: '#0b1120', fontWeight: 700, fontSize: '15px', color: '#4ade80' }}
+                      value={editingReseller.wallet_balance !== undefined ? editingReseller.wallet_balance : (editingReseller.walletBalance !== undefined ? editingReseller.walletBalance : '0.00')}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setEditingReseller({
+                          ...editingReseller,
+                          wallet_balance: val,
+                          walletBalance: val
+                        });
+                      }}
+                      placeholder="0.00"
+                    />
+                  </div>
                 </div>
 
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
@@ -677,58 +781,6 @@ function AdminResellers({ currentUser, onViewClients }) {
                   />
                 </div>
 
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
-                  <div className="admin-form-group">
-                    <label className="admin-form-label" style={{ color: '#f59e0b', fontWeight: 700 }}>
-                      Per User Price ($)
-                      <span style={{ fontSize: '12px', color: '#94a3b8', fontWeight: 400, marginLeft: '6px', display: 'block' }}>
-                        (Wholesale cost charged per user)
-                      </span>
-                    </label>
-                    <input
-                      type="number"
-                      step="0.01"
-                      min="0"
-                      className="admin-form-input"
-                      value={editingReseller.per_user_cost !== undefined ? editingReseller.per_user_cost : (editingReseller.perUserCost !== undefined ? editingReseller.perUserCost : '0.00')}
-                      onChange={(e) => {
-                        const val = e.target.value;
-                        setEditingReseller({
-                          ...editingReseller,
-                          per_user_cost: val,
-                          perUserCost: val
-                        });
-                      }}
-                      placeholder="0.00 (Free) or e.g. 1.50"
-                    />
-                  </div>
-
-                  <div className="admin-form-group">
-                    <label className="admin-form-label" style={{ color: '#4ade80', fontWeight: 700 }}>
-                      Wallet Balance ($)
-                      <span style={{ fontSize: '12px', color: '#94a3b8', fontWeight: 400, marginLeft: '6px', display: 'block' }}>
-                        (Reseller prepaid funds)
-                      </span>
-                    </label>
-                    <input
-                      type="number"
-                      step="0.01"
-                      min="0"
-                      className="admin-form-input"
-                      value={editingReseller.wallet_balance !== undefined ? editingReseller.wallet_balance : (editingReseller.walletBalance !== undefined ? editingReseller.walletBalance : '0.00')}
-                      onChange={(e) => {
-                        const val = e.target.value;
-                        setEditingReseller({
-                          ...editingReseller,
-                          wallet_balance: val,
-                          walletBalance: val
-                        });
-                      }}
-                      placeholder="0.00"
-                    />
-                  </div>
-                </div>
-
                 <div className="admin-form-group">
                   <label className="admin-form-label">
                     Custom Domain for User Creation
@@ -776,15 +828,40 @@ function AdminResellers({ currentUser, onViewClients }) {
                 </div>
               </div>
 
-              <div className="admin-modal-footer">
+              {/* ALWAYS PINNED FOOTER - 100% VISIBLE */}
+              <div
+                className="admin-modal-footer"
+                style={{
+                  flexShrink: 0,
+                  background: '#090d16',
+                  borderTop: '1px solid #1e293b',
+                  padding: '16px 24px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'flex-end',
+                  gap: '12px',
+                  zIndex: 20
+                }}
+              >
                 <button
                   type="button"
                   className="btn-admin-secondary"
                   onClick={() => setEditingReseller(null)}
+                  style={{ padding: '10px 20px', borderRadius: '10px', fontSize: '14px', fontWeight: 600 }}
                 >
                   Cancel
                 </button>
-                <button type="submit" className="btn-admin-primary">
+                <button
+                  type="submit"
+                  className="btn-admin-primary"
+                  style={{
+                    padding: '11px 26px',
+                    borderRadius: '10px',
+                    fontSize: '15px',
+                    fontWeight: 800,
+                    boxShadow: '0 0 16px rgba(34, 197, 94, 0.4)'
+                  }}
+                >
                   Save Changes
                 </button>
               </div>
@@ -807,8 +884,27 @@ function AdminResellers({ currentUser, onViewClients }) {
                 ✕
               </button>
             </div>
-            <form onSubmit={handleCreateReseller}>
-              <div className="admin-modal-body">
+            <form
+              onSubmit={handleCreateReseller}
+              style={{
+                display: 'flex',
+                flexDirection: 'column',
+                flex: 1,
+                minHeight: 0,
+                overflow: 'hidden'
+              }}
+            >
+              <div
+                className="admin-modal-body"
+                style={{
+                  flex: '1 1 auto',
+                  minHeight: 0,
+                  overflowY: 'auto',
+                  padding: '20px 24px',
+                  scrollbarWidth: 'thin',
+                  scrollbarColor: 'rgba(34, 197, 94, 0.4) #090d16'
+                }}
+              >
                 <div className="admin-form-group">
                   <label className="admin-form-label">Reseller Name / Company</label>
                   <input

@@ -414,14 +414,28 @@
 
 .admin-table-container {
   overflow-x: auto;
-  scrollbar-width: none !important;
-  -ms-overflow-style: none !important;
+  width: 100%;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(56, 189, 248, 0.4) #0e1422;
 }
 
 .admin-table-container::-webkit-scrollbar {
-  display: none !important;
-  width: 0 !important;
-  height: 0 !important;
+  height: 6px;
+  width: 6px;
+}
+
+.admin-table-container::-webkit-scrollbar-track {
+  background: #0e1422;
+  border-radius: 4px;
+}
+
+.admin-table-container::-webkit-scrollbar-thumb {
+  background: rgba(56, 189, 248, 0.4);
+  border-radius: 4px;
+}
+
+.admin-table-container::-webkit-scrollbar-thumb:hover {
+  background: #38bdf8;
 }
 
 .admin-table {
@@ -1150,4 +1164,66 @@ input[type="number"] {
   .admin-topbar {
     padding: 0 16px;
   }
+}
+
+.btn-table-approve {
+  background: rgba(34, 197, 94, 0.15) !important;
+  border: 1px solid rgba(34, 197, 94, 0.45) !important;
+  color: #4ade80 !important;
+  padding: 6px 14px !important;
+  font-size: 13px !important;
+  font-weight: 800 !important;
+  border-radius: 8px !important;
+  cursor: pointer !important;
+  transition: all 0.15s ease !important;
+}
+
+.btn-table-approve:hover {
+  background: #22c55e !important;
+  color: #090d16 !important;
+  border-color: #22c55e !important;
+  transform: translateY(-1px) !important;
+  box-shadow: 0 0 14px rgba(34, 197, 94, 0.4) !important;
+}
+
+.btn-table-reject {
+  background: rgba(239, 68, 68, 0.15) !important;
+  border: 1px solid rgba(239, 68, 68, 0.45) !important;
+  color: #f87171 !important;
+  padding: 6px 14px !important;
+  font-size: 13px !important;
+  font-weight: 800 !important;
+  border-radius: 8px !important;
+  cursor: pointer !important;
+  transition: all 0.15s ease !important;
+}
+
+.btn-table-reject:hover {
+  background: #ef4444 !important;
+  color: #ffffff !important;
+  border-color: #ef4444 !important;
+  transform: translateY(-1px) !important;
+  box-shadow: 0 0 14px rgba(239, 68, 68, 0.4) !important;
+}
+
+.admin-modal-card form {
+  display: flex !important;
+  flex-direction: column !important;
+  flex: 1 1 auto !important;
+  min-height: 0 !important;
+  overflow: hidden !important;
+}
+
+.admin-modal-footer {
+  flex-shrink: 0 !important;
+  background: #090d16 !important;
+  border-top: 1px solid #1e293b !important;
+  padding: 16px 24px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: flex-end !important;
+  gap: 12px !important;
+  position: sticky !important;
+  bottom: 0 !important;
+  z-index: 20 !important;
 }

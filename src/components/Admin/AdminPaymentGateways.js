@@ -393,63 +393,97 @@ function AdminPaymentGateways({ initialTab = 'recharges', onRechargeAction }) {
             </button>
           </div>
 
-          {/* Table */}
-          <div className="admin-table-wrapper">
-            <table className="admin-table">
+          {/* Table Container with proper horizontal scrolling & modern styling */}
+          <div className="admin-table-container" style={{ overflowX: 'auto', width: '100%', borderRadius: '12px', border: '1px solid #1e293b' }}>
+            <table className="admin-table" style={{ minWidth: '950px', width: '100%' }}>
               <thead>
                 <tr>
-                  <th>Date</th>
-                  <th>Reseller</th>
-                  <th>Gateway</th>
-                  <th>Amount</th>
-                  <th>Transaction ID (TXR)</th>
-                  <th>Proof of Payment</th>
+                  <th style={{ width: '130px' }}>Date</th>
+                  <th>Reseller Partner</th>
+                  <th>Payment Method</th>
+                  <th>Deposit Amount</th>
+                  <th>TXR Reference</th>
+                  <th>Proof Receipt</th>
                   <th>Status</th>
-                  <th style={{ textAlign: 'right' }}>Actions</th>
+                  <th style={{ textAlign: 'right', paddingRight: '20px', minWidth: '220px' }}>Review Actions</th>
                 </tr>
               </thead>
               <tbody>
                 {rechargesLoading ? (
                   <tr>
                     <td colSpan="8" style={{ textAlign: 'center', padding: '40px', color: '#94a3b8' }}>
-                      Loading recharge requests...
+                      <div style={{ display: 'inline-flex', alignItems: 'center', gap: '8px' }}>
+                        <div style={{ width: '18px', height: '18px', border: '2px solid #22c55e', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 0.6s linear infinite' }} />
+                        <span>Loading recharge requests...</span>
+                      </div>
                     </td>
                   </tr>
                 ) : filteredRecharges.length === 0 ? (
                   <tr>
                     <td colSpan="8" style={{ textAlign: 'center', padding: '40px', color: '#64748b' }}>
-                      No recharge requests found.
+                      No recharge requests found matching criteria.
                     </td>
                   </tr>
                 ) : (
                   filteredRecharges.map((r) => (
                     <tr key={r.id}>
-                      <td style={{ fontSize: '13px', color: '#94a3b8', whiteSpace: 'nowrap' }}>
-                        {r.created_at ? new Date(r.created_at).toLocaleString() : 'N/A'}
+                      <td style={{ whiteSpace: 'nowrap' }}>
+                        <div style={{ fontSize: '13px', fontWeight: 600, color: '#f1f5f9' }}>
+                          {r.created_at ? new Date(r.created_at).toLocaleDateString() : 'N/A'}
+                        </div>
+                        <div style={{ fontSize: '11px', color: '#64748b', marginTop: '2px' }}>
+                          {r.created_at ? new Date(r.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}
+                        </div>
                       </td>
                       <td>
-                        <div style={{ fontWeight: 700, color: '#f8fafc' }}>{r.reseller_name || 'Reseller'}</div>
-                        <div style={{ fontSize: '12px', color: '#64748b' }}>{r.reseller_email}</div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                          <div style={{
+                            width: '32px',
+                            height: '32px',
+                            borderRadius: '50%',
+                            background: 'linear-gradient(135deg, #0284c7, #38bdf8)',
+                            color: '#090d16',
+                            fontWeight: 800,
+                            fontSize: '13px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            flexShrink: 0
+                          }}>
+                            {(r.reseller_name || 'R').charAt(0).toUpperCase()}
+                          </div>
+                          <div>
+                            <div style={{ fontWeight: 700, color: '#f8fafc', fontSize: '14px', whiteSpace: 'nowrap' }}>{r.reseller_name || 'Reseller'}</div>
+                            <div style={{ fontSize: '12px', color: '#94a3b8', whiteSpace: 'nowrap' }}>{r.reseller_email}</div>
+                          </div>
+                        </div>
                       </td>
                       <td>
-                        <span style={{ fontWeight: 600, color: '#38bdf8' }}>{r.gateway_name || 'Manual Gateway'}</span>
-                      </td>
-                      <td>
-                        <span style={{ fontSize: '15px', fontWeight: 800, color: '#4ade80' }}>
-                          ${Number(r.amount).toFixed(2)}
+                        <span style={{ fontWeight: 700, color: '#38bdf8', fontSize: '13px', whiteSpace: 'nowrap' }}>
+                          {r.gateway_name || 'Manual Gateway'}
                         </span>
-                        <span style={{ fontSize: '11px', color: '#94a3b8', marginLeft: '4px' }}>
-                          {r.currency || 'USD'}
-                        </span>
+                      </td>
+                      <td>
+                        <div style={{ whiteSpace: 'nowrap' }}>
+                          <span style={{ fontSize: '15px', fontWeight: 800, color: '#4ade80' }}>
+                            ${Number(r.amount).toFixed(2)}
+                          </span>
+                          <span style={{ fontSize: '11px', color: '#94a3b8', marginLeft: '5px', fontWeight: 600 }}>
+                            {r.currency || 'USD'}
+                          </span>
+                        </div>
                       </td>
                       <td>
                         <code style={{
-                          background: '#1e293b',
+                          background: '#0b1120',
+                          border: '1px solid #334155',
                           padding: '4px 8px',
                           borderRadius: '6px',
                           color: '#facc15',
-                          fontSize: '13px',
-                          fontWeight: 700
+                          fontSize: '12px',
+                          fontWeight: 700,
+                          letterSpacing: '0.5px',
+                          whiteSpace: 'nowrap'
                         }}>
                           {r.transaction_id}
                         </code>
@@ -459,8 +493,15 @@ function AdminPaymentGateways({ initialTab = 'recharges', onRechargeAction }) {
                           <button
                             type="button"
                             onClick={() => setPreviewProofUrl(r.proof_image)}
-                            className="btn-action"
-                            style={{ color: '#38bdf8', borderColor: 'rgba(56, 189, 248, 0.4)', background: 'rgba(56, 189, 248, 0.1)' }}
+                            className="btn-table-action"
+                            style={{
+                              padding: '5px 12px',
+                              fontSize: '12px',
+                              color: '#38bdf8',
+                              borderColor: 'rgba(56, 189, 248, 0.4)',
+                              background: 'rgba(56, 189, 248, 0.1)',
+                              whiteSpace: 'nowrap'
+                            }}
                           >
                             🖼️ View Proof
                           </button>
@@ -470,46 +511,45 @@ function AdminPaymentGateways({ initialTab = 'recharges', onRechargeAction }) {
                       </td>
                       <td>
                         {r.status === 'pending' && (
-                          <span className="badge-pill badge-pending" style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                            <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#eab308' }} />
-                            Pending
+                          <span className="badge-pill badge-pending" style={{ padding: '4px 10px', fontSize: '11px', fontWeight: 800 }}>
+                            ● PENDING
                           </span>
                         )}
                         {r.status === 'approved' && (
-                          <span className="badge-pill badge-green" style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                            ✅ Approved
+                          <span className="badge-pill badge-green" style={{ padding: '4px 10px', fontSize: '11px', fontWeight: 800 }}>
+                            ✓ APPROVED
                           </span>
                         )}
                         {r.status === 'rejected' && (
-                          <span className="badge-pill badge-failed" style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                            🚫 Rejected
+                          <span className="badge-pill badge-failed" style={{ padding: '4px 10px', fontSize: '11px', fontWeight: 800 }}>
+                            ✕ REJECTED
                           </span>
                         )}
                       </td>
-                      <td style={{ textAlign: 'right' }}>
+                      <td style={{ textAlign: 'right', whiteSpace: 'nowrap', paddingRight: '20px' }}>
                         {r.status === 'pending' ? (
-                          <div style={{ display: 'inline-flex', gap: '6px' }}>
+                          <div className="admin-actions-cell" style={{ justifyContent: 'flex-end', gap: '8px' }}>
                             <button
                               type="button"
-                              className="btn-action"
-                              style={{ color: '#22c55e', borderColor: 'rgba(34, 197, 94, 0.4)', background: 'rgba(34, 197, 94, 0.12)' }}
+                              className="btn-table-action btn-table-approve"
                               onClick={() => handleOpenActionModal(r, 'approve')}
+                              title="Approve and credit wallet balance"
                             >
                               ✓ Approve
                             </button>
                             <button
                               type="button"
-                              className="btn-action"
-                              style={{ color: '#ef4444', borderColor: 'rgba(239, 68, 68, 0.4)', background: 'rgba(239, 68, 68, 0.12)' }}
+                              className="btn-table-action btn-table-reject"
                               onClick={() => handleOpenActionModal(r, 'reject')}
+                              title="Reject deposit request"
                             >
                               ✕ Reject
                             </button>
                           </div>
                         ) : (
-                          <span style={{ fontSize: '12px', color: '#64748b' }}>
-                            {r.admin_notes ? `Note: ${r.admin_notes}` : 'Completed'}
-                          </span>
+                          <div style={{ fontSize: '12px', color: '#94a3b8', fontStyle: 'italic', textAlign: 'right' }}>
+                            {r.admin_notes ? `Note: ${r.admin_notes}` : (r.status === 'approved' ? 'Credited to wallet' : 'Declined')}
+                          </div>
                         )}
                       </td>
                     </tr>
