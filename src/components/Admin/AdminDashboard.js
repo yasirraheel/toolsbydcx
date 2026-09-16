@@ -13,6 +13,68 @@ function AdminDashboard({ stats, recentUsers, onNavigate, onOpenCreateUser }) {
 
   return (
     <div className="admin-dashboard-view">
+      {/* PENDING WALLET RECHARGES NOTIFICATION BANNER */}
+      {(stats?.pendingRecharges || 0) > 0 && (
+        <div 
+          onClick={() => onNavigate('recharges')}
+          style={{
+            background: 'linear-gradient(135deg, rgba(239, 68, 68, 0.2), rgba(15, 23, 42, 0.98))',
+            border: '1px solid #ef4444',
+            borderRadius: '14px',
+            padding: '16px 22px',
+            marginBottom: '20px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            flexWrap: 'wrap',
+            gap: '14px',
+            cursor: 'pointer',
+            boxShadow: '0 4px 25px rgba(239, 68, 68, 0.3)'
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+            <div style={{
+              width: '42px',
+              height: '42px',
+              borderRadius: '10px',
+              background: 'rgba(239, 68, 68, 0.2)',
+              border: '1px solid rgba(239, 68, 68, 0.4)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontSize: '20px'
+            }}>
+              ⚡
+            </div>
+            <div>
+              <div style={{ fontSize: '15px', fontWeight: 800, color: '#f8fafc', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <span>{stats.pendingRecharges} Reseller Wallet Deposit Request{stats.pendingRecharges > 1 ? 's' : ''} Pending Review</span>
+                <span style={{ background: '#ef4444', color: '#fff', fontSize: '11px', padding: '1px 6px', borderRadius: '8px', fontWeight: 800 }}>ACTION NEEDED</span>
+              </div>
+              <div style={{ fontSize: '13px', color: '#fca5a5', marginTop: '2px' }}>
+                A reseller has submitted manual payment proof. Click here to verify the transaction reference, screenshot, and approve credit.
+              </div>
+            </div>
+          </div>
+          <button 
+            type="button" 
+            className="btn-admin-primary"
+            style={{
+              background: '#ef4444',
+              borderColor: '#ef4444',
+              color: '#ffffff',
+              padding: '9px 18px',
+              fontSize: '13px',
+              fontWeight: 800,
+              borderRadius: '8px',
+              cursor: 'pointer'
+            }}
+          >
+            Review & Approve Recharges ➜
+          </button>
+        </div>
+      )}
+
       {/* KPI METRIC CARDS */}
       <div className="admin-kpi-grid">
         <div className="admin-kpi-card">

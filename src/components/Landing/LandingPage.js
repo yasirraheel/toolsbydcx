@@ -23,27 +23,33 @@ export default function LandingPage({ currentUser, onOpenAuth, onNavigate, onLog
         sessionStorage.setItem('active_reseller_param', resellerParam);
       }
 
-      // 1. Fetch tenant info (if reseller parameter or custom domain exists)
-      const paramStr = resellerParam ? `?reseller=${encodeURIComponent(resellerParam)}&domain=${encodeURIComponent(window.location.hostname)}` : `?domain=${encodeURIComponent(window.location.hostname)}`;
+      // 1. Fetch tenant info
+      const paramStr = resellerParam 
+        ? `?reseller=${encodeURIComponent(resellerParam)}&domain=${encodeURIComponent(window.location.hostname)}` 
+        : `?domain=${encodeURIComponent(window.location.hostname)}`;
       const tenantRes = await fetch(`${API_BASE}/tenant/info${paramStr}`);
       const tenantData = await tenantRes.json();
 
       if (tenantData && tenantData.success && tenantData.is_reseller && tenantData.tenant) {
         setTenant(tenantData.tenant);
         if (tenantData.tenant.brand_name) {
-          document.title = `${tenantData.tenant.brand_name} - Premium Cloud Tools Access`;
+          document.title = `${tenantData.tenant.brand_name} - Cloud Tools Access`;
         }
+        // ONLY show custom plans if the reseller specifically created them!
+        // If reseller has NOT created plans yet, DO NOT fallback to platform plans!
         if (tenantData.plans && Array.isArray(tenantData.plans) && tenantData.plans.length > 0) {
           setPlans(tenantData.plans);
-          setLoadingPlans(false);
-          return;
+        } else {
+          setPlans([]);
         }
+        setLoadingPlans(false);
+        return;
       }
     } catch (err) {
       console.warn("Failed to load tenant info:", err);
     }
 
-    // 2. Fallback: Fetch platform public plans
+    // 2. Main Platform Public Plans (Only shown if NOT a reseller tenant page)
     try {
       const res = await fetch(`${API_BASE}/plans`);
       const data = await res.json();
@@ -115,11 +121,11 @@ export default function LandingPage({ currentUser, onOpenAuth, onNavigate, onLog
   };
 
   const getContactLink = (contact, planName) => {
-    if (!contact) return '#pricing';
+    if (!contact) return '#';
     const trimmed = contact.trim();
     const text = planName 
-      ? `Hello! I would like to get access to the ${planName} plan from ${tenant?.brand_name || 'your service'}.`
-      : `Hello! I would like to inquire about accounts and access with ${tenant?.brand_name || 'your agency'}.`;
+      ? `Hello! I would like to get access to the ${planName} plan from ${tenant?.brand_name || 'your agency'}.`
+      : `Hello! I would like to inquire about cloud tool access with ${tenant?.brand_name || 'your agency'}.`;
     
     // Check if phone/WhatsApp (digits)
     const digitsOnly = trimmed.replace(/\D/g, '');
@@ -135,7 +141,7 @@ export default function LandingPage({ currentUser, onOpenAuth, onNavigate, onLog
     if (trimmed.includes('@')) {
       return `mailto:${trimmed}?subject=${encodeURIComponent('Subscription Inquiry: ' + (planName || 'Tool Access'))}&body=${encodeURIComponent(text)}`;
     }
-    return '#pricing';
+    return '#';
   };
 
   const handleSelectPlan = (plan) => {
@@ -146,7 +152,7 @@ export default function LandingPage({ currentUser, onOpenAuth, onNavigate, onLog
     } else {
       if (tenant?.support_contact) {
         const link = getContactLink(tenant.support_contact, plan.name);
-        if (link && link !== '#pricing') {
+        if (link && link !== '#') {
           window.open(link, '_blank');
           return;
         }
@@ -157,9 +163,8 @@ export default function LandingPage({ currentUser, onOpenAuth, onNavigate, onLog
 
   const getPortalLabel = () => {
     if (!currentUser) return "Sign In";
-    if (currentUser.role === "admin") return "Admin Portal";
-    if (currentUser.role === "reseller") return "Reseller Portal";
-    return "User Dashboard";
+    if (currentUser.role === "admin") return "Admin Dashboard";
+    return "My Dashboard";
   };
 
   const handlePortalClick = () => {
@@ -215,11 +220,6 @@ export default function LandingPage({ currentUser, onOpenAuth, onNavigate, onLog
                   <>ToolsBy<span>Dcx</span></>
                 )}
               </span>
-              {tenant && (
-                <span style={{ fontSize: '10px', color: brandColor, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase' }}>
-                  ⚡ Verified Partner Portal
-                </span>
-              )}
             </div>
           </div>
 
@@ -230,9 +230,11 @@ export default function LandingPage({ currentUser, onOpenAuth, onNavigate, onLog
             <button type="button" className="landing-nav-link" onClick={() => document.getElementById("how-it-works")?.scrollIntoView({ behavior: "smooth" })}>
               How It Works
             </button>
-            <button type="button" className="landing-nav-link" onClick={scrollToPricing}>
-              Plans & Pricing
-            </button>
+            {(!tenant || plans.length > 0) && (
+              <button type="button" className="landing-nav-link" onClick={scrollToPricing}>
+                Plans & Pricing
+              </button>
+            )}
             <button type="button" className="landing-nav-link" onClick={() => document.getElementById("extension")?.scrollIntoView({ behavior: "smooth" })}>
               Extension
             </button>
@@ -248,7 +250,7 @@ export default function LandingPage({ currentUser, onOpenAuth, onNavigate, onLog
                 style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 14px', fontSize: '13px', textDecoration: 'none' }}
               >
                 <span>💬</span>
-                <span>Contact Agent</span>
+                <span>Contact Support</span>
               </a>
             )}
 
@@ -281,31 +283,43 @@ export default function LandingPage({ currentUser, onOpenAuth, onNavigate, onLog
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
               <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
             </svg>
-            <span>{tenant ? `${brandName} Official Portal` : "All-In-One Tool Access Platform"}</span>
+            <span>Instant 1-Click Tool Access</span>
           </div>
 
           <h1 className="landing-hero-title">
-            Unlock Premium Cloud Tools in <span className="landing-hero-gradient">{tenant ? brandName : "One Click"}</span>
+            Unlock Premium Cloud Tools in <span className="landing-hero-gradient">{brandName}</span>
           </h1>
 
           <p className="landing-hero-subtitle">
-            {tenant ? (
-              <>
-                Welcome to the official <strong>{brandName}</strong> customer portal. Connect verified accounts directly to your browser with instant 1-click launch, automated session sync, and dedicated agency support.
-              </>
-            ) : (
-              "Experience seamless tool access without complicated setups. ToolsByDcx connects verified accounts directly to your browser with instant 1-click launch, automated session sync, and high-uptime performance."
-            )}
+            Experience seamless tool access without complicated setups. Connect verified accounts directly to your browser with instant 1-click launch, automated session sync, and high-uptime performance.
           </p>
 
           <div className="landing-hero-actions">
-            <button type="button" className="landing-btn-primary hero-cta-primary" onClick={scrollToPricing}>
-              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                <circle cx="12" cy="12" r="10" />
-                <polyline points="12 8 12 12 14 14" />
-              </svg>
-              Explore Plans & Pricing
-            </button>
+            {(!tenant || plans.length > 0) ? (
+              <button type="button" className="landing-btn-primary hero-cta-primary" onClick={scrollToPricing}>
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="12" cy="12" r="10" />
+                  <polyline points="12 8 12 12 14 14" />
+                </svg>
+                Explore Plans & Pricing
+              </button>
+            ) : supportContact ? (
+              <a
+                href={getContactLink(supportContact)}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="landing-btn-primary hero-cta-primary"
+                style={{ textDecoration: 'none' }}
+              >
+                <span>💬</span>
+                <span>Contact to Get Access ➜</span>
+              </a>
+            ) : (
+              <button type="button" className="landing-btn-primary hero-cta-primary" onClick={() => onOpenAuth("login")}>
+                Sign In to Access ➜
+              </button>
+            )}
+
             {currentUser ? (
               <button type="button" className="landing-btn-secondary hero-cta-secondary" onClick={handleDownloadExtension}>
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -365,7 +379,7 @@ export default function LandingPage({ currentUser, onOpenAuth, onNavigate, onLog
                     <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
                     <path d="M16 3.13a4 4 0 0 1 0 7.75" />
                   </svg>
-                  {tenant ? "Dedicated VIP Pool" : "Multi-Tier Rotation"}
+                  Dedicated High-Speed Pools
                 </div>
               </div>
               <div className="landing-preview-box">
@@ -383,110 +397,112 @@ export default function LandingPage({ currentUser, onOpenAuth, onNavigate, onLog
         </div>
       </section>
 
-      {/* PLANS & PRICING SECTION */}
-      <section className="landing-section" id="pricing">
-        <div className="landing-container">
-          <div className="landing-section-header">
-            <span className="landing-section-badge" style={{ color: brandColor, borderColor: brandColor }}>
-              {tenant ? "Official Subscription Plans" : "Transparent Pricing"}
-            </span>
-            <h2 className="landing-section-title">
-              {tenant ? `Subscription Plans by ${brandName}` : "Flexible Plans Tailored For You"}
-            </h2>
-            <p className="landing-section-desc">
-              {tenant ? (
-                `Select an official access plan provided by ${brandName}. All plans include instant activation and browser extension sync.`
+      {/* PLANS & PRICING SECTION - Strictly hidden on reseller page if reseller hasn't created plans yet */}
+      {(!tenant || plans.length > 0) && (
+        <section className="landing-section" id="pricing">
+          <div className="landing-container">
+            <div className="landing-section-header">
+              <span className="landing-section-badge" style={{ color: brandColor, borderColor: brandColor }}>
+                Plans & Subscriptions
+              </span>
+              <h2 className="landing-section-title">
+                {tenant ? `Subscription Plans by ${brandName}` : "Flexible Plans Tailored For You"}
+              </h2>
+              <p className="landing-section-desc">
+                {tenant ? (
+                  `Select an access plan provided by ${brandName}. All plans include instant activation and browser extension sync.`
+                ) : (
+                  "Whether you need casual access or full-throttle enterprise pools, choose the plan that fits your workflow."
+                )}
+              </p>
+            </div>
+
+            <div className="landing-plans-grid">
+              {loadingPlans ? (
+                <div style={{ textAlign: "center", gridColumn: "1 / -1", padding: "40px", color: "#94a3b8" }}>
+                  <div style={{ width: "24px", height: "24px", border: "2px solid rgba(34, 197, 94, 0.2)", borderTopColor: "#22c55e", borderRadius: "50%", animation: "spin 0.6s linear infinite", margin: "0 auto 12px" }}></div>
+                  <span>Loading available plans...</span>
+                </div>
               ) : (
-                "Whether you need casual access or full-throttle enterprise pools, choose the plan that fits your workflow."
-              )}
-            </p>
-          </div>
+                plans.map((plan, idx) => {
+                  const isPopular = plan.id === "plan_pro" || idx === 1 || plans.length === 1;
+                  const featList = Array.isArray(plan.features)
+                    ? plan.features
+                    : typeof plan.features === "string"
+                    ? JSON.parse(plan.features || "[]")
+                    : [];
 
-          <div className="landing-plans-grid">
-            {loadingPlans ? (
-              <div style={{ textAlign: "center", gridColumn: "1 / -1", padding: "40px", color: "#94a3b8" }}>
-                <div style={{ width: "24px", height: "24px", border: "2px solid rgba(34, 197, 94, 0.2)", borderTopColor: "#22c55e", borderRadius: "50%", animation: "spin 0.6s linear infinite", margin: "0 auto 12px" }}></div>
-                <span>Loading available plans...</span>
-              </div>
-            ) : (
-              plans.map((plan, idx) => {
-                const isPopular = plan.id === "plan_pro" || idx === 1 || plans.length === 1;
-                const featList = Array.isArray(plan.features)
-                  ? plan.features
-                  : typeof plan.features === "string"
-                  ? JSON.parse(plan.features || "[]")
-                  : [];
+                  const durationLabel = plan.duration_days 
+                    ? `${plan.duration_days} days` 
+                    : (plan.billing_cycle || "month");
 
-                const durationLabel = plan.duration_days 
-                  ? `${plan.duration_days} days` 
-                  : (plan.billing_cycle || "month");
+                  return (
+                    <div key={plan.id || idx} className={`landing-plan-card ${isPopular ? "popular" : ""}`}>
+                      {isPopular && <div className="landing-popular-badge">★ Recommended</div>}
 
-                return (
-                  <div key={plan.id || idx} className={`landing-plan-card ${isPopular ? "popular" : ""}`}>
-                    {isPopular && <div className="landing-popular-badge">★ Recommended</div>}
-
-                    <div className="landing-plan-top">
-                      <h3 className="landing-plan-name">{plan.name}</h3>
-                      <p className="landing-plan-desc">{plan.description || "Full access to verified creative account pools."}</p>
-                      <div className="landing-plan-price-wrap">
-                        <span className="landing-plan-price">
-                          {Number(plan.price) === 0 ? "Free" : `$${Number(plan.price).toFixed(2)}`}
-                        </span>
-                        {Number(plan.price) > 0 && <span className="landing-plan-cycle">/ {durationLabel}</span>}
-                      </div>
-                    </div>
-
-                    <ul className="landing-plan-features">
-                      {featList.map((feat, fIdx) => (
-                        <li key={fIdx} className="landing-plan-feature-item">
-                          <span className="landing-feature-check">
-                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-                              <polyline points="20 6 9 17 4 12" />
-                            </svg>
+                      <div className="landing-plan-top">
+                        <h3 className="landing-plan-name">{plan.name}</h3>
+                        <p className="landing-plan-desc">{plan.description || "Full access to verified creative account pools."}</p>
+                        <div className="landing-plan-price-wrap">
+                          <span className="landing-plan-price">
+                            {Number(plan.price) === 0 ? "Free" : `$${Number(plan.price).toFixed(2)}`}
                           </span>
-                          <span>{feat}</span>
-                        </li>
-                      ))}
-                      {featList.length === 0 && (
-                        <>
-                          <li className="landing-plan-feature-item">
-                            <span className="landing-feature-check">
-                              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
-                            </span>
-                            <span>Full Cloud Tool Access</span>
-                          </li>
-                          <li className="landing-plan-feature-item">
-                            <span className="landing-feature-check">
-                              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
-                            </span>
-                            <span>Browser Extension Sync</span>
-                          </li>
-                          <li className="landing-plan-feature-item">
-                            <span className="landing-feature-check">
-                              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
-                            </span>
-                            <span>High-Speed Dedicated Rotation</span>
-                          </li>
-                        </>
-                      )}
-                    </ul>
+                          {Number(plan.price) > 0 && <span className="landing-plan-cycle">/ {durationLabel}</span>}
+                        </div>
+                      </div>
 
-                    <button
-                      type="button"
-                      className={`landing-plan-btn ${isPopular ? "primary" : "secondary"}`}
-                      onClick={() => handleSelectPlan(plan)}
-                    >
-                      {currentUser 
-                        ? "Go to Dashboard ➜" 
-                        : (supportContact ? "Contact to Purchase ➜" : "Sign In to Access ➜")}
-                    </button>
-                  </div>
-                );
-              })
-            )}
+                      <ul className="landing-plan-features">
+                        {featList.map((feat, fIdx) => (
+                          <li key={fIdx} className="landing-plan-feature-item">
+                            <span className="landing-feature-check">
+                              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                                <polyline points="20 6 9 17 4 12" />
+                              </svg>
+                            </span>
+                            <span>{feat}</span>
+                          </li>
+                        ))}
+                        {featList.length === 0 && (
+                          <>
+                            <li className="landing-plan-feature-item">
+                              <span className="landing-feature-check">
+                                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
+                              </span>
+                              <span>Full Cloud Tool Access</span>
+                            </li>
+                            <li className="landing-plan-feature-item">
+                              <span className="landing-feature-check">
+                                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
+                              </span>
+                              <span>Browser Extension Sync</span>
+                            </li>
+                            <li className="landing-plan-feature-item">
+                              <span className="landing-feature-check">
+                                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
+                              </span>
+                              <span>High-Speed Dedicated Rotation</span>
+                            </li>
+                          </>
+                        )}
+                      </ul>
+
+                      <button
+                        type="button"
+                        className={`landing-plan-btn ${isPopular ? "primary" : "secondary"}`}
+                        onClick={() => handleSelectPlan(plan)}
+                      >
+                        {currentUser 
+                          ? "Go to Dashboard ➜" 
+                          : (supportContact ? "Contact to Purchase ➜" : "Sign In to Access ➜")}
+                      </button>
+                    </div>
+                  );
+                })
+              )}
+            </div>
           </div>
-        </div>
-      </section>
+        </section>
+      )}
 
       {/* CORE FEATURES SECTION */}
       <section className="landing-section" id="features">
@@ -545,9 +561,9 @@ export default function LandingPage({ currentUser, onOpenAuth, onNavigate, onLog
                   <polyline points="17 11 19 13 23 9" />
                 </svg>
               </div>
-              <h3 className="landing-feature-title">Verified Reseller Network</h3>
+              <h3 className="landing-feature-title">Dedicated Account Pools</h3>
               <p className="landing-feature-desc">
-                Authorized partners can onboard clients with custom branded portals, assign subscription plans, and provide direct localized support.
+                High-availability server infrastructure with smart session pooling and continuous rotation for maximum creative productivity.
               </p>
             </div>
           </div>
@@ -568,9 +584,9 @@ export default function LandingPage({ currentUser, onOpenAuth, onNavigate, onLog
           <div className="landing-steps-grid">
             <div className="landing-step-card">
               <div className="landing-step-num">01</div>
-              <h3 className="landing-step-title">Select Your Plan</h3>
+              <h3 className="landing-step-title">Get Your Access</h3>
               <p className="landing-step-desc">
-                Pick a subscription plan offered by {brandName} and complete your onboarding in seconds.
+                {tenant ? `Contact ${brandName} or sign in to your assigned account.` : "Pick a plan that fits your resource needs and verify your account in seconds."}
               </p>
             </div>
 
@@ -578,7 +594,7 @@ export default function LandingPage({ currentUser, onOpenAuth, onNavigate, onLog
               <div className="landing-step-num">02</div>
               <h3 className="landing-step-title">Install Chrome Extension</h3>
               <p className="landing-step-desc">
-                Add the ToolsByDcx Chrome Extension to your browser. It links automatically to your active dashboard session.
+                Add the Chrome Extension to your browser. It links automatically to your active dashboard session.
               </p>
             </div>
 
@@ -671,7 +687,7 @@ export default function LandingPage({ currentUser, onOpenAuth, onNavigate, onLog
         </div>
       </section>
 
-      {/* FOOTER */}
+      {/* FOOTER - 100% White-Label */}
       <footer className="landing-footer">
         <div className="landing-container">
           <div className="landing-footer-top">
@@ -698,9 +714,11 @@ export default function LandingPage({ currentUser, onOpenAuth, onNavigate, onLog
               <button type="button" className="landing-nav-link" onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}>
                 Top
               </button>
-              <button type="button" className="landing-nav-link" onClick={scrollToPricing}>
-                Pricing
-              </button>
+              {(!tenant || plans.length > 0) && (
+                <button type="button" className="landing-nav-link" onClick={scrollToPricing}>
+                  Pricing
+                </button>
+              )}
               <button type="button" className="landing-nav-link" onClick={() => onOpenAuth("login")}>
                 Sign In
               </button>
@@ -709,7 +727,7 @@ export default function LandingPage({ currentUser, onOpenAuth, onNavigate, onLog
 
           <div className="landing-footer-bottom">
             <div>
-              © {new Date().getFullYear()} {brandName}. All rights reserved. {tenant ? "Authorized Partner • Powered by ToolsByDcx Platform." : "Professional Cloud Account Access Platform."}
+              © {new Date().getFullYear()} {brandName}. All rights reserved.
             </div>
             <div style={{ display: "flex", gap: "16px" }}>
               <span>Privacy Policy</span>

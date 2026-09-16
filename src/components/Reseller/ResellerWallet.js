@@ -481,20 +481,25 @@ function ResellerWallet({ currentUser, onOpenRecharge }) {
             onClick={(e) => e.stopPropagation()}
             style={{
               maxWidth: '560px',
-              border: '1px solid rgba(34, 197, 94, 0.35)',
-              boxShadow: '0 20px 60px rgba(0,0,0,0.8), 0 0 30px rgba(34, 197, 94, 0.15)',
-              borderRadius: '18px',
-              overflow: 'hidden'
+              maxHeight: 'min(90vh, 760px)',
+              display: 'flex',
+              flexDirection: 'column',
+              border: '1px solid rgba(34, 197, 94, 0.4)',
+              boxShadow: '0 25px 70px rgba(0,0,0,0.85), 0 0 35px rgba(34, 197, 94, 0.2)',
+              borderRadius: '16px',
+              overflow: 'hidden',
+              background: '#0d1322'
             }}
           >
             {/* MODAL HEADER */}
             <div style={{
-              padding: '20px 24px',
+              padding: '18px 24px',
               borderBottom: '1px solid #1e293b',
               background: 'linear-gradient(180deg, #131b2e 0%, #0d1322 100%)',
               display: 'flex',
               alignItems: 'center',
-              justifyContent: 'space-between'
+              justifyContent: 'space-between',
+              flexShrink: 0
             }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
                 <div style={{
@@ -532,8 +537,27 @@ function ResellerWallet({ currentUser, onOpenRecharge }) {
               </button>
             </div>
 
-            <form onSubmit={handleSubmitRecharge}>
-              <div className="admin-modal-body" style={{ padding: '24px', maxHeight: '72vh', overflowY: 'auto' }}>
+            <form
+              onSubmit={handleSubmitRecharge}
+              style={{
+                display: 'flex',
+                flexDirection: 'column',
+                flex: 1,
+                minHeight: 0,
+                overflow: 'hidden'
+              }}
+            >
+              <div
+                className="admin-modal-body"
+                style={{
+                  flex: '1 1 auto',
+                  minHeight: 0,
+                  overflowY: 'auto',
+                  padding: '20px 24px',
+                  scrollbarWidth: 'thin',
+                  scrollbarColor: 'rgba(34, 197, 94, 0.4) #090d16'
+                }}
+              >
                 {gateways.length === 0 ? (
                   <div style={{ color: '#f87171', padding: '16px', background: 'rgba(239, 68, 68, 0.1)', borderRadius: '10px', border: '1px solid rgba(239, 68, 68, 0.3)' }}>
                     No manual payment methods are configured by the admin yet. Please contact support.
@@ -829,13 +853,26 @@ function ResellerWallet({ currentUser, onOpenRecharge }) {
                 )}
               </div>
 
-              {/* MODAL FOOTER */}
-              <div className="admin-modal-footer" style={{ padding: '16px 24px', background: '#090d16' }}>
+              {/* PINNED MODAL FOOTER */}
+              <div 
+                className="admin-modal-footer" 
+                style={{ 
+                  flexShrink: 0, 
+                  padding: '16px 24px', 
+                  background: '#090d16', 
+                  borderTop: '1px solid #1e293b', 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  justifyContent: 'flex-end', 
+                  gap: '12px' 
+                }}
+              >
                 <button
                   type="button"
                   className="btn-admin-secondary"
                   onClick={() => setIsRechargeModalOpen(false)}
                   disabled={submitting}
+                  style={{ padding: '10px 20px', borderRadius: '10px', fontSize: '14px', fontWeight: 600 }}
                 >
                   Cancel
                 </button>
@@ -844,10 +881,18 @@ function ResellerWallet({ currentUser, onOpenRecharge }) {
                   className="btn-admin-primary"
                   disabled={submitting || gateways.length === 0}
                   style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '8px',
                     background: 'linear-gradient(135deg, #22c55e, #16a34a)',
                     boxShadow: '0 0 20px rgba(34, 197, 94, 0.4)',
-                    padding: '11px 24px',
-                    fontSize: '15px'
+                    padding: '11px 26px',
+                    fontSize: '15px',
+                    fontWeight: 800,
+                    borderRadius: '10px',
+                    border: 'none',
+                    color: '#ffffff',
+                    cursor: 'pointer'
                   }}
                 >
                   {submitting ? 'Submitting Deposit...' : `⚡ Submit Deposit ($${Number(amount || 0).toFixed(2)}) →`}

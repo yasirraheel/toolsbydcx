@@ -112,7 +112,8 @@ function AdminLayout({ currentUser, onExitAdmin, onSwitchPortal, onLogout }) {
       case 'users': return '👥 Customers';
       case 'resellers': return '🤝 Resellers';
       case 'plans': return '💳 Plans';
-      case 'gateways': return '💳 Gateways & Wallet Recharges';
+      case 'recharges': return '💰 Wallet Recharge Requests';
+      case 'gateways': return '🏦 Manual Payment Gateways';
       case 'extension': return '🧩 Chrome Extension';
       case 'settings': return '⚙️ Settings & SMTP';
       default: return 'Admin Portal';
@@ -211,10 +212,34 @@ function AdminLayout({ currentUser, onExitAdmin, onSwitchPortal, onLogout }) {
 
           <button
             type="button"
+            className={`admin-nav-item ${activeTab === 'recharges' ? 'active' : ''}`}
+            onClick={() => switchTab('recharges')}
+            style={{ position: 'relative' }}
+          >
+            <span className="admin-nav-icon">💰</span>
+            <span style={{ flex: 1 }}>Recharges</span>
+            {(statsData?.stats?.pendingRecharges || 0) > 0 && (
+              <span style={{
+                background: '#ef4444',
+                color: '#ffffff',
+                fontSize: '11px',
+                fontWeight: 800,
+                padding: '2px 8px',
+                borderRadius: '10px',
+                marginLeft: 'auto',
+                boxShadow: '0 0 10px rgba(239, 68, 68, 0.5)'
+              }}>
+                {statsData.stats.pendingRecharges}
+              </span>
+            )}
+          </button>
+
+          <button
+            type="button"
             className={`admin-nav-item ${activeTab === 'gateways' ? 'active' : ''}`}
             onClick={() => switchTab('gateways')}
           >
-            <span className="admin-nav-icon">💰</span>
+            <span className="admin-nav-icon">🏦</span>
             <span>Gateways</span>
           </button>
 
@@ -341,7 +366,13 @@ function AdminLayout({ currentUser, onExitAdmin, onSwitchPortal, onLogout }) {
 
           {activeTab === 'plans' && <AdminPlans />}
 
-          {activeTab === 'gateways' && <AdminPaymentGateways />}
+          {activeTab === 'recharges' && (
+            <AdminPaymentGateways initialTab="recharges" onRechargeAction={fetchStats} />
+          )}
+
+          {activeTab === 'gateways' && (
+            <AdminPaymentGateways initialTab="gateways" onRechargeAction={fetchStats} />
+          )}
 
           {activeTab === 'extension' && <AdminExtension />}
 

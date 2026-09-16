@@ -451,6 +451,11 @@ if (preg_match('#^/api/tenant/info#', $basePath) && $method === 'GET') {
             return $p;
         }, $rPlans);
 
+$bName = trim($reseller['brand_name'] ?? '');
+        if (!$bName) {
+            $rRaw = trim($reseller['name'] ?? '');
+            $bName = (empty($rRaw) || strtolower($rRaw) === 'reseller') ? 'Cloud Tools' : $rRaw;
+        }
         echo json_encode([
             "success" => true,
             "is_reseller" => true,
@@ -458,7 +463,7 @@ if (preg_match('#^/api/tenant/info#', $basePath) && $method === 'GET') {
             "tenant" => [
                 "id" => $reseller['id'],
                 "name" => $reseller['name'],
-                "brand_name" => $reseller['brand_name'] ?: ($reseller['name'] . ' Tools'),
+                "brand_name" => $bName,
                 "brand_logo" => $reseller['brand_logo'] ?: '/logo.png',
                 "brand_color" => $reseller['brand_color'] ?: '#22c55e',
                 "support_contact" => $reseller['support_contact'] ?: '',
@@ -763,6 +768,7 @@ if (preg_match('#^/api/admin/#', $basePath)) {
         $activeSessions = (int)$pdo->query("SELECT COUNT(*) FROM extension_sessions")->fetchColumn();
         $totalAccounts = (int)$pdo->query("SELECT COUNT(*) FROM shared_accounts")->fetchColumn();
         $activeAccounts = (int)$pdo->query("SELECT COUNT(*) FROM shared_accounts WHERE status = 'active'")->fetchColumn();
+        $pendingRecharges = (int)$pdo->query("SELECT COUNT(*) FROM wallet_recharges WHERE status = 'pending'")->fetchColumn();
 
         $recentUsers = $pdo->query("SELECT id, name, email, role, plan, is_verified, created_at FROM users ORDER BY created_at DESC LIMIT 6")->fetchAll();
 
@@ -774,7 +780,8 @@ if (preg_match('#^/api/admin/#', $basePath)) {
                 "totalCustomers" => $totalCustomers,
                 "activeSessions" => $activeSessions,
                 "totalAccounts" => $totalAccounts,
-                "activeAccounts" => $activeAccounts
+                "activeAccounts" => $activeAccounts,
+                "pendingRecharges" => $pendingRecharges
             ],
             "recentUsers" => $recentUsers
         ]);

@@ -842,41 +842,39 @@
 .admin-modal-backdrop {
   position: fixed;
   inset: 0;
-  background: rgba(5, 8, 15, 0.75);
-  backdrop-filter: blur(6px);
+  background: rgba(5, 8, 15, 0.85);
+  backdrop-filter: blur(8px);
   display: flex;
   align-items: center;
   justify-content: center;
   z-index: 1200;
   padding: 20px;
+  overflow-y: auto;
 }
 
 .admin-modal-card {
-  background: #131926;
+  background: #0d1322;
   border: 1px solid #334155;
-  border-radius: 12px;
+  border-radius: 16px;
   width: 100%;
   max-width: 680px;
-  max-height: 90vh;
-  overflow-y: auto;
-  overflow-x: hidden;
-  box-shadow: 0 20px 40px rgba(0,0,0,0.6);
-  scrollbar-width: none !important;
-  -ms-overflow-style: none !important;
-}
-
-.admin-modal-card::-webkit-scrollbar {
-  display: none !important;
-  width: 0 !important;
-  height: 0 !important;
+  max-height: min(90vh, 820px);
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 25px 60px rgba(0,0,0,0.85);
+  overflow: hidden;
+  margin: auto;
+  position: relative;
 }
 
 .admin-modal-header {
-  padding: 20px 24px;
+  padding: 18px 24px;
   border-bottom: 1px solid #1e293b;
   display: flex;
   align-items: center;
   justify-content: space-between;
+  flex-shrink: 0;
+  background: #111827;
 }
 
 .admin-modal-title {
@@ -895,10 +893,34 @@
 }
 
 .admin-modal-body {
-  padding: 24px;
+  padding: 20px 24px;
   display: flex;
   flex-direction: column;
   gap: 16px;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(34, 197, 94, 0.4) #090d16;
+}
+
+.admin-modal-body::-webkit-scrollbar {
+  width: 6px;
+}
+
+.admin-modal-body::-webkit-scrollbar-track {
+  background: #090d16;
+  border-radius: 4px;
+}
+
+.admin-modal-body::-webkit-scrollbar-thumb {
+  background: rgba(34, 197, 94, 0.35);
+  border-radius: 4px;
+}
+
+.admin-modal-body::-webkit-scrollbar-thumb:hover {
+  background: #22c55e;
 }
 
 .admin-form-group {

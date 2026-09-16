@@ -2,9 +2,13 @@ import React, { useState, useEffect } from 'react';
 import { useDialog } from '../../context/DialogContext';
 import { API_BASE, handleAuthError, authFetch } from '../../apiConfig';
 
-function AdminPaymentGateways() {
+function AdminPaymentGateways({ initialTab = 'recharges', onRechargeAction }) {
   const { confirm, alert: showCustomAlert } = useDialog();
-  const [subTab, setSubTab] = useState('recharges'); // 'recharges' | 'gateways'
+  const [subTab, setSubTab] = useState(initialTab);
+
+  useEffect(() => {
+    if (initialTab) setSubTab(initialTab);
+  }, [initialTab]); // 'recharges' | 'gateways'
   
   // Gateways State
   const [gateways, setGateways] = useState([]);
@@ -240,6 +244,7 @@ function AdminPaymentGateways() {
         });
         setActionModal({ isOpen: false, type: 'approve', recharge: null, adminNotes: '', submitting: false });
         fetchRecharges();
+        if (onRechargeAction) onRechargeAction();
         setTimeout(() => setActionFeedback(null), 5000);
       } else {
         await showCustomAlert({
