@@ -215,7 +215,7 @@ function AdminLayout({ currentUser, onExitAdmin, onSwitchPortal, onLogout }) {
             onClick={() => switchTab('gateways')}
           >
             <span className="admin-nav-icon">💰</span>
-            <span>Gateways & Recharges</span>
+            <span>Gateways</span>
           </button>
 
           <button

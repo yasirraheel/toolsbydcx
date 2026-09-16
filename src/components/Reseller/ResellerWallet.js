@@ -16,6 +16,7 @@ function ResellerWallet({ currentUser, onOpenRecharge }) {
   const [isRechargeModalOpen, setIsRechargeModalOpen] = useState(false);
   const [previewProofUrl, setPreviewProofUrl] = useState(null);
   const [actionFeedback, setActionFeedback] = useState(null);
+  const [copiedKey, setCopiedKey] = useState(null);
 
   // Recharge Form State
   const [selectedGatewayId, setSelectedGatewayId] = useState('');
@@ -25,6 +26,7 @@ function ResellerWallet({ currentUser, onOpenRecharge }) {
   const [proofPreview, setProofPreview] = useState('');
   const [notes, setNotes] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
 
   const getAuthHeaders = () => {
     const token = localStorage.getItem('ccna_auth_token') || localStorage.getItem('flow_token');
@@ -73,8 +75,14 @@ function ResellerWallet({ currentUser, onOpenRecharge }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const handleFileChange = (e) => {
-    const file = e.target.files[0];
+  const handleCopyText = (text, key) => {
+    if (!text) return;
+    navigator.clipboard.writeText(text);
+    setCopiedKey(key);
+    setTimeout(() => setCopiedKey(null), 2500);
+  };
+
+  const handleFileChange = (file) => {
     if (file) {
       setProofFile(file);
       const reader = new FileReader();
@@ -88,11 +96,11 @@ function ResellerWallet({ currentUser, onOpenRecharge }) {
   const handleSubmitRecharge = async (e) => {
     e.preventDefault();
     if (!amount || Number(amount) <= 0) {
-      await showCustomAlert({ title: 'Invalid Amount', message: 'Please enter a valid recharge amount.', type: 'warning' });
+      await showCustomAlert({ title: 'Invalid Amount', message: 'Please enter a valid deposit amount.', type: 'warning' });
       return;
     }
     if (!transactionId.trim()) {
-      await showCustomAlert({ title: 'Transaction ID Required', message: 'Please enter the transaction ID (TXR ID) from your payment receipt.', type: 'warning' });
+      await showCustomAlert({ title: 'Transaction ID Required', message: 'Please enter the transaction reference (TXR ID) from your payment receipt.', type: 'warning' });
       return;
     }
 
@@ -100,7 +108,6 @@ function ResellerWallet({ currentUser, onOpenRecharge }) {
       setSubmitting(true);
       let uploadedProofUrl = '';
 
-      // Upload proof file if provided
       if (proofFile) {
         const formData = new FormData();
         formData.append('file', proofFile);
@@ -164,30 +171,48 @@ function ResellerWallet({ currentUser, onOpenRecharge }) {
     }
   };
 
-  const activeGw = gateways.find(g => g.id === selectedGatewayId);
+  const activeGw = gateways.find(g => g.id === selectedGatewayId) || gateways[0];
   const possibleAccounts = walletInfo.per_user_cost > 0 
     ? Math.floor(walletInfo.balance / walletInfo.per_user_cost) 
     : 'Unlimited';
+
+  // Helper to extract clean crypto address or bank details
+  const getGatewayIcon = (name = '', currency = '') => {
+    const lower = (name + ' ' + currency).toLowerCase();
+    if (lower.includes('usdt') || lower.includes('tether') || lower.includes('trc') || lower.includes('binance')) return '₮';
+    if (lower.includes('bank') || lower.includes('transfer') || lower.includes('wire') || lower.includes('chase')) return '🏦';
+    if (lower.includes('easypaisa') || lower.includes('jazzcash') || lower.includes('mobile')) return '📱';
+    if (lower.includes('paypal') || lower.includes('wise')) return '💳';
+    return '⚡';
+  };
 
   return (
     <div className="admin-content-card">
       {/* HEADER */}
       <div className="admin-card-header" style={{ flexWrap: 'wrap', gap: '16px' }}>
         <div>
-          <h2 className="admin-card-title">💰 My Wallet & Balance</h2>
+          <h2 className="admin-card-title">💰 Reseller Wallet & Balance</h2>
           <p className="admin-card-subtitle">
-            Manage your reseller balance, recharge via manual gateways, and review transactions
+            Manage your account funds, deposit via verified manual gateways, and track ledger history
           </p>
         </div>
 
         <button
           type="button"
           className="btn-admin-primary"
-          style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 20px', fontSize: '15px' }}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+            padding: '11px 22px',
+            fontSize: '15px',
+            background: 'linear-gradient(135deg, #22c55e, #16a34a)',
+            boxShadow: '0 0 20px rgba(34, 197, 94, 0.35)'
+          }}
           onClick={() => setIsRechargeModalOpen(true)}
         >
           <span>⚡</span>
-          <span>Recharge Wallet</span>
+          <span>Deposit / Recharge</span>
         </button>
       </div>
 
@@ -207,24 +232,27 @@ function ResellerWallet({ currentUser, onOpenRecharge }) {
       )}
 
       {/* STATS CARDS */}
-      <div style={{ padding: '20px', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '16px' }}>
+      <div style={{ padding: '20px', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '16px' }}>
         {/* Balance Card */}
         <div style={{
-          background: 'linear-gradient(135deg, rgba(34, 197, 94, 0.15), rgba(9, 13, 22, 0.8))',
+          background: 'linear-gradient(135deg, rgba(34, 197, 94, 0.16), rgba(9, 13, 22, 0.9))',
           border: '1px solid rgba(34, 197, 94, 0.4)',
           borderRadius: '14px',
-          padding: '20px',
-          position: 'relative',
-          overflow: 'hidden'
+          padding: '22px',
+          boxShadow: '0 4px 20px rgba(0,0,0,0.3)',
+          position: 'relative'
         }}>
-          <div style={{ fontSize: '13px', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-            Current Wallet Balance
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ fontSize: '13px', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+              Available Balance
+            </span>
+            <span style={{ fontSize: '18px' }}>💳</span>
           </div>
-          <div style={{ fontSize: '32px', fontWeight: 900, color: '#4ade80', margin: '8px 0 4px', letterSpacing: '-0.5px' }}>
+          <div style={{ fontSize: '36px', fontWeight: 900, color: '#4ade80', margin: '8px 0 4px', letterSpacing: '-0.5px' }}>
             ${Number(walletInfo.balance || 0).toFixed(2)}
           </div>
           <div style={{ fontSize: '12px', color: '#cbd5e1' }}>
-            Available funds for creating customer accounts
+            Current funds available to create customer accounts
           </div>
         </div>
 
@@ -233,35 +261,41 @@ function ResellerWallet({ currentUser, onOpenRecharge }) {
           background: '#0d1322',
           border: '1px solid #1e293b',
           borderRadius: '14px',
-          padding: '20px'
+          padding: '22px'
         }}>
-          <div style={{ fontSize: '13px', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-            Wholesale Cost Per Account
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ fontSize: '13px', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+              Account Creation Cost
+            </span>
+            <span style={{ fontSize: '18px' }}>🏷️</span>
           </div>
-          <div style={{ fontSize: '32px', fontWeight: 900, color: '#f59e0b', margin: '8px 0 4px', letterSpacing: '-0.5px' }}>
+          <div style={{ fontSize: '36px', fontWeight: 900, color: '#f59e0b', margin: '8px 0 4px', letterSpacing: '-0.5px' }}>
             ${Number(walletInfo.per_user_cost || 0).toFixed(2)}
           </div>
           <div style={{ fontSize: '12px', color: '#94a3b8' }}>
-            Set by Admin. Automatically deducted when you create a customer.
+            Wholesale rate set by admin. Automatically deducted on user creation.
           </div>
         </div>
 
-        {/* Possible Accounts Card */}
+        {/* Capacity Card */}
         <div style={{
           background: '#0d1322',
           border: '1px solid #1e293b',
           borderRadius: '14px',
-          padding: '20px'
+          padding: '22px'
         }}>
-          <div style={{ fontSize: '13px', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-            Capacity Available
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ fontSize: '13px', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+              Creation Capacity
+            </span>
+            <span style={{ fontSize: '18px' }}>👥</span>
           </div>
-          <div style={{ fontSize: '32px', fontWeight: 900, color: '#38bdf8', margin: '8px 0 4px', letterSpacing: '-0.5px' }}>
+          <div style={{ fontSize: '36px', fontWeight: 900, color: '#38bdf8', margin: '8px 0 4px', letterSpacing: '-0.5px' }}>
             {possibleAccounts} <span style={{ fontSize: '16px', fontWeight: 600, color: '#94a3b8' }}>accounts</span>
           </div>
           <div style={{ fontSize: '12px', color: '#94a3b8' }}>
-            {walletInfo.balance < walletInfo.per_user_cost 
-              ? '⚠️ Recharge required to create your next customer.' 
+            {walletInfo.balance < walletInfo.per_user_cost && walletInfo.per_user_cost > 0
+              ? '⚠️ Balance below per-user cost. Recharge to create next customer.' 
               : 'You have sufficient funds to create customer accounts.'}
           </div>
         </div>
@@ -270,7 +304,7 @@ function ResellerWallet({ currentUser, onOpenRecharge }) {
       {/* RECHARGE HISTORY & TRANSACTIONS */}
       <div style={{ padding: '0 20px 20px' }}>
         <h3 style={{ fontSize: '17px', fontWeight: 800, color: '#f8fafc', marginBottom: '12px' }}>
-          📑 Recharge Requests History
+          📑 Deposit Requests History
         </h3>
 
         <div className="admin-table-wrapper" style={{ marginBottom: '28px' }}>
@@ -278,25 +312,25 @@ function ResellerWallet({ currentUser, onOpenRecharge }) {
             <thead>
               <tr>
                 <th>Date</th>
-                <th>Gateway</th>
+                <th>Payment Method</th>
                 <th>Amount</th>
-                <th>Transaction ID (TXR ID)</th>
-                <th>Proof of Payment</th>
+                <th>Transaction Reference (TXR ID)</th>
+                <th>Receipt Proof</th>
                 <th>Status</th>
-                <th>Notes / Feedback</th>
+                <th>Admin Note / Remarks</th>
               </tr>
             </thead>
             <tbody>
               {loading ? (
                 <tr>
                   <td colSpan="7" style={{ textAlign: 'center', padding: '30px', color: '#94a3b8' }}>
-                    Loading recharge history...
+                    Loading history...
                   </td>
                 </tr>
               ) : recharges.length === 0 ? (
                 <tr>
                   <td colSpan="7" style={{ textAlign: 'center', padding: '30px', color: '#64748b' }}>
-                    No recharge requests found. Click "Recharge Wallet" to add funds.
+                    No deposit requests yet. Click "Deposit / Recharge" to add funds.
                   </td>
                 </tr>
               ) : (
@@ -337,7 +371,7 @@ function ResellerWallet({ currentUser, onOpenRecharge }) {
                     </td>
                     <td>
                       {r.status === 'pending' && (
-                        <span className="badge-pill badge-pending">🟡 Pending Admin Review</span>
+                        <span className="badge-pill badge-pending">🟡 Pending Verification</span>
                       )}
                       {r.status === 'approved' && (
                         <span className="badge-pill badge-green">✅ Approved & Credited</span>
@@ -389,7 +423,7 @@ function ResellerWallet({ currentUser, onOpenRecharge }) {
               ) : transactions.length === 0 ? (
                 <tr>
                   <td colSpan="6" style={{ textAlign: 'center', padding: '30px', color: '#64748b' }}>
-                    No wallet transactions recorded yet.
+                    No wallet deductions recorded yet.
                   </td>
                 </tr>
               ) : (
@@ -400,11 +434,11 @@ function ResellerWallet({ currentUser, onOpenRecharge }) {
                     </td>
                     <td>
                       {t.type === 'recharge' && (
-                        <span className="badge-pill badge-green">💰 Wallet Recharge</span>
+                        <span className="badge-pill badge-green">💰 Deposit Credit</span>
                       )}
                       {t.type === 'user_creation' && (
                         <span className="badge-pill" style={{ background: 'rgba(239, 68, 68, 0.15)', color: '#f87171', border: '1px solid rgba(239, 68, 68, 0.3)' }}>
-                          👤 Account Creation
+                          👤 Customer Creation
                         </span>
                       )}
                       {t.type !== 'recharge' && t.type !== 'user_creation' && (
@@ -438,139 +472,365 @@ function ResellerWallet({ currentUser, onOpenRecharge }) {
       </div>
 
       {/* =========================================================================
-          MODAL: RECHARGE WALLET
+          HIGH-END FINTECH MODAL: RECHARGE WALLET
           ========================================================================= */}
       {isRechargeModalOpen && (
         <div className="admin-modal-backdrop" onClick={() => setIsRechargeModalOpen(false)}>
-          <div className="admin-modal-card" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '540px' }}>
-            <div className="admin-modal-header">
-              <h3 className="admin-modal-title">⚡ Recharge Reseller Wallet</h3>
-              <button type="button" className="admin-modal-close" onClick={() => setIsRechargeModalOpen(false)}>✕</button>
+          <div
+            className="admin-modal-card"
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              maxWidth: '560px',
+              border: '1px solid rgba(34, 197, 94, 0.35)',
+              boxShadow: '0 20px 60px rgba(0,0,0,0.8), 0 0 30px rgba(34, 197, 94, 0.15)',
+              borderRadius: '18px',
+              overflow: 'hidden'
+            }}
+          >
+            {/* MODAL HEADER */}
+            <div style={{
+              padding: '20px 24px',
+              borderBottom: '1px solid #1e293b',
+              background: 'linear-gradient(180deg, #131b2e 0%, #0d1322 100%)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+                <div style={{
+                  width: '42px',
+                  height: '42px',
+                  borderRadius: '12px',
+                  background: 'rgba(34, 197, 94, 0.15)',
+                  border: '1px solid rgba(34, 197, 94, 0.35)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontSize: '20px',
+                  color: '#22c55e',
+                  boxShadow: '0 0 16px rgba(34, 197, 94, 0.25)'
+                }}>
+                  ⚡
+                </div>
+                <div>
+                  <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 800, color: '#f8fafc', letterSpacing: '-0.3px' }}>
+                    Recharge Reseller Wallet
+                  </h3>
+                  <div style={{ fontSize: '12px', color: '#94a3b8', marginTop: '2px' }}>
+                    Current Balance: <span style={{ color: '#4ade80', fontWeight: 700 }}>${Number(walletInfo.balance).toFixed(2)}</span> • Wholesale Cost: <span style={{ color: '#f59e0b', fontWeight: 700 }}>${Number(walletInfo.per_user_cost).toFixed(2)}/user</span>
+                  </div>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                className="admin-modal-close"
+                onClick={() => setIsRechargeModalOpen(false)}
+                style={{ width: '32px', height: '32px', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#1e293b', border: '1px solid #334155', color: '#94a3b8', cursor: 'pointer' }}
+              >
+                ✕
+              </button>
             </div>
 
             <form onSubmit={handleSubmitRecharge}>
-              <div className="admin-modal-body">
+              <div className="admin-modal-body" style={{ padding: '24px', maxHeight: '72vh', overflowY: 'auto' }}>
                 {gateways.length === 0 ? (
-                  <div style={{ color: '#f87171', padding: '16px', background: 'rgba(239, 68, 68, 0.1)', borderRadius: '8px', border: '1px solid rgba(239, 68, 68, 0.3)' }}>
-                    No payment gateways are currently configured. Please contact the platform administrator to add manual gateways.
+                  <div style={{ color: '#f87171', padding: '16px', background: 'rgba(239, 68, 68, 0.1)', borderRadius: '10px', border: '1px solid rgba(239, 68, 68, 0.3)' }}>
+                    No manual payment methods are configured by the admin yet. Please contact support.
                   </div>
                 ) : (
                   <>
-                    <div className="admin-form-group">
-                      <label className="admin-form-label">Select Payment Method</label>
-                      <select
-                        className="admin-form-input"
-                        value={selectedGatewayId}
-                        onChange={(e) => setSelectedGatewayId(e.target.value)}
-                      >
-                        {gateways.map(g => (
-                          <option key={g.id} value={g.id}>
-                            {g.name} ({g.currency || 'USD'})
-                          </option>
-                        ))}
-                      </select>
+                    {/* 1. SELECT PAYMENT METHOD (MODERN CARDS) */}
+                    <div>
+                      <label style={{ fontSize: '13px', fontWeight: 800, color: '#cbd5e1', textTransform: 'uppercase', letterSpacing: '0.04em', display: 'block', marginBottom: '10px' }}>
+                        1. Select Deposit Method
+                      </label>
+
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: '10px', marginBottom: '16px' }}>
+                        {gateways.map((g) => {
+                          const isSelected = g.id === selectedGatewayId;
+                          return (
+                            <div
+                              key={g.id}
+                              onClick={() => setSelectedGatewayId(g.id)}
+                              style={{
+                                background: isSelected ? 'rgba(34, 197, 94, 0.12)' : '#090d16',
+                                border: `1.5px solid ${isSelected ? '#22c55e' : '#1e293b'}`,
+                                borderRadius: '12px',
+                                padding: '12px',
+                                cursor: 'pointer',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '10px',
+                                transition: 'all 0.15s ease',
+                                boxShadow: isSelected ? '0 0 16px rgba(34, 197, 94, 0.2)' : 'none'
+                              }}
+                            >
+                              <div style={{
+                                width: '34px',
+                                height: '34px',
+                                borderRadius: '8px',
+                                background: isSelected ? 'rgba(34, 197, 94, 0.25)' : '#1e293b',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                fontSize: '18px',
+                                color: isSelected ? '#22c55e' : '#94a3b8',
+                                flexShrink: 0
+                              }}>
+                                {getGatewayIcon(g.name, g.currency)}
+                              </div>
+                              <div style={{ overflow: 'hidden' }}>
+                                <div style={{ fontSize: '13px', fontWeight: 700, color: isSelected ? '#f8fafc' : '#cbd5e1', whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }}>
+                                  {g.name}
+                                </div>
+                                <div style={{ fontSize: '11px', color: isSelected ? '#4ade80' : '#64748b', fontWeight: 600 }}>
+                                  {g.currency || 'USD'}
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
                     </div>
 
-                    {/* GATEWAY PAYMENT INSTRUCTIONS BOX */}
+                    {/* 2. OFFICIAL ACCOUNT / WALLET DETAILS BOX */}
                     {activeGw && (
                       <div style={{
-                        background: '#090d16',
-                        border: '1px solid #334155',
-                        borderRadius: '10px',
-                        padding: '14px',
-                        marginBottom: '16px'
+                        background: 'linear-gradient(180deg, #090e1a 0%, #060a12 100%)',
+                        border: '1px solid #1e293b',
+                        borderRadius: '14px',
+                        padding: '16px 18px',
+                        marginBottom: '18px',
+                        position: 'relative'
                       }}>
-                        <div style={{ fontSize: '12px', fontWeight: 700, color: '#38bdf8', marginBottom: '6px' }}>
-                          📋 PAYMENT INSTRUCTIONS ({activeGw.name}):
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                          <span style={{ fontSize: '12px', fontWeight: 800, color: '#38bdf8', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                            💳 {activeGw.name} Details
+                          </span>
+                          <span style={{ fontSize: '11px', color: '#94a3b8', background: '#1e293b', padding: '2px 8px', borderRadius: '6px' }}>
+                            Currency: {activeGw.currency || 'USD'}
+                          </span>
                         </div>
 
                         {activeGw.account_details && (
                           <div style={{
-                            background: '#1e293b',
-                            padding: '10px',
-                            borderRadius: '6px',
-                            fontFamily: 'monospace',
-                            fontSize: '13px',
-                            color: '#4ade80',
-                            whiteSpace: 'pre-wrap',
-                            marginBottom: '8px',
-                            userSelect: 'all'
+                            background: '#0d1526',
+                            border: '1px solid rgba(56, 189, 248, 0.25)',
+                            borderRadius: '10px',
+                            padding: '12px 14px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            gap: '10px',
+                            marginBottom: '12px'
                           }}>
-                            {activeGw.account_details}
+                            <div style={{
+                              fontFamily: 'monospace',
+                              fontSize: '13px',
+                              color: '#4ade80',
+                              wordBreak: 'break-all',
+                              whiteSpace: 'pre-wrap',
+                              lineHeight: 1.4
+                            }}>
+                              {activeGw.account_details}
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => handleCopyText(activeGw.account_details, 'gw-details')}
+                              style={{
+                                background: copiedKey === 'gw-details' ? '#22c55e' : '#1e293b',
+                                color: copiedKey === 'gw-details' ? '#000' : '#38bdf8',
+                                border: '1px solid rgba(56, 189, 248, 0.4)',
+                                borderRadius: '8px',
+                                padding: '6px 12px',
+                                fontSize: '12px',
+                                fontWeight: 700,
+                                cursor: 'pointer',
+                                whiteSpace: 'nowrap',
+                                flexShrink: 0,
+                                transition: 'all 0.15s'
+                              }}
+                            >
+                              {copiedKey === 'gw-details' ? '✓ Copied!' : '📋 Copy'}
+                            </button>
                           </div>
                         )}
 
-                        <div style={{ fontSize: '12px', color: '#94a3b8', whiteSpace: 'pre-wrap', lineHeight: 1.4 }}>
-                          {activeGw.instructions}
-                        </div>
+                        {activeGw.instructions && (
+                          <div style={{ fontSize: '12px', color: '#94a3b8', lineHeight: 1.5, background: 'rgba(255,255,255,0.02)', padding: '10px 12px', borderRadius: '8px', borderLeft: '3px solid #38bdf8' }}>
+                            {activeGw.instructions}
+                          </div>
+                        )}
                       </div>
                     )}
 
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-                      <div className="admin-form-group">
-                        <label className="admin-form-label">Amount (${activeGw?.currency || 'USD'}) *</label>
+                    {/* 3. DEPOSIT AMOUNT & QUICK PRESETS */}
+                    <div style={{ marginBottom: '16px' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                        <label className="admin-form-label" style={{ fontSize: '13px' }}>
+                          Deposit Amount ({activeGw?.currency || 'USD'}) *
+                        </label>
+                        <div style={{ display: 'flex', gap: '6px' }}>
+                          {[25, 50, 100, 200, 500].map(val => (
+                            <button
+                              key={val}
+                              type="button"
+                              onClick={() => setAmount(String(val))}
+                              style={{
+                                background: amount === String(val) ? 'rgba(34, 197, 94, 0.25)' : '#1e293b',
+                                color: amount === String(val) ? '#4ade80' : '#94a3b8',
+                                border: `1px solid ${amount === String(val) ? '#22c55e' : '#334155'}`,
+                                borderRadius: '6px',
+                                padding: '2px 8px',
+                                fontSize: '11px',
+                                fontWeight: 700,
+                                cursor: 'pointer'
+                              }}
+                            >
+                              +${val}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      <div style={{ display: 'flex', alignItems: 'center' }}>
+                        <span style={{
+                          background: '#1e293b',
+                          border: '1px solid #334155',
+                          borderRight: 'none',
+                          padding: '13px 16px',
+                          borderTopLeftRadius: '10px',
+                          borderBottomLeftRadius: '10px',
+                          color: '#22c55e',
+                          fontWeight: 800,
+                          fontSize: '16px'
+                        }}>
+                          $
+                        </span>
                         <input
                           type="number"
                           step="0.01"
                           min="1"
                           required
                           className="admin-form-input"
+                          style={{ borderTopLeftRadius: 0, borderBottomLeftRadius: 0, fontWeight: 700, fontSize: '17px' }}
                           placeholder="e.g. 50.00"
                           value={amount}
                           onChange={(e) => setAmount(e.target.value)}
                         />
                       </div>
-
-                      <div className="admin-form-group">
-                        <label className="admin-form-label">Transaction ID (TXR ID) *</label>
-                        <input
-                          type="text"
-                          required
-                          className="admin-form-input"
-                          placeholder="e.g. 847291048201 or hash"
-                          value={transactionId}
-                          onChange={(e) => setTransactionId(e.target.value)}
-                        />
-                      </div>
                     </div>
 
+                    {/* 4. TRANSACTION ID (TXR ID) */}
                     <div className="admin-form-group">
-                      <label className="admin-form-label">
-                        Upload Proof of Payment (Screenshot / Receipt)
+                      <label className="admin-form-label" style={{ fontSize: '13px' }}>
+                        Transaction Reference / Hash (TXR ID) *
                       </label>
                       <input
-                        type="file"
-                        accept="image/*,.pdf"
+                        type="text"
+                        required
                         className="admin-form-input"
-                        onChange={handleFileChange}
-                        style={{ padding: '8px' }}
+                        style={{ fontFamily: 'monospace', fontSize: '14px', color: '#facc15' }}
+                        placeholder="Paste transaction ID or bank transfer reference"
+                        value={transactionId}
+                        onChange={(e) => setTransactionId(e.target.value)}
                       />
-                      {proofPreview && (
-                        <div style={{ marginTop: '8px', textAlign: 'center' }}>
-                          <img
-                            src={proofPreview}
-                            alt="Receipt Preview"
-                            style={{ maxHeight: '120px', borderRadius: '6px', border: '1px solid #334155' }}
+                    </div>
+
+                    {/* 5. DRAG AND DROP RECEIPT PROOF UPLOAD */}
+                    <div className="admin-form-group">
+                      <label className="admin-form-label" style={{ fontSize: '13px' }}>
+                        Proof of Payment (Screenshot / Receipt)
+                      </label>
+
+                      {!proofPreview ? (
+                        <div
+                          className={`admin-dropzone ${isDragging ? 'dragging' : ''}`}
+                          onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
+                          onDragLeave={() => setIsDragging(false)}
+                          onDrop={(e) => {
+                            e.preventDefault();
+                            setIsDragging(false);
+                            if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+                              handleFileChange(e.dataTransfer.files[0]);
+                            }
+                          }}
+                          onClick={() => document.getElementById('reseller-receipt-input').click()}
+                          style={{ padding: '20px 16px', borderRadius: '12px' }}
+                        >
+                          <input
+                            id="reseller-receipt-input"
+                            type="file"
+                            accept="image/*,.pdf"
+                            style={{ display: 'none' }}
+                            onChange={(e) => handleFileChange(e.target.files[0])}
                           />
+                          <div className="admin-dropzone-icon" style={{ width: '40px', height: '40px', fontSize: '18px' }}>
+                            📤
+                          </div>
+                          <div className="admin-dropzone-title" style={{ fontSize: '13px' }}>
+                            Click to browse or drop payment screenshot
+                          </div>
+                          <div className="admin-dropzone-subtitle" style={{ fontSize: '11px' }}>
+                            PNG, JPG, WEBP, or PDF receipt (Max 10MB)
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="admin-file-card" style={{ padding: '10px 14px' }}>
+                          <div className="admin-file-card-info">
+                            {proofPreview.startsWith('data:image') ? (
+                              <img
+                                src={proofPreview}
+                                alt="Receipt Thumbnail"
+                                style={{ width: '44px', height: '44px', objectFit: 'cover', borderRadius: '8px', border: '1px solid #334155' }}
+                              />
+                            ) : (
+                              <div className="admin-file-card-icon">📄</div>
+                            )}
+                            <div>
+                              <div className="admin-file-card-name" style={{ maxWidth: '280px', fontSize: '13px' }}>
+                                {proofFile?.name || 'Payment Receipt'}
+                              </div>
+                              <div className="admin-file-card-size">
+                                {proofFile ? `${(proofFile.size / 1024).toFixed(1)} KB` : 'Ready to upload'}
+                              </div>
+                            </div>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setProofFile(null);
+                              setProofPreview('');
+                            }}
+                            style={{ background: 'rgba(239, 68, 68, 0.15)', color: '#f87171', border: '1px solid rgba(239, 68, 68, 0.3)', padding: '5px 10px', borderRadius: '6px', fontSize: '12px', cursor: 'pointer', fontWeight: 700 }}
+                          >
+                            ✕ Remove
+                          </button>
                         </div>
                       )}
                     </div>
 
+                    {/* 6. ADDITIONAL NOTES */}
                     <div className="admin-form-group">
-                      <label className="admin-form-label">Additional Notes (Optional)</label>
+                      <label className="admin-form-label" style={{ fontSize: '12px', color: '#94a3b8' }}>
+                        Sender Notes / Payer Account Title (Optional)
+                      </label>
                       <input
                         type="text"
                         className="admin-form-input"
-                        placeholder="Sender name, account title, or notes"
+                        placeholder="e.g. Sent from John Doe's Binance / Chase account"
                         value={notes}
                         onChange={(e) => setNotes(e.target.value)}
+                        style={{ fontSize: '13px' }}
                       />
                     </div>
                   </>
                 )}
               </div>
 
-              <div className="admin-modal-footer">
+              {/* MODAL FOOTER */}
+              <div className="admin-modal-footer" style={{ padding: '16px 24px', background: '#090d16' }}>
                 <button
                   type="button"
                   className="btn-admin-secondary"
@@ -583,8 +843,14 @@ function ResellerWallet({ currentUser, onOpenRecharge }) {
                   type="submit"
                   className="btn-admin-primary"
                   disabled={submitting || gateways.length === 0}
+                  style={{
+                    background: 'linear-gradient(135deg, #22c55e, #16a34a)',
+                    boxShadow: '0 0 20px rgba(34, 197, 94, 0.4)',
+                    padding: '11px 24px',
+                    fontSize: '15px'
+                  }}
                 >
-                  {submitting ? 'Submitting...' : 'Submit Recharge Request'}
+                  {submitting ? 'Submitting Deposit...' : `⚡ Submit Deposit ($${Number(amount || 0).toFixed(2)}) →`}
                 </button>
               </div>
             </form>
