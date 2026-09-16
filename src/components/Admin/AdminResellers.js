@@ -175,14 +175,22 @@ function AdminResellers({ currentUser, onViewClients }) {
     e.preventDefault();
     if (!editingReseller) return;
     try {
+      const rawCost = editingReseller.per_user_cost !== undefined ? editingReseller.per_user_cost : editingReseller.perUserCost;
+      const rawBal = editingReseller.wallet_balance !== undefined ? editingReseller.wallet_balance : editingReseller.walletBalance;
+      const rawDomain = editingReseller.custom_domain !== undefined ? editingReseller.custom_domain : (editingReseller.customDomain || '');
+
       const payload = {
         ...editingReseller,
+        plan: editingReseller.plan,
+        durationDays: parseInt(editingReseller.durationDays, 10) || 30,
         maxCustomers: parseInt(editingReseller.max_customers !== undefined ? editingReseller.max_customers : editingReseller.maxCustomers, 10) || 1,
         max_customers: parseInt(editingReseller.max_customers !== undefined ? editingReseller.max_customers : editingReseller.maxCustomers, 10) || 1,
-        durationDays: parseInt(editingReseller.durationDays, 10) || 30,
-        perUserCost: parseFloat(editingReseller.per_user_cost !== undefined ? editingReseller.per_user_cost : (editingReseller.perUserCost || 0)) || 0.00,
-        walletBalance: parseFloat(editingReseller.wallet_balance !== undefined ? editingReseller.wallet_balance : (editingReseller.walletBalance || 0)) || 0.00,
-        customDomain: (editingReseller.custom_domain !== undefined ? editingReseller.custom_domain : (editingReseller.customDomain || '')).trim()
+        perUserCost: isNaN(parseFloat(rawCost)) ? 0.00 : parseFloat(rawCost),
+        per_user_cost: isNaN(parseFloat(rawCost)) ? 0.00 : parseFloat(rawCost),
+        walletBalance: isNaN(parseFloat(rawBal)) ? 0.00 : parseFloat(rawBal),
+        wallet_balance: isNaN(parseFloat(rawBal)) ? 0.00 : parseFloat(rawBal),
+        customDomain: (rawDomain || '').trim(),
+        custom_domain: (rawDomain || '').trim()
       };
       const res = await fetch(`${API_BASE}/admin/resellers/${editingReseller.id}`, {
         method: 'PUT',
@@ -669,6 +677,81 @@ function AdminResellers({ currentUser, onViewClients }) {
                   />
                 </div>
 
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                  <div className="admin-form-group">
+                    <label className="admin-form-label" style={{ color: '#f59e0b', fontWeight: 700 }}>
+                      Per User Price ($)
+                      <span style={{ fontSize: '12px', color: '#94a3b8', fontWeight: 400, marginLeft: '6px', display: 'block' }}>
+                        (Wholesale cost charged per user)
+                      </span>
+                    </label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      className="admin-form-input"
+                      value={editingReseller.per_user_cost !== undefined ? editingReseller.per_user_cost : (editingReseller.perUserCost !== undefined ? editingReseller.perUserCost : '0.00')}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setEditingReseller({
+                          ...editingReseller,
+                          per_user_cost: val,
+                          perUserCost: val
+                        });
+                      }}
+                      placeholder="0.00 (Free) or e.g. 1.50"
+                    />
+                  </div>
+
+                  <div className="admin-form-group">
+                    <label className="admin-form-label" style={{ color: '#4ade80', fontWeight: 700 }}>
+                      Wallet Balance ($)
+                      <span style={{ fontSize: '12px', color: '#94a3b8', fontWeight: 400, marginLeft: '6px', display: 'block' }}>
+                        (Reseller prepaid funds)
+                      </span>
+                    </label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      className="admin-form-input"
+                      value={editingReseller.wallet_balance !== undefined ? editingReseller.wallet_balance : (editingReseller.walletBalance !== undefined ? editingReseller.walletBalance : '0.00')}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setEditingReseller({
+                          ...editingReseller,
+                          wallet_balance: val,
+                          walletBalance: val
+                        });
+                      }}
+                      placeholder="0.00"
+                    />
+                  </div>
+                </div>
+
+                <div className="admin-form-group">
+                  <label className="admin-form-label">
+                    Custom Domain for User Creation
+                    <span style={{ fontSize: '12px', color: '#94a3b8', fontWeight: 400, marginLeft: '6px' }}>
+                      (e.g. example.com — reseller creates users with @example.com)
+                    </span>
+                  </label>
+                  <input
+                    type="text"
+                    className="admin-form-input"
+                    value={editingReseller.custom_domain !== undefined ? (editingReseller.custom_domain || '') : (editingReseller.customDomain || '')}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setEditingReseller({
+                        ...editingReseller,
+                        custom_domain: val,
+                        customDomain: val
+                      });
+                    }}
+                    placeholder="e.g. agencydomain.com (optional)"
+                  />
+                </div>
+
                 <div className="admin-form-group">
                   <label className="admin-form-label">Set New Password (optional)</label>
                   <input
@@ -866,6 +949,60 @@ function AdminResellers({ currentUser, onViewClients }) {
                     onChange={(e) => setNewResellerData({ ...newResellerData, maxCustomers: e.target.value })}
                     placeholder="e.g. 5, 10, 25, 50"
                     required
+                  />
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                  <div className="admin-form-group">
+                    <label className="admin-form-label" style={{ color: '#f59e0b', fontWeight: 700 }}>
+                      Per User Price ($)
+                      <span style={{ fontSize: '12px', color: '#94a3b8', fontWeight: 400, marginLeft: '6px', display: 'block' }}>
+                        (Wholesale cost charged per user)
+                      </span>
+                    </label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      className="admin-form-input"
+                      value={newResellerData.perUserCost !== undefined ? newResellerData.perUserCost : '0.00'}
+                      onChange={(e) => setNewResellerData({ ...newResellerData, perUserCost: e.target.value })}
+                      placeholder="0.00"
+                    />
+                  </div>
+
+                  <div className="admin-form-group">
+                    <label className="admin-form-label" style={{ color: '#4ade80', fontWeight: 700 }}>
+                      Initial Wallet Balance ($)
+                      <span style={{ fontSize: '12px', color: '#94a3b8', fontWeight: 400, marginLeft: '6px', display: 'block' }}>
+                        (Preloaded wallet funds)
+                      </span>
+                    </label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      className="admin-form-input"
+                      value={newResellerData.walletBalance !== undefined ? newResellerData.walletBalance : '0.00'}
+                      onChange={(e) => setNewResellerData({ ...newResellerData, walletBalance: e.target.value })}
+                      placeholder="0.00"
+                    />
+                  </div>
+                </div>
+
+                <div className="admin-form-group">
+                  <label className="admin-form-label">
+                    Custom Domain for User Creation
+                    <span style={{ fontSize: '12px', color: '#94a3b8', fontWeight: 400, marginLeft: '6px' }}>
+                      (e.g. agency.com — users created by this reseller will have @agency.com)
+                    </span>
+                  </label>
+                  <input
+                    type="text"
+                    className="admin-form-input"
+                    value={newResellerData.customDomain || ''}
+                    onChange={(e) => setNewResellerData({ ...newResellerData, customDomain: e.target.value })}
+                    placeholder="e.g. partnerdomain.com (optional)"
                   />
                 </div>
 

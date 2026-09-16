@@ -908,6 +908,13 @@ if (preg_match('#^/api/admin/#', $basePath)) {
             $pdo->prepare("UPDATE users SET name = ?, email = ?, max_customers = ?, per_user_cost = ?, custom_domain = ? WHERE id = ? AND role = 'reseller'")
                 ->execute([$name, $email, $maxCustomers, $perUserCost, $customDomain ?: null, $resellerId]);
         }
+        if (!empty($body['plan'])) {
+            $pdo->prepare("UPDATE users SET plan = ? WHERE id = ? AND role = 'reseller'")->execute([$body['plan'], $resellerId]);
+        }
+        if (isset($body['durationDays']) && (int)$body['durationDays'] > 0) {
+            $newExp = date('Y-m-d H:i:s', strtotime("+" . (int)$body['durationDays'] . " days"));
+            $pdo->prepare("UPDATE users SET expires_at = ? WHERE id = ? AND role = 'reseller'")->execute([$newExp, $resellerId]);
+        }
         if (!empty($body['password'])) {
             $hash = password_hash($body['password'], PASSWORD_BCRYPT);
             $pdo->prepare("UPDATE users SET password_hash = ? WHERE id = ?")->execute([$hash, $resellerId]);
