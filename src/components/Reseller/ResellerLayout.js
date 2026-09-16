@@ -273,6 +273,7 @@ function ResellerLayout({ currentUser, onExitReseller, onSwitchPortal, onLogout 
         <div className="admin-content-area">
           {activeTab === 'dashboard' && (
             <ResellerDashboard
+              currentUser={currentUser}
               stats={statsData?.stats}
               recentUsers={statsData?.recentUsers}
               onNavigate={(tab) => switchTab(tab)}

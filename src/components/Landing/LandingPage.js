@@ -7,11 +7,87 @@ export default function LandingPage({ currentUser, onOpenAuth, onNavigate, onLog
   const [plans, setPlans] = useState([]);
   const [loadingPlans, setLoadingPlans] = useState(true);
   const [extensionInfo, setExtensionInfo] = useState(null);
+  const [tenant, setTenant] = useState(null);
 
   useEffect(() => {
-    fetchPlans();
+    fetchTenantAndPlans();
     fetchExtensionInfo();
   }, []);
+
+  const fetchTenantAndPlans = async () => {
+    try {
+      setLoadingPlans(true);
+      const urlParams = new URLSearchParams(window.location.search);
+      const resellerParam = urlParams.get('reseller') || urlParams.get('reseller_id') || urlParams.get('ref') || sessionStorage.getItem('active_reseller_param') || '';
+      if (resellerParam) {
+        sessionStorage.setItem('active_reseller_param', resellerParam);
+      }
+
+      // 1. Fetch tenant info (if reseller parameter or custom domain exists)
+      const paramStr = resellerParam ? `?reseller=${encodeURIComponent(resellerParam)}&domain=${encodeURIComponent(window.location.hostname)}` : `?domain=${encodeURIComponent(window.location.hostname)}`;
+      const tenantRes = await fetch(`${API_BASE}/tenant/info${paramStr}`);
+      const tenantData = await tenantRes.json();
+
+      if (tenantData && tenantData.success && tenantData.is_reseller && tenantData.tenant) {
+        setTenant(tenantData.tenant);
+        if (tenantData.tenant.brand_name) {
+          document.title = `${tenantData.tenant.brand_name} - Premium Cloud Tools Access`;
+        }
+        if (tenantData.plans && Array.isArray(tenantData.plans) && tenantData.plans.length > 0) {
+          setPlans(tenantData.plans);
+          setLoadingPlans(false);
+          return;
+        }
+      }
+    } catch (err) {
+      console.warn("Failed to load tenant info:", err);
+    }
+
+    // 2. Fallback: Fetch platform public plans
+    try {
+      const res = await fetch(`${API_BASE}/plans`);
+      const data = await res.json();
+      if (data.plans && Array.isArray(data.plans)) {
+        setPlans(data.plans);
+      } else {
+        setDefaultFallbackPlans();
+      }
+    } catch (err) {
+      console.warn("Failed to load plans from server:", err);
+      setDefaultFallbackPlans();
+    } finally {
+      setLoadingPlans(false);
+    }
+  };
+
+  const setDefaultFallbackPlans = () => {
+    setPlans([
+      {
+        id: "plan_free",
+        name: "Tools Basic",
+        price: 0,
+        billing_cycle: "monthly",
+        description: "Essential starter plan for basic tool access.",
+        features: ["Standard Tool Access", "1 Active Device Session", "ToolsByDcx Extension Access", "Standard Server Speed", "Email Support"]
+      },
+      {
+        id: "plan_pro",
+        name: "Tools Ultra",
+        price: 9.99,
+        billing_cycle: "monthly",
+        description: "Complete access with high-speed rotation for creators and professionals.",
+        features: ["Full Platform Access", "Priority High-Speed Connection", "Full ToolsByDcx Suite Access", "Multi-Account Standby Pools", "Priority Support"]
+      },
+      {
+        id: "plan_unlimited",
+        name: "Tools Max",
+        price: 29.99,
+        billing_cycle: "monthly",
+        description: "All-inclusive VIP plan for unlimited tool access and top priority routing.",
+        features: ["Unlimited Tool Access", "Instant 1-Click Launch", "VIP Dedicated Server Pools", "Unlimited Active Sessions", "24/7 Dedicated VIP Support"]
+      }
+    ]);
+  };
 
   const fetchExtensionInfo = async () => {
     try {
@@ -33,61 +109,49 @@ export default function LandingPage({ currentUser, onOpenAuth, onNavigate, onLog
     window.open(downloadUrl, "_blank");
   };
 
-  const fetchPlans = async () => {
-    try {
-      setLoadingPlans(true);
-      const res = await fetch(`${API_BASE}/plans`);
-      const data = await res.json();
-      if (data.plans && Array.isArray(data.plans)) {
-        setPlans(data.plans);
-      }
-    } catch (err) {
-      console.warn("Failed to load plans from server:", err);
-      // Fallback
-      setPlans([
-        {
-          id: "plan_free",
-          name: "Tools Basic",
-          price: 0,
-          billing_cycle: "monthly",
-          description: "Essential starter plan for basic tool access.",
-          features: ["Standard Tool Access", "1 Active Device Session", "ToolsByDcx Extension Access", "Standard Server Speed", "Email Support"]
-        },
-        {
-          id: "plan_pro",
-          name: "Tools Ultra",
-          price: 9.99,
-          billing_cycle: "monthly",
-          description: "Complete access with high-speed rotation for creators and professionals.",
-          features: ["Full Platform Access", "Priority High-Speed Connection", "Full ToolsByDcx Suite Access", "Multi-Account Standby Pools", "Priority Support"]
-        },
-        {
-          id: "plan_unlimited",
-          name: "Tools Max",
-          price: 29.99,
-          billing_cycle: "monthly",
-          description: "All-inclusive VIP plan for unlimited tool access and top priority routing.",
-          features: ["Unlimited Tool Access", "Instant 1-Click Launch", "VIP Dedicated Server Pools", "Unlimited Active Sessions", "24/7 Dedicated VIP Support"]
-        }
-      ]);
-    } finally {
-      setLoadingPlans(false);
-    }
-  };
-
   const scrollToPricing = () => {
     const el = document.getElementById("pricing");
     if (el) el.scrollIntoView({ behavior: "smooth" });
   };
 
+  const getContactLink = (contact, planName) => {
+    if (!contact) return '#pricing';
+    const trimmed = contact.trim();
+    const text = planName 
+      ? `Hello! I would like to get access to the ${planName} plan from ${tenant?.brand_name || 'your service'}.`
+      : `Hello! I would like to inquire about accounts and access with ${tenant?.brand_name || 'your agency'}.`;
+    
+    // Check if phone/WhatsApp (digits)
+    const digitsOnly = trimmed.replace(/\D/g, '');
+    if (digitsOnly.length >= 8 && (trimmed.startsWith('+') || trimmed.toLowerCase().includes('whatsapp') || !trimmed.includes('@'))) {
+      return `https://wa.me/${digitsOnly}?text=${encodeURIComponent(text)}`;
+    }
+    // Telegram
+    if (trimmed.includes('t.me/') || trimmed.startsWith('@')) {
+      const handle = trimmed.replace('https://t.me/', '').replace('@', '');
+      return `https://t.me/${handle}`;
+    }
+    // Email
+    if (trimmed.includes('@')) {
+      return `mailto:${trimmed}?subject=${encodeURIComponent('Subscription Inquiry: ' + (planName || 'Tool Access'))}&body=${encodeURIComponent(text)}`;
+    }
+    return '#pricing';
+  };
+
   const handleSelectPlan = (plan) => {
-    if (!currentUser) {
-      onOpenAuth("login");
-    } else {
-      // If already logged in, navigate to appropriate panel
+    if (currentUser) {
       if (currentUser.role === "admin") onNavigate("admin");
       else if (currentUser.role === "reseller") onNavigate("reseller");
       else onNavigate("user-panel");
+    } else {
+      if (tenant?.support_contact) {
+        const link = getContactLink(tenant.support_contact, plan.name);
+        if (link && link !== '#pricing') {
+          window.open(link, '_blank');
+          return;
+        }
+      }
+      onOpenAuth("login");
     }
   };
 
@@ -108,6 +172,11 @@ export default function LandingPage({ currentUser, onOpenAuth, onNavigate, onLog
     else onNavigate("user-panel");
   };
 
+  const brandName = tenant?.brand_name || "ToolsByDcx";
+  const brandLogo = tenant?.brand_logo;
+  const brandColor = tenant?.brand_color || "#22c55e";
+  const supportContact = tenant?.support_contact;
+
   return (
     <div className="landing-root">
       <div className="landing-bg-glow-1"></div>
@@ -117,14 +186,41 @@ export default function LandingPage({ currentUser, onOpenAuth, onNavigate, onLog
       <nav className="landing-nav">
         <div className="landing-container landing-nav-inner">
           <div className="landing-brand" onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}>
-            <div className="landing-brand-icon">
-              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
-              </svg>
+            {brandLogo && brandLogo !== "/logo.png" ? (
+              <img
+                src={brandLogo.startsWith('http') ? brandLogo : `${API_BASE.replace(/\/api$/, '')}${brandLogo}`}
+                alt={brandName}
+                style={{
+                  width: '42px',
+                  height: '42px',
+                  objectFit: 'contain',
+                  borderRadius: '10px',
+                  background: '#131926',
+                  border: `1px solid ${brandColor}`,
+                  padding: '3px'
+                }}
+              />
+            ) : (
+              <div className="landing-brand-icon" style={{ borderColor: brandColor, color: brandColor }}>
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
+                </svg>
+              </div>
+            )}
+            <div style={{ display: 'flex', flexDirection: 'column' }}>
+              <span className="landing-brand-text">
+                {tenant ? (
+                  <span>{brandName}</span>
+                ) : (
+                  <>ToolsBy<span>Dcx</span></>
+                )}
+              </span>
+              {tenant && (
+                <span style={{ fontSize: '10px', color: brandColor, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase' }}>
+                  ⚡ Verified Partner Portal
+                </span>
+              )}
             </div>
-            <span className="landing-brand-text">
-              ToolsBy<span>Dcx</span>
-            </span>
           </div>
 
           <div className="landing-nav-links">
@@ -143,6 +239,19 @@ export default function LandingPage({ currentUser, onOpenAuth, onNavigate, onLog
           </div>
 
           <div className="landing-nav-actions">
+            {supportContact && (
+              <a
+                href={getContactLink(supportContact)}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="landing-btn-secondary"
+                style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 14px', fontSize: '13px', textDecoration: 'none' }}
+              >
+                <span>💬</span>
+                <span>Contact Agent</span>
+              </a>
+            )}
+
             {currentUser ? (
               <>
                 <div className="landing-user-chip">
@@ -172,15 +281,21 @@ export default function LandingPage({ currentUser, onOpenAuth, onNavigate, onLog
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
               <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
             </svg>
-            <span>All-In-One Tool Access Platform</span>
+            <span>{tenant ? `${brandName} Official Portal` : "All-In-One Tool Access Platform"}</span>
           </div>
 
           <h1 className="landing-hero-title">
-            Unlock Premium Cloud Tools in <span className="landing-hero-gradient">One Click</span>
+            Unlock Premium Cloud Tools in <span className="landing-hero-gradient">{tenant ? brandName : "One Click"}</span>
           </h1>
 
           <p className="landing-hero-subtitle">
-            Experience seamless tool access without complicated setups. ToolsByDcx connects verified accounts directly to your browser with instant 1-click launch, automated session sync, and high-uptime performance.
+            {tenant ? (
+              <>
+                Welcome to the official <strong>{brandName}</strong> customer portal. Connect verified accounts directly to your browser with instant 1-click launch, automated session sync, and dedicated agency support.
+              </>
+            ) : (
+              "Experience seamless tool access without complicated setups. ToolsByDcx connects verified accounts directly to your browser with instant 1-click launch, automated session sync, and high-uptime performance."
+            )}
           </p>
 
           <div className="landing-hero-actions">
@@ -250,7 +365,7 @@ export default function LandingPage({ currentUser, onOpenAuth, onNavigate, onLog
                     <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
                     <path d="M16 3.13a4 4 0 0 1 0 7.75" />
                   </svg>
-                  Multi-Tier Rotation
+                  {tenant ? "Dedicated VIP Pool" : "Multi-Tier Rotation"}
                 </div>
               </div>
               <div className="landing-preview-box">
@@ -272,10 +387,18 @@ export default function LandingPage({ currentUser, onOpenAuth, onNavigate, onLog
       <section className="landing-section" id="pricing">
         <div className="landing-container">
           <div className="landing-section-header">
-            <span className="landing-section-badge">Transparent Pricing</span>
-            <h2 className="landing-section-title">Flexible Plans Tailored For You</h2>
+            <span className="landing-section-badge" style={{ color: brandColor, borderColor: brandColor }}>
+              {tenant ? "Official Subscription Plans" : "Transparent Pricing"}
+            </span>
+            <h2 className="landing-section-title">
+              {tenant ? `Subscription Plans by ${brandName}` : "Flexible Plans Tailored For You"}
+            </h2>
             <p className="landing-section-desc">
-              Whether you need casual access or full-throttle enterprise pools, choose the plan that fits your workflow.
+              {tenant ? (
+                `Select an official access plan provided by ${brandName}. All plans include instant activation and browser extension sync.`
+              ) : (
+                "Whether you need casual access or full-throttle enterprise pools, choose the plan that fits your workflow."
+              )}
             </p>
           </div>
 
@@ -287,51 +410,80 @@ export default function LandingPage({ currentUser, onOpenAuth, onNavigate, onLog
               </div>
             ) : (
               plans.map((plan, idx) => {
-              const isPopular = plan.id === "plan_pro" || idx === 1;
-              const featList = Array.isArray(plan.features)
-                ? plan.features
-                : typeof plan.features === "string"
-                ? JSON.parse(plan.features || "[]")
-                : [];
+                const isPopular = plan.id === "plan_pro" || idx === 1 || plans.length === 1;
+                const featList = Array.isArray(plan.features)
+                  ? plan.features
+                  : typeof plan.features === "string"
+                  ? JSON.parse(plan.features || "[]")
+                  : [];
 
-              return (
-                <div key={plan.id || idx} className={`landing-plan-card ${isPopular ? "popular" : ""}`}>
-                  {isPopular && <div className="landing-popular-badge">★ Most Popular</div>}
+                const durationLabel = plan.duration_days 
+                  ? `${plan.duration_days} days` 
+                  : (plan.billing_cycle || "month");
 
-                  <div className="landing-plan-top">
-                    <h3 className="landing-plan-name">{plan.name}</h3>
-                    <p className="landing-plan-desc">{plan.description}</p>
-                    <div className="landing-plan-price-wrap">
-                      <span className="landing-plan-price">
-                        {plan.price === 0 ? "Free" : `$${Number(plan.price).toFixed(2)}`}
-                      </span>
-                      {plan.price > 0 && <span className="landing-plan-cycle">/ {plan.billing_cycle || "month"}</span>}
-                    </div>
-                  </div>
+                return (
+                  <div key={plan.id || idx} className={`landing-plan-card ${isPopular ? "popular" : ""}`}>
+                    {isPopular && <div className="landing-popular-badge">★ Recommended</div>}
 
-                  <ul className="landing-plan-features">
-                    {featList.map((feat, fIdx) => (
-                      <li key={fIdx} className="landing-plan-feature-item">
-                        <span className="landing-feature-check">
-                          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-                            <polyline points="20 6 9 17 4 12" />
-                          </svg>
+                    <div className="landing-plan-top">
+                      <h3 className="landing-plan-name">{plan.name}</h3>
+                      <p className="landing-plan-desc">{plan.description || "Full access to verified creative account pools."}</p>
+                      <div className="landing-plan-price-wrap">
+                        <span className="landing-plan-price">
+                          {Number(plan.price) === 0 ? "Free" : `$${Number(plan.price).toFixed(2)}`}
                         </span>
-                        <span>{feat}</span>
-                      </li>
-                    ))}
-                  </ul>
+                        {Number(plan.price) > 0 && <span className="landing-plan-cycle">/ {durationLabel}</span>}
+                      </div>
+                    </div>
 
-                  <button
-                    type="button"
-                    className={`landing-plan-btn ${isPopular ? "primary" : "secondary"}`}
-                    onClick={() => handleSelectPlan(plan)}
-                  >
-                    {currentUser ? "Go to Dashboard ➜" : "Sign In to Access ➜"}
-                  </button>
-                </div>
-              );
-            }))}
+                    <ul className="landing-plan-features">
+                      {featList.map((feat, fIdx) => (
+                        <li key={fIdx} className="landing-plan-feature-item">
+                          <span className="landing-feature-check">
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                              <polyline points="20 6 9 17 4 12" />
+                            </svg>
+                          </span>
+                          <span>{feat}</span>
+                        </li>
+                      ))}
+                      {featList.length === 0 && (
+                        <>
+                          <li className="landing-plan-feature-item">
+                            <span className="landing-feature-check">
+                              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
+                            </span>
+                            <span>Full Cloud Tool Access</span>
+                          </li>
+                          <li className="landing-plan-feature-item">
+                            <span className="landing-feature-check">
+                              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
+                            </span>
+                            <span>Browser Extension Sync</span>
+                          </li>
+                          <li className="landing-plan-feature-item">
+                            <span className="landing-feature-check">
+                              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
+                            </span>
+                            <span>High-Speed Dedicated Rotation</span>
+                          </li>
+                        </>
+                      )}
+                    </ul>
+
+                    <button
+                      type="button"
+                      className={`landing-plan-btn ${isPopular ? "primary" : "secondary"}`}
+                      onClick={() => handleSelectPlan(plan)}
+                    >
+                      {currentUser 
+                        ? "Go to Dashboard ➜" 
+                        : (supportContact ? "Contact to Purchase ➜" : "Sign In to Access ➜")}
+                    </button>
+                  </div>
+                );
+              })
+            )}
           </div>
         </div>
       </section>
@@ -364,7 +516,7 @@ export default function LandingPage({ currentUser, onOpenAuth, onNavigate, onLog
               <div className="landing-feature-icon">
                 <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                   <circle cx="12" cy="12" r="10" />
-                  <polyline points="12 6 12 12 14 14" />
+                  <polyline points="12 6 12 12 16 14" />
                 </svg>
               </div>
               <h3 className="landing-feature-title">Auto-Renewing Sessions</h3>
@@ -393,9 +545,9 @@ export default function LandingPage({ currentUser, onOpenAuth, onNavigate, onLog
                   <polyline points="17 11 19 13 23 9" />
                 </svg>
               </div>
-              <h3 className="landing-feature-title">Dedicated Reseller Hub</h3>
+              <h3 className="landing-feature-title">Verified Reseller Network</h3>
               <p className="landing-feature-desc">
-                Resellers can easily onboard clients, allocate custom access periods, track user usage, and manage shared resource pools from a dedicated portal.
+                Authorized partners can onboard clients with custom branded portals, assign subscription plans, and provide direct localized support.
               </p>
             </div>
           </div>
@@ -418,7 +570,7 @@ export default function LandingPage({ currentUser, onOpenAuth, onNavigate, onLog
               <div className="landing-step-num">01</div>
               <h3 className="landing-step-title">Select Your Plan</h3>
               <p className="landing-step-desc">
-                Pick a plan that fits your resource needs, create your ToolsByDcx account, and verify your email in seconds.
+                Pick a subscription plan offered by {brandName} and complete your onboarding in seconds.
               </p>
             </div>
 
@@ -448,9 +600,9 @@ export default function LandingPage({ currentUser, onOpenAuth, onNavigate, onLog
             <div className="landing-pill-badge" style={{ marginBottom: "16px" }}>
               Chrome Extension v{extensionInfo?.latest_version || '1.0.0'} Available
             </div>
-            <h2 className="landing-ext-title">Power Your Browser with ToolsByDcx</h2>
+            <h2 className="landing-ext-title">Power Your Browser with {brandName}</h2>
             <p className="landing-ext-desc">
-              The ToolsByDcx Chrome extension coordinates directly with your web session. Features automatic tool detection, instant 1-click launch, and seamless browser integration.
+              The Chrome extension coordinates directly with your web session. Features automatic tool detection, instant 1-click launch, and seamless browser integration.
             </p>
             <div style={{ display: "flex", gap: "12px", flexWrap: "wrap", alignItems: "center" }}>
               {currentUser ? (
@@ -504,14 +656,14 @@ export default function LandingPage({ currentUser, onOpenAuth, onNavigate, onLog
               width: "120px",
               height: "120px",
               borderRadius: "24px",
-              background: "linear-gradient(135deg, rgba(34,197,94,0.2) 0%, rgba(16,185,129,0.05) 100%)",
-              border: "1px solid rgba(34,197,94,0.4)",
+              background: `linear-gradient(135deg, ${brandColor}33 0%, rgba(16,185,129,0.05) 100%)`,
+              border: `1px solid ${brandColor}66`,
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
-              boxShadow: "0 0 40px rgba(34,197,94,0.3)"
+              boxShadow: `0 0 40px ${brandColor}44`
             }}>
-              <svg width="60" height="60" viewBox="0 0 24 24" fill="none" stroke="#22c55e" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+              <svg width="60" height="60" viewBox="0 0 24 24" fill="none" stroke={brandColor} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
                 <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
               </svg>
             </div>
@@ -524,12 +676,22 @@ export default function LandingPage({ currentUser, onOpenAuth, onNavigate, onLog
         <div className="landing-container">
           <div className="landing-footer-top">
             <div className="landing-brand">
-              <div className="landing-brand-icon" style={{ width: "32px", height: "32px" }}>
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                  <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
-                </svg>
-              </div>
-              <span className="landing-brand-text">ToolsBy<span>Dcx</span></span>
+              {brandLogo && brandLogo !== "/logo.png" ? (
+                <img
+                  src={brandLogo.startsWith('http') ? brandLogo : `${API_BASE.replace(/\/api$/, '')}${brandLogo}`}
+                  alt={brandName}
+                  style={{ width: '28px', height: '28px', objectFit: 'contain', borderRadius: '6px' }}
+                />
+              ) : (
+                <div className="landing-brand-icon" style={{ width: "32px", height: "32px", borderColor: brandColor, color: brandColor }}>
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
+                  </svg>
+                </div>
+              )}
+              <span className="landing-brand-text">
+                {tenant ? <span>{brandName}</span> : <>ToolsBy<span>Dcx</span></>}
+              </span>
             </div>
 
             <div className="landing-nav-links">
@@ -546,7 +708,9 @@ export default function LandingPage({ currentUser, onOpenAuth, onNavigate, onLog
           </div>
 
           <div className="landing-footer-bottom">
-            <div>© {new Date().getFullYear()} ToolsByDcx. All rights reserved. Professional Cloud Account Access Platform.</div>
+            <div>
+              © {new Date().getFullYear()} {brandName}. All rights reserved. {tenant ? "Authorized Partner • Powered by ToolsByDcx Platform." : "Professional Cloud Account Access Platform."}
+            </div>
             <div style={{ display: "flex", gap: "16px" }}>
               <span>Privacy Policy</span>
               <span>•</span>

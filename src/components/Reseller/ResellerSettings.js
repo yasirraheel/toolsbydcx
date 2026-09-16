@@ -1,9 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useDialog } from '../../context/DialogContext';
 import { API_BASE, handleAuthError, authFetch } from '../../apiConfig';
 
 function ResellerSettings({ currentUser, onUpdateBrand }) {
   const { alert: showCustomAlert } = useDialog();
+  const fileInputRef = useRef(null);
+
   const [settings, setSettings] = useState({
     custom_domain: '',
     brand_name: '',
@@ -15,6 +17,9 @@ function ResellerSettings({ currentUser, onUpdateBrand }) {
   const [saving, setSaving] = useState(false);
   const [logoFile, setLogoFile] = useState(null);
   const [logoPreview, setLogoPreview] = useState('');
+  const [isDragging, setIsDragging] = useState(false);
+  const [copiedLink, setCopiedLink] = useState(false);
+  const [showUrlFallback, setShowUrlFallback] = useState(false);
   const [actionFeedback, setActionFeedback] = useState(null);
 
   const getAuthHeaders = () => {
@@ -56,7 +61,7 @@ function ResellerSettings({ currentUser, onUpdateBrand }) {
   }, []);
 
   const handleLogoFileChange = (e) => {
-    const file = e.target.files[0];
+    const file = e.target.files && e.target.files[0];
     if (file) {
       setLogoFile(file);
       const reader = new FileReader();
@@ -65,6 +70,55 @@ function ResellerSettings({ currentUser, onUpdateBrand }) {
       };
       reader.readAsDataURL(file);
     }
+  };
+
+  const handleDragOver = (e) => {
+    e.preventDefault();
+    setIsDragging(true);
+  };
+
+  const handleDragLeave = (e) => {
+    e.preventDefault();
+    setIsDragging(false);
+  };
+
+  const handleDrop = (e) => {
+    e.preventDefault();
+    setIsDragging(false);
+    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+      const file = e.dataTransfer.files[0];
+      setLogoFile(file);
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setLogoPreview(reader.result);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const handleRemoveLogo = () => {
+    setLogoFile(null);
+    setLogoPreview('');
+    setSettings(prev => ({ ...prev, brand_logo: '' }));
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
+  // Generate shareable client portal URL
+  const clientIdentifier = settings.custom_domain || currentUser?.custom_domain || currentUser?.id || '';
+  const portalUrl = clientIdentifier 
+    ? `${window.location.origin}/?reseller=${encodeURIComponent(clientIdentifier)}`
+    : `${window.location.origin}/`;
+
+  const handleCopyPortalLink = () => {
+    if (!portalUrl) return;
+    navigator.clipboard.writeText(portalUrl);
+    setCopiedLink(true);
+    setTimeout(() => setCopiedLink(false), 2500);
+  };
+
+  const handleOpenLivePortal = () => {
+    if (!portalUrl) return;
+    window.open(portalUrl, '_blank');
   };
 
   const handleSaveSettings = async (e) => {
@@ -90,7 +144,7 @@ function ResellerSettings({ currentUser, onUpdateBrand }) {
         const upData = await upRes.json();
         if (upRes.ok && upData.url) {
           finalLogoUrl = upData.url;
-        } else if (logoPreview) {
+        } else if (logoPreview && !logoPreview.startsWith('data:')) {
           finalLogoUrl = logoPreview;
         }
       }
@@ -142,9 +196,9 @@ function ResellerSettings({ currentUser, onUpdateBrand }) {
     <div className="admin-content-card">
       <div className="admin-card-header">
         <div>
-          <h2 className="admin-card-title">⚙️ Branding & User Creation Domain</h2>
+          <h2 className="admin-card-title">⚙️ Branding & Client Portal</h2>
           <p className="admin-card-subtitle">
-            Configure your custom brand identity and email domain for creating customer accounts
+            Configure your custom agency branding, client landing link, and email creation domain
           </p>
         </div>
       </div>
@@ -164,191 +218,462 @@ function ResellerSettings({ currentUser, onUpdateBrand }) {
         </div>
       )}
 
-      <div style={{ padding: '24px', maxWidth: '680px' }}>
+      <div style={{ padding: '24px', maxWidth: '720px' }}>
         {loading ? (
           <div style={{ color: '#94a3b8', padding: '20px' }}>Loading settings...</div>
         ) : (
-          <form onSubmit={handleSaveSettings}>
-            {/* DOMAIN SECTION */}
+          <div>
+            {/* =========================================================================
+                SHAREABLE BRANDED CLIENT PORTAL / LANDING PAGE CARD
+                ========================================================================= */}
             <div style={{
-              background: '#0d1322',
-              border: '1px solid #1e293b',
-              borderRadius: '12px',
-              padding: '20px',
-              marginBottom: '24px'
+              background: 'linear-gradient(135deg, rgba(56, 189, 248, 0.12), rgba(15, 23, 42, 0.95))',
+              border: '1px solid rgba(56, 189, 248, 0.35)',
+              borderRadius: '16px',
+              padding: '24px',
+              marginBottom: '28px',
+              boxShadow: '0 8px 30px rgba(0, 0, 0, 0.45)',
+              position: 'relative',
+              overflow: 'hidden'
             }}>
-              <h3 style={{ fontSize: '16px', fontWeight: 800, color: '#38bdf8', margin: '0 0 8px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <span>🌐</span> Domain for User Account Creation
-              </h3>
-              <p style={{ fontSize: '13px', color: '#94a3b8', margin: '0 0 16px', lineHeight: 1.4 }}>
-                Enter your agency domain name (e.g. <code>myagencytools.com</code>). When you create new customer accounts, their email address will be automatically formatted as <code>username@{settings.custom_domain || 'yourdomain.com'}</code> instead of <code>toolsbydcx.com</code>.
+              <div style={{
+                position: 'absolute',
+                top: '-30px',
+                right: '-30px',
+                width: '120px',
+                height: '120px',
+                background: 'radial-gradient(circle, rgba(56, 189, 248, 0.2) 0%, rgba(0,0,0,0) 70%)',
+                pointerEvents: 'none'
+              }} />
+
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px', flexWrap: 'wrap', gap: '10px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <div style={{
+                    width: '36px',
+                    height: '36px',
+                    borderRadius: '10px',
+                    background: 'rgba(56, 189, 248, 0.15)',
+                    border: '1px solid rgba(56, 189, 248, 0.3)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontSize: '18px',
+                    color: '#38bdf8'
+                  }}>
+                    🔗
+                  </div>
+                  <div>
+                    <h3 style={{ fontSize: '17px', fontWeight: 800, color: '#f8fafc', margin: 0 }}>
+                      Your Shareable Client Landing Page
+                    </h3>
+                    <div style={{ fontSize: '12px', color: '#94a3b8' }}>
+                      Official branded portal link for your customers & clients
+                    </div>
+                  </div>
+                </div>
+
+                <span style={{
+                  fontSize: '11px',
+                  fontWeight: 700,
+                  padding: '4px 10px',
+                  borderRadius: '20px',
+                  background: 'rgba(34, 197, 94, 0.15)',
+                  border: '1px solid #22c55e',
+                  color: '#4ade80',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px'
+                }}>
+                  <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#22c55e' }} />
+                  Live & Shareable
+                </span>
+              </div>
+
+              <p style={{ fontSize: '13px', color: '#cbd5e1', lineHeight: 1.5, margin: '0 0 16px' }}>
+                Share this direct URL with your clients. When opened, it showcases your agency name (<strong>{settings.brand_name || currentUser?.name || 'Your Agency'}</strong>), your custom logo, your retail pricing plans, and your direct contact channel.
               </p>
 
-              <div className="admin-form-group">
-                <label className="admin-form-label">Custom Creation Domain</label>
-                <div style={{ display: 'flex', alignItems: 'center' }}>
-                  <div style={{
-                    background: '#1e293b',
-                    border: '1px solid #334155',
-                    borderRight: 'none',
-                    padding: '10px 14px',
-                    borderTopLeftRadius: '8px',
-                    borderBottomLeftRadius: '8px',
-                    color: '#94a3b8',
-                    fontSize: '14px',
-                    fontWeight: 700
-                  }}>
-                    @
-                  </div>
+              {/* URL INPUT & ACTION BUTTONS */}
+              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'stretch' }}>
+                <div style={{ flex: '1 1 300px', position: 'relative' }}>
                   <input
                     type="text"
-                    className="admin-form-input"
-                    style={{ borderTopLeftRadius: 0, borderBottomLeftRadius: 0 }}
-                    placeholder="e.g. saqibagency.com"
-                    value={settings.custom_domain}
-                    onChange={(e) => {
-                      let val = e.target.value.toLowerCase().trim();
-                      val = val.replace(/^https?:\/\//, '').replace(/^www\./, '').replace(/\/.*$/, '').replace(/^@/, '');
-                      setSettings({ ...settings, custom_domain: val });
+                    readOnly
+                    value={portalUrl}
+                    style={{
+                      width: '100%',
+                      padding: '12px 14px',
+                      background: '#090d16',
+                      border: '1px solid #334155',
+                      borderRadius: '10px',
+                      color: '#38bdf8',
+                      fontFamily: 'monospace',
+                      fontSize: '13px',
+                      fontWeight: 600,
+                      outline: 'none',
+                      boxSizing: 'border-box'
                     }}
+                    onClick={(e) => e.target.select()}
                   />
                 </div>
-                <div style={{ fontSize: '12px', color: '#64748b', marginTop: '6px' }}>
-                  Customer email preview:{' '}
-                  <span style={{ color: '#4ade80', fontWeight: 700, fontFamily: 'monospace' }}>
-                    client@{settings.custom_domain || 'toolsbydcx.com'}
-                  </span>
-                </div>
+
+                <button
+                  type="button"
+                  onClick={handleCopyPortalLink}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    padding: '10px 18px',
+                    borderRadius: '10px',
+                    background: copiedLink ? '#22c55e' : '#1e293b',
+                    color: copiedLink ? '#000' : '#f8fafc',
+                    border: `1px solid ${copiedLink ? '#22c55e' : 'rgba(56, 189, 248, 0.4)'}`,
+                    fontWeight: 700,
+                    fontSize: '13px',
+                    cursor: 'pointer',
+                    transition: 'all 0.15s ease',
+                    whiteSpace: 'nowrap'
+                  }}
+                >
+                  <span>{copiedLink ? '✓' : '📋'}</span>
+                  <span>{copiedLink ? 'Copied!' : 'Copy Link'}</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleOpenLivePortal}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    padding: '10px 18px',
+                    borderRadius: '10px',
+                    background: 'linear-gradient(135deg, #0284c7, #0369a1)',
+                    color: '#ffffff',
+                    border: '1px solid rgba(56, 189, 248, 0.5)',
+                    fontWeight: 700,
+                    fontSize: '13px',
+                    cursor: 'pointer',
+                    boxShadow: '0 2px 10px rgba(2, 132, 199, 0.3)',
+                    whiteSpace: 'nowrap'
+                  }}
+                >
+                  <span>↗️</span>
+                  <span>Preview Portal</span>
+                </button>
+              </div>
+
+              {/* HIGHLIGHT PILLS */}
+              <div style={{ display: 'flex', gap: '8px', marginTop: '16px', flexWrap: 'wrap' }}>
+                <span style={{ fontSize: '11px', color: '#94a3b8', background: 'rgba(255,255,255,0.04)', padding: '4px 10px', borderRadius: '6px', border: '1px solid #1e293b' }}>
+                  🎨 Agency Logo & Accent Colors
+                </span>
+                <span style={{ fontSize: '11px', color: '#94a3b8', background: 'rgba(255,255,255,0.04)', padding: '4px 10px', borderRadius: '6px', border: '1px solid #1e293b' }}>
+                  🏷️ Your Custom Retail Plans
+                </span>
+                <span style={{ fontSize: '11px', color: '#94a3b8', background: 'rgba(255,255,255,0.04)', padding: '4px 10px', borderRadius: '6px', border: '1px solid #1e293b' }}>
+                  💬 Direct WhatsApp & Support Channel
+                </span>
               </div>
             </div>
 
-            {/* BRANDING SECTION */}
-            <div style={{
-              background: '#0d1322',
-              border: '1px solid #1e293b',
-              borderRadius: '12px',
-              padding: '20px',
-              marginBottom: '24px'
-            }}>
-              <h3 style={{ fontSize: '16px', fontWeight: 800, color: '#f8fafc', margin: '0 0 16px' }}>
-                🎨 Agency Branding & Portal Identity
-              </h3>
+            <form onSubmit={handleSaveSettings}>
+              {/* DOMAIN SECTION */}
+              <div style={{
+                background: '#0d1322',
+                border: '1px solid #1e293b',
+                borderRadius: '12px',
+                padding: '20px',
+                marginBottom: '24px'
+              }}>
+                <h3 style={{ fontSize: '16px', fontWeight: 800, color: '#38bdf8', margin: '0 0 8px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <span>🌐</span> Domain for User Account Creation
+                </h3>
+                <p style={{ fontSize: '13px', color: '#94a3b8', margin: '0 0 16px', lineHeight: 1.4 }}>
+                  Enter your agency domain name (e.g. <code>myagencytools.com</code>). When you create new customer accounts, their email address will be automatically formatted as <code>username@{settings.custom_domain || 'yourdomain.com'}</code> instead of <code>toolsbydcx.com</code>.
+                </p>
 
-              <div className="admin-form-group">
-                <label className="admin-form-label">Brand / Agency Name</label>
-                <input
-                  type="text"
-                  className="admin-form-input"
-                  placeholder="e.g. Saqib Digital Agency"
-                  value={settings.brand_name}
-                  onChange={(e) => setSettings({ ...settings, brand_name: e.target.value })}
-                />
-              </div>
-
-              <div className="admin-form-group">
-                <label className="admin-form-label">Agency Logo</label>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '14px', marginBottom: '8px' }}>
-                  {logoPreview ? (
-                    <img
-                      src={logoPreview}
-                      alt="Brand Logo"
-                      style={{ width: '56px', height: '56px', objectFit: 'cover', borderRadius: '12px', border: '1px solid #334155' }}
-                    />
-                  ) : (
+                <div className="admin-form-group">
+                  <label className="admin-form-label">Custom Creation Domain</label>
+                  <div style={{ display: 'flex', alignItems: 'center' }}>
                     <div style={{
-                      width: '56px',
-                      height: '56px',
-                      borderRadius: '12px',
                       background: '#1e293b',
                       border: '1px solid #334155',
+                      borderRight: 'none',
+                      padding: '10px 14px',
+                      borderTopLeftRadius: '8px',
+                      borderBottomLeftRadius: '8px',
+                      color: '#94a3b8',
+                      fontSize: '14px',
+                      fontWeight: 700
+                    }}>
+                      @
+                    </div>
+                    <input
+                      type="text"
+                      className="admin-form-input"
+                      style={{ borderTopLeftRadius: 0, borderBottomLeftRadius: 0 }}
+                      placeholder="e.g. saqibagency.com"
+                      value={settings.custom_domain}
+                      onChange={(e) => {
+                        let val = e.target.value.toLowerCase().trim();
+                        val = val.replace(/^https?:\/\//, '').replace(/^www\./, '').replace(/\/.*$/, '').replace(/^@/, '');
+                        setSettings({ ...settings, custom_domain: val });
+                      }}
+                    />
+                  </div>
+                  <div style={{ fontSize: '12px', color: '#64748b', marginTop: '6px' }}>
+                    Customer email preview:{' '}
+                    <span style={{ color: '#4ade80', fontWeight: 700, fontFamily: 'monospace' }}>
+                      client@{settings.custom_domain || 'toolsbydcx.com'}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* BRANDING SECTION */}
+              <div style={{
+                background: '#0d1322',
+                border: '1px solid #1e293b',
+                borderRadius: '12px',
+                padding: '20px',
+                marginBottom: '24px'
+              }}>
+                <h3 style={{ fontSize: '16px', fontWeight: 800, color: '#f8fafc', margin: '0 0 16px' }}>
+                  🎨 Agency Branding & Portal Identity
+                </h3>
+
+                <div className="admin-form-group">
+                  <label className="admin-form-label">Brand / Agency Name</label>
+                  <input
+                    type="text"
+                    className="admin-form-input"
+                    placeholder="e.g. Saqib Digital Agency"
+                    value={settings.brand_name}
+                    onChange={(e) => setSettings({ ...settings, brand_name: e.target.value })}
+                  />
+                </div>
+
+                {/* HIGH-END LOGO FILE UPLOAD COMPONENT */}
+                <div className="admin-form-group">
+                  <label className="admin-form-label">Agency Logo</label>
+
+                  {/* Hidden native file input */}
+                  <input
+                    type="file"
+                    ref={fileInputRef}
+                    accept="image/*"
+                    onChange={handleLogoFileChange}
+                    style={{ display: 'none' }}
+                  />
+
+                  {logoPreview ? (
+                    /* Active Logo Preview Card */
+                    <div style={{
+                      background: '#090d16',
+                      border: `1px solid ${settings.brand_color ? settings.brand_color + '66' : 'rgba(34, 197, 94, 0.4)'}`,
+                      borderRadius: '12px',
+                      padding: '16px',
                       display: 'flex',
                       alignItems: 'center',
-                      justifyContent: 'center',
-                      fontSize: '22px'
+                      justifyContent: 'space-between',
+                      gap: '16px',
+                      flexWrap: 'wrap'
                     }}>
-                      ⚡
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+                        <img
+                          src={logoPreview.startsWith('http') || logoPreview.startsWith('data:') ? logoPreview : `${API_BASE.replace(/\/api$/, '')}${logoPreview}`}
+                          alt="Agency Logo"
+                          style={{
+                            width: '60px',
+                            height: '60px',
+                            objectFit: 'contain',
+                            borderRadius: '12px',
+                            background: '#131926',
+                            border: `1px solid ${settings.brand_color || '#334155'}`,
+                            padding: '4px'
+                          }}
+                        />
+                        <div>
+                          <div style={{ fontSize: '14px', fontWeight: 700, color: '#f8fafc' }}>
+                            {logoFile ? logoFile.name : 'Current Brand Logo'}
+                          </div>
+                          <div style={{ fontSize: '12px', color: '#4ade80', display: 'flex', alignItems: 'center', gap: '4px', marginTop: '2px' }}>
+                            <span>✓</span> Logo Ready
+                          </div>
+                        </div>
+                      </div>
+
+                      <div style={{ display: 'flex', gap: '8px' }}>
+                        <button
+                          type="button"
+                          onClick={() => fileInputRef.current && fileInputRef.current.click()}
+                          style={{
+                            background: '#1e293b',
+                            border: '1px solid #334155',
+                            color: '#38bdf8',
+                            borderRadius: '8px',
+                            padding: '8px 14px',
+                            fontSize: '12px',
+                            fontWeight: 700,
+                            cursor: 'pointer'
+                          }}
+                        >
+                          📁 Change Logo
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleRemoveLogo}
+                          style={{
+                            background: 'rgba(239, 68, 68, 0.1)',
+                            border: '1px solid rgba(239, 68, 68, 0.3)',
+                            color: '#f87171',
+                            borderRadius: '8px',
+                            padding: '8px 14px',
+                            fontSize: '12px',
+                            fontWeight: 700,
+                            cursor: 'pointer'
+                          }}
+                        >
+                          🗑️ Remove
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    /* Sleek Upload Dropzone */
+                    <div
+                      className={`admin-dropzone ${isDragging ? 'dragging' : ''}`}
+                      onDragOver={handleDragOver}
+                      onDragLeave={handleDragLeave}
+                      onDrop={handleDrop}
+                      onClick={() => fileInputRef.current && fileInputRef.current.click()}
+                      style={{ padding: '28px 20px', cursor: 'pointer' }}
+                    >
+                      <div className="admin-dropzone-icon" style={{ width: '48px', height: '48px', fontSize: '22px' }}>
+                        🖼️
+                      </div>
+                      <div className="admin-dropzone-title" style={{ fontSize: '14px' }}>
+                        Click to upload or drag and drop agency logo
+                      </div>
+                      <div className="admin-dropzone-subtitle" style={{ fontSize: '12px' }}>
+                        PNG, JPG, WEBP or SVG (Recommended: 256x256 square logo)
+                      </div>
                     </div>
                   )}
 
-                  <div style={{ flex: 1 }}>
-                    <input
-                      type="file"
-                      accept="image/*"
-                      className="admin-form-input"
-                      onChange={handleLogoFileChange}
-                      style={{ padding: '8px' }}
-                    />
+                  {/* Optional Direct URL Fallback */}
+                  <div style={{ marginTop: '10px' }}>
+                    {!showUrlFallback ? (
+                      <button
+                        type="button"
+                        onClick={() => setShowUrlFallback(true)}
+                        style={{
+                          background: 'none',
+                          border: 'none',
+                          color: '#64748b',
+                          fontSize: '12px',
+                          cursor: 'pointer',
+                          padding: 0,
+                          textDecoration: 'underline'
+                        }}
+                      >
+                        🔗 Or paste a direct image URL
+                      </button>
+                    ) : (
+                      <div style={{ display: 'flex', gap: '8px', marginTop: '6px' }}>
+                        <input
+                          type="text"
+                          className="admin-form-input"
+                          style={{ fontSize: '13px' }}
+                          placeholder="https://example.com/my-logo.png"
+                          value={settings.brand_logo}
+                          onChange={(e) => {
+                            setSettings({ ...settings, brand_logo: e.target.value });
+                            setLogoPreview(e.target.value);
+                          }}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowUrlFallback(false)}
+                          style={{
+                            background: '#1e293b',
+                            border: '1px solid #334155',
+                            color: '#94a3b8',
+                            borderRadius: '8px',
+                            padding: '0 12px',
+                            fontSize: '12px',
+                            cursor: 'pointer'
+                          }}
+                        >
+                          ✕ Close
+                        </button>
+                      </div>
+                    )}
                   </div>
                 </div>
-                <input
-                  type="text"
-                  className="admin-form-input"
-                  placeholder="Or paste direct image URL (https://...)"
-                  value={settings.brand_logo}
-                  onChange={(e) => {
-                    setSettings({ ...settings, brand_logo: e.target.value });
-                    setLogoPreview(e.target.value);
-                  }}
-                />
-              </div>
 
-              <div className="admin-form-group">
-                <label className="admin-form-label">Brand Accent Color</label>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                  <input
-                    type="color"
-                    value={settings.brand_color || '#22c55e'}
-                    onChange={(e) => setSettings({ ...settings, brand_color: e.target.value })}
-                    style={{ width: '44px', height: '40px', border: 'none', borderRadius: '8px', cursor: 'pointer', background: 'transparent' }}
-                  />
+                <div className="admin-form-group">
+                  <label className="admin-form-label">Brand Accent Color</label>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <input
+                      type="color"
+                      value={settings.brand_color || '#22c55e'}
+                      onChange={(e) => setSettings({ ...settings, brand_color: e.target.value })}
+                      style={{ width: '44px', height: '40px', border: 'none', borderRadius: '8px', cursor: 'pointer', background: 'transparent' }}
+                    />
+                    <input
+                      type="text"
+                      className="admin-form-input"
+                      style={{ maxWidth: '140px', fontFamily: 'monospace' }}
+                      value={settings.brand_color}
+                      onChange={(e) => setSettings({ ...settings, brand_color: e.target.value })}
+                    />
+                    <div style={{ display: 'flex', gap: '6px' }}>
+                      {['#22c55e', '#38bdf8', '#a855f7', '#f59e0b', '#ec4899'].map(c => (
+                        <button
+                          key={c}
+                          type="button"
+                          onClick={() => setSettings({ ...settings, brand_color: c })}
+                          style={{
+                            width: '24px',
+                            height: '24px',
+                            borderRadius: '50%',
+                            background: c,
+                            border: settings.brand_color === c ? '2px solid #fff' : 'none',
+                            cursor: 'pointer'
+                          }}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="admin-form-group">
+                  <label className="admin-form-label">Support Contact (WhatsApp, Telegram, or Email)</label>
                   <input
                     type="text"
                     className="admin-form-input"
-                    style={{ maxWidth: '140px', fontFamily: 'monospace' }}
-                    value={settings.brand_color}
-                    onChange={(e) => setSettings({ ...settings, brand_color: e.target.value })}
+                    placeholder="e.g. WhatsApp: +923001234567 or support@saqibagency.com"
+                    value={settings.support_contact}
+                    onChange={(e) => setSettings({ ...settings, support_contact: e.target.value })}
                   />
-                  <div style={{ display: 'flex', gap: '6px' }}>
-                    {['#22c55e', '#38bdf8', '#a855f7', '#f59e0b', '#ec4899'].map(c => (
-                      <button
-                        key={c}
-                        type="button"
-                        onClick={() => setSettings({ ...settings, brand_color: c })}
-                        style={{
-                          width: '24px',
-                          height: '24px',
-                          borderRadius: '50%',
-                          background: c,
-                          border: settings.brand_color === c ? '2px solid #fff' : 'none',
-                          cursor: 'pointer'
-                        }}
-                      />
-                    ))}
+                  <div style={{ fontSize: '12px', color: '#64748b', marginTop: '4px' }}>
+                    This contact button is displayed directly on your branded landing page for client inquiries.
                   </div>
                 </div>
               </div>
 
-              <div className="admin-form-group">
-                <label className="admin-form-label">Support Contact (WhatsApp, Telegram, or Email)</label>
-                <input
-                  type="text"
-                  className="admin-form-input"
-                  placeholder="e.g. WhatsApp: +923001234567 or support@saqibagency.com"
-                  value={settings.support_contact}
-                  onChange={(e) => setSettings({ ...settings, support_contact: e.target.value })}
-                />
-              </div>
-            </div>
-
-            <button
-              type="submit"
-              className="btn-admin-primary"
-              disabled={saving}
-              style={{ width: '100%', padding: '12px', fontSize: '15px' }}
-            >
-              {saving ? 'Saving Settings...' : 'Save Branding & Domain Settings'}
-            </button>
-          </form>
+              <button
+                type="submit"
+                className="btn-admin-primary"
+                disabled={saving}
+                style={{ width: '100%', padding: '13px', fontSize: '15px', fontWeight: 700 }}
+              >
+                {saving ? 'Saving Settings...' : 'Save Branding & Domain Settings'}
+              </button>
+            </form>
+          </div>
         )}
       </div>
     </div>

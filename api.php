@@ -430,8 +430,9 @@ if (preg_match('#^/api/tenant/info#', $basePath) && $method === 'GET') {
 
     $reseller = null;
     if ($resellerId) {
-        $stmt = $pdo->prepare("SELECT id, name, brand_name, brand_logo, brand_color, support_contact, custom_domain FROM users WHERE id = ? AND role = 'reseller'");
-        $stmt->execute([$resellerId]);
+        $strippedId = preg_replace('/^www\./', '', $resellerId);
+        $stmt = $pdo->prepare("SELECT id, name, brand_name, brand_logo, brand_color, support_contact, custom_domain FROM users WHERE (id = ? OR custom_domain = ? OR custom_domain = ?) AND role = 'reseller' LIMIT 1");
+        $stmt->execute([$resellerId, $resellerId, $strippedId]);
         $reseller = $stmt->fetch();
     } else if (!in_array($domain, ['toolsbydcx.com', 'localhost', '127.0.0.1', 'flowbydcx.com'])) {
         $stmt = $pdo->prepare("SELECT id, name, brand_name, brand_logo, brand_color, support_contact, custom_domain FROM users WHERE role = 'reseller' AND (custom_domain = ? OR custom_domain = ? OR custom_domain = ?) LIMIT 1");
