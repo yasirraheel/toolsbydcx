@@ -1,6 +1,29 @@
 (function(){
   'use strict';
 
+  // ── GOOGLE FLOW /about AUTO-RECOVERY ─────────────────────────────────────
+  // If Google Flow's client router temporarily bounces the user to /about,
+  // smoothly redirect them back to https://flow.google.com/ with loop protection
+  (function() {
+    try {
+      var currentHost = window.location.hostname.toLowerCase();
+      if (currentHost.includes('flow.google.com')) {
+        var currentPath = window.location.pathname.toLowerCase();
+        if (currentPath === '/about' || currentPath === '/about/' || currentPath.startsWith('/flow/about')) {
+          var REDIRECT_KEY = '__bf_flow_about_recovery';
+          var attempts = parseInt(sessionStorage.getItem(REDIRECT_KEY) || '0', 10);
+          if (attempts < 3) {
+            sessionStorage.setItem(REDIRECT_KEY, String(attempts + 1));
+            window.location.replace('https://flow.google.com/');
+            return;
+          }
+        } else {
+          try { sessionStorage.removeItem('__bf_flow_about_recovery'); } catch(_) {}
+        }
+      }
+    } catch(_) {}
+  })();
+
   // ── PLAN-EXPIRED FULL-SCREEN BLOCK ──────────────────────────────────────
   // If the user's plan is expired, show a black full-screen overlay over the
   // Flow page with "Your plan has expired. Renew now." and prevent any access.
