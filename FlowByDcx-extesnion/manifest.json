@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "ToolsByDcx",
-  "version": "1.5",
+  "version": "1.6",
   "description": "AI Access Platform — Unlock Google Flow and AI tools with your ToolsByDcx plan.",
   "permissions": [
     "cookies",

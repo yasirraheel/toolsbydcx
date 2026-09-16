@@ -208,10 +208,14 @@
                 bfSilentTokenRefresh(token, function() {});
                 return;
               }
-              if (data.forceSignout === true ||
+              // Only wipe cookies if the user's plan is explicitly expired or revoked.
+              // A dashboard web session timeout (401/403/dashboard_session_required) must NEVER wipe live work sessions.
+              if (data && (data.forceSignout === true ||
                   data.error === 'device_session_revoked' ||
                   data.error === 'device_limit_reached' ||
-                  data.error === 'dashboard_session_required') {
+                  (data.user && data.user.is_expired === true) ||
+                  data.is_expired === true)) {
+                console.log('[ToolsByDcx] Subscription expired or device revoked — clearing cookies.');
                 bfClearAllFlowCookies();
               }
             }).catch(function() {});
@@ -822,7 +826,20 @@ chrome.tabs.onUpdated.addListener(function(tabId, changeInfo, tab) {
       const lastInj = __tabInjectedMap.get(tabId) || 0;
       if (Date.now() - lastInj > 45000) {
         __tabInjectedMap.set(tabId, Date.now());
-        bunnyflowInjectCookies({ force: false, targetUrl: url, service: 'google_flow', skipReloadTabId: tabId });
+        // PRESERVE LIVE ROLLING TOKENS:
+        // Check if active auth cookies already exist in the browser (__Secure-1PSID / SID).
+        // If the user is already authenticated, DO NOT re-inject the static snapshot over
+        // Google's live rolling tokens (PSIDTS, OSID, SIDCC), which would break the session!
+        chrome.cookies.get({ url: 'https://flow.google.com/', name: '__Secure-1PSID' }, function(c1) {
+          if (!c1) {
+            chrome.cookies.get({ url: 'https://flow.google.com/', name: 'SID' }, function(c2) {
+              if (!c2) {
+                console.log('[ToolsByDcx] Google Flow auth missing, re-injecting cookies.');
+                bunnyflowInjectCookies({ force: false, targetUrl: url, service: 'google_flow', skipReloadTabId: tabId });
+              }
+            });
+          }
+        });
       }
     }
   } else if (url.includes('chatgpt.com') || url.includes('openai.com')) {
@@ -830,7 +847,16 @@ chrome.tabs.onUpdated.addListener(function(tabId, changeInfo, tab) {
       const lastInj = __tabInjectedMap.get(tabId) || 0;
       if (Date.now() - lastInj > 45000) {
         __tabInjectedMap.set(tabId, Date.now());
-        bunnyflowInjectCookies({ force: false, targetUrl: url, service: 'chatgpt', skipReloadTabId: tabId });
+        chrome.cookies.get({ url: 'https://chatgpt.com/', name: '__Secure-next-auth.session-token' }, function(c1) {
+          if (!c1) {
+            chrome.cookies.get({ url: 'https://chatgpt.com/', name: 'oai-did' }, function(c2) {
+              if (!c2) {
+                console.log('[ToolsByDcx] ChatGPT auth missing, re-injecting cookies.');
+                bunnyflowInjectCookies({ force: false, targetUrl: url, service: 'chatgpt', skipReloadTabId: tabId });
+              }
+            });
+          }
+        });
       }
     }
   } else {
