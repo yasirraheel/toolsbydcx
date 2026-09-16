@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useDialog } from '../../context/DialogContext';
 import { API_BASE } from '../../apiConfig';
 
-function ResellerUsers({ currentUser, isCreateOpen, onCloseCreate }) {
+function ResellerUsers({ currentUser, isCreateOpen, onCloseCreate, onNavigateTab }) {
   const { confirm, alert: showCustomAlert } = useDialog();
   const [users, setUsers] = useState([]);
   const [availablePlans, setAvailablePlans] = useState([]);
@@ -22,10 +22,21 @@ function ResellerUsers({ currentUser, isCreateOpen, onCloseCreate }) {
   // Create User Form State
   const [newUserData, setNewUserData] = useState({
     name: '',
+    emailPrefix: '',
     email: '',
     password: 'Password123!',
     plan: 'pro',
     expiryDays: 30
+  });
+
+  const [resellerWallet, setResellerWallet] = useState({
+    balance: 0.00,
+    per_user_cost: 0.00,
+    custom_domain: ''
+  });
+
+  const [userDomain, setUserDomain] = useState(() => {
+    return currentUser?.custom_domain || 'toolsbydcx.com';
   });
 
 
@@ -41,18 +52,54 @@ function ResellerUsers({ currentUser, isCreateOpen, onCloseCreate }) {
     };
   };
 
+  const fetchResellerWallet = async () => {
+    try {
+      const res = await fetch(`${API_BASE}/reseller/wallet`, { headers: getAuthHeaders() });
+      const data = await res.json();
+      if (data.success && data.wallet) {
+        setResellerWallet(data.wallet);
+        if (data.wallet.custom_domain) {
+          setUserDomain(data.wallet.custom_domain);
+        }
+      }
+    } catch (e) {
+      console.warn('Could not fetch wallet info');
+    }
+  };
+
   const fetchPlans = async () => {
     try {
-      const res = await fetch(`${API_BASE}/admin/plans`, { headers: getAuthHeaders() });
-      const data = await res.json();
-      if (data.plans && Array.isArray(data.plans)) {
-        setAvailablePlans(data.plans);
-        if (data.plans.length > 0) {
-          setNewUserData(prev => ({
-            ...prev,
-            plan: data.plans[0].id
+      let combined = [];
+      // 1. Fetch reseller custom plans
+      try {
+        const rRes = await fetch(`${API_BASE}/reseller/plans`, { headers: getAuthHeaders() });
+        const rData = await rRes.json();
+        if (rData.success && Array.isArray(rData.plans) && rData.plans.length > 0) {
+          combined = rData.plans.map(p => ({
+            id: p.id,
+            name: `${p.name} ($${Number(p.price).toFixed(2)})`,
+            price_monthly: `$${Number(p.price).toFixed(2)}`,
+            duration_days: p.duration_days,
+            is_custom: true
           }));
         }
+      } catch (_) {}
+
+      // 2. Fetch admin standard plans
+      try {
+        const aRes = await fetch(`${API_BASE}/plans`);
+        const aData = await aRes.json();
+        if (aData.success && Array.isArray(aData.plans)) {
+          combined = [...combined, ...aData.plans];
+        }
+      } catch (_) {}
+
+      if (combined.length > 0) {
+        setAvailablePlans(combined);
+        setNewUserData(prev => ({
+          ...prev,
+          plan: combined[0].id
+        }));
       }
     } catch (e) {
       console.warn('Could not fetch plans dynamically');
@@ -88,6 +135,7 @@ function ResellerUsers({ currentUser, isCreateOpen, onCloseCreate }) {
 
   useEffect(() => {
     fetchPlans();
+    fetchResellerWallet();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -102,15 +150,16 @@ function ResellerUsers({ currentUser, isCreateOpen, onCloseCreate }) {
   const handleCreateCustomer = async (e) => {
     e.preventDefault();
     try {
+      const activeDomain = userDomain.trim() || currentDomain;
       let finalEmail = (newUserData.email || '').trim().toLowerCase();
       if (!finalEmail && newUserData.emailPrefix) {
         finalEmail = newUserData.emailPrefix.trim().toLowerCase();
       }
       if (finalEmail) {
         if (finalEmail.includes('@')) {
-          finalEmail = finalEmail.split('@')[0] + '@' + currentDomain;
+          finalEmail = finalEmail.split('@')[0] + '@' + activeDomain;
         } else {
-          finalEmail = finalEmail + '@' + currentDomain;
+          finalEmail = finalEmail + '@' + activeDomain;
         }
       }
 
@@ -135,7 +184,7 @@ function ResellerUsers({ currentUser, isCreateOpen, onCloseCreate }) {
       });
       const data = await res.json();
       if (res.ok) {
-        setActionFeedback({ type: 'success', message: 'Customer account created successfully!' });
+        setActionFeedback({ type: 'success', message: data.deducted > 0 ? `Customer created! $${Number(data.deducted).toFixed(2)} deducted from wallet.` : 'Customer account created successfully!' }); fetchResellerWallet();
         onCloseCreate();
         setNewUserData({
           name: '',
@@ -762,11 +811,48 @@ function ResellerUsers({ currentUser, isCreateOpen, onCloseCreate }) {
                   />
                 </div>
 
+                {/* Wallet Balance Warning */}
+                {resellerWallet.per_user_cost > 0 && resellerWallet.balance < resellerWallet.per_user_cost && (
+                  <div style={{
+                    background: 'rgba(239, 68, 68, 0.15)',
+                    border: '1px solid #ef4444',
+                    borderRadius: '10px',
+                    padding: '12px 14px',
+                    marginBottom: '16px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    gap: '10px'
+                  }}>
+                    <div>
+                      <div style={{ color: '#f87171', fontWeight: 700, fontSize: '13px' }}>
+                        ⚠️ Insufficient Wallet Balance (${Number(resellerWallet.balance).toFixed(2)})
+                      </div>
+                      <div style={{ color: '#cbd5e1', fontSize: '12px', marginTop: '2px' }}>
+                        Account creation cost is <strong>${Number(resellerWallet.per_user_cost).toFixed(2)}</strong>. Please recharge first.
+                      </div>
+                    </div>
+                    {onNavigateTab && (
+                      <button
+                        type="button"
+                        className="btn-admin-primary"
+                        style={{ padding: '6px 12px', fontSize: '12px', whiteSpace: 'nowrap' }}
+                        onClick={() => {
+                          onCloseCreate(false);
+                          onNavigateTab('wallet');
+                        }}
+                      >
+                        ⚡ Recharge
+                      </button>
+                    )}
+                  </div>
+                )}
+
                 <div className="admin-form-group">
                   <label className="admin-form-label">
                     Email Address
                     <span style={{ fontSize: '12px', color: '#94a3b8', fontWeight: 400, marginLeft: '6px' }}>
-                      (domain auto-set to @{currentDomain})
+                      (User email will be username@{userDomain || 'toolsbydcx.com'})
                     </span>
                   </label>
                   <div style={{ display: 'flex', alignItems: 'center' }}>
@@ -790,7 +876,7 @@ function ResellerUsers({ currentUser, isCreateOpen, onCloseCreate }) {
                         setNewUserData({
                           ...newUserData,
                           emailPrefix: val,
-                          email: val ? `${val}@${currentDomain}` : ''
+                          email: val ? `${val}@${userDomain || 'toolsbydcx.com'}` : ''
                         });
                       }}
                     />
@@ -798,24 +884,43 @@ function ResellerUsers({ currentUser, isCreateOpen, onCloseCreate }) {
                       style={{
                         background: '#1e293b',
                         border: '1px solid #334155',
-                        borderLeft: 'none',
-                        padding: '11px 16px',
-                        borderTopRightRadius: '10px',
-                        borderBottomRightRadius: '10px',
-                        color: '#38bdf8',
+                        padding: '11px 8px',
+                        color: '#94a3b8',
                         fontSize: '14px',
-                        fontWeight: 700,
-                        userSelect: 'none',
-                        whiteSpace: 'nowrap'
+                        fontWeight: 700
                       }}
                     >
-                      @{currentDomain}
+                      @
                     </div>
+                    <input
+                      type="text"
+                      className="admin-form-input"
+                      style={{
+                        maxWidth: '180px',
+                        borderTopLeftRadius: 0,
+                        borderBottomLeftRadius: 0,
+                        fontFamily: 'monospace',
+                        color: '#38bdf8',
+                        fontWeight: 600
+                      }}
+                      placeholder="agencydomain.com"
+                      value={userDomain}
+                      onChange={(e) => {
+                        let d = e.target.value.toLowerCase().trim().replace(/^@/, '');
+                        setUserDomain(d);
+                        if (newUserData.emailPrefix) {
+                          setNewUserData({
+                            ...newUserData,
+                            email: `${newUserData.emailPrefix}@${d}`
+                          });
+                        }
+                      }}
+                    />
                   </div>
                   <div style={{ fontSize: '12px', color: '#64748b', marginTop: '4px' }}>
                     Full address will be:{' '}
                     <span style={{ color: '#4ade80', fontWeight: 600 }}>
-                      {newUserData.emailPrefix ? `${newUserData.emailPrefix}@${currentDomain}` : `client@${currentDomain}`}
+                      {newUserData.emailPrefix ? `${newUserData.emailPrefix}@${userDomain || 'toolsbydcx.com'}` : `client@${userDomain || 'toolsbydcx.com'}`}
                     </span>
                   </div>
                 </div>

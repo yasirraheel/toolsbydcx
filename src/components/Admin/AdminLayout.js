@@ -8,6 +8,7 @@ import AdminAccounts from './AdminAccounts';
 import AdminAccountTypes from './AdminAccountTypes';
 import AdminSettings from './AdminSettings';
 import AdminExtension from './AdminExtension';
+import AdminPaymentGateways from './AdminPaymentGateways';
 import { API_BASE, handleAuthError, authFetch } from '../../apiConfig';
 
 function AdminLayout({ currentUser, onExitAdmin, onSwitchPortal, onLogout }) {
@@ -21,6 +22,7 @@ function AdminLayout({ currentUser, onExitAdmin, onSwitchPortal, onLogout }) {
     if (path.includes("/admin/users")) return "users";
     if (path.includes("/admin/resellers")) return "resellers";
     if (path.includes("/admin/plans")) return "plans";
+    if (path.includes("/admin/gateways") || path.includes("/admin/recharges")) return "gateways";
     if (path.includes("/admin/extension")) return "extension";
     if (path.includes("/admin/settings")) return "settings";
     return "dashboard";
@@ -110,6 +112,7 @@ function AdminLayout({ currentUser, onExitAdmin, onSwitchPortal, onLogout }) {
       case 'users': return '👥 Customers';
       case 'resellers': return '🤝 Resellers';
       case 'plans': return '💳 Plans';
+      case 'gateways': return '💳 Gateways & Wallet Recharges';
       case 'extension': return '🧩 Chrome Extension';
       case 'settings': return '⚙️ Settings & SMTP';
       default: return 'Admin Portal';
@@ -208,6 +211,15 @@ function AdminLayout({ currentUser, onExitAdmin, onSwitchPortal, onLogout }) {
 
           <button
             type="button"
+            className={`admin-nav-item ${activeTab === 'gateways' ? 'active' : ''}`}
+            onClick={() => switchTab('gateways')}
+          >
+            <span className="admin-nav-icon">💰</span>
+            <span>Gateways & Recharges</span>
+          </button>
+
+          <button
+            type="button"
             className={`admin-nav-item ${activeTab === 'extension' ? 'active' : ''}`}
             onClick={() => switchTab('extension')}
           >
@@ -250,7 +262,7 @@ function AdminLayout({ currentUser, onExitAdmin, onSwitchPortal, onLogout }) {
           <div className="admin-topbar-right">
             <div className="admin-server-badge">
               <span className="admin-pulse-dot"></span>
-              <span>System Online</span>
+              <span>Production Live</span>
             </div>
 
             <div className="admin-user-capsule">
@@ -258,7 +270,7 @@ function AdminLayout({ currentUser, onExitAdmin, onSwitchPortal, onLogout }) {
                 {(currentUser?.name || 'A').charAt(0).toUpperCase()}
               </div>
               <span className="admin-user-name">
-                {currentUser?.name || 'Admin'}
+                {currentUser?.name || 'Super Admin'}
               </span>
               {onLogout && (
                 <button
@@ -328,6 +340,8 @@ function AdminLayout({ currentUser, onExitAdmin, onSwitchPortal, onLogout }) {
           )}
 
           {activeTab === 'plans' && <AdminPlans />}
+
+          {activeTab === 'gateways' && <AdminPaymentGateways />}
 
           {activeTab === 'extension' && <AdminExtension />}
 

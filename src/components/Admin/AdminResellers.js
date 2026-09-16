@@ -22,6 +22,9 @@ function AdminResellers({ currentUser, onViewClients }) {
     plan: 'plan_unlimited',
     durationDays: 30,
     maxCustomers: 10,
+    perUserCost: 0.00,
+    walletBalance: 0.00,
+    customDomain: '',
     isVerified: true
   });
 
@@ -126,7 +129,10 @@ function AdminResellers({ currentUser, onViewClients }) {
         ...newResellerData,
         email: finalEmail,
         maxCustomers: parseInt(newResellerData.maxCustomers, 10) || 1,
-        durationDays: parseInt(newResellerData.durationDays, 10) || 30
+        durationDays: parseInt(newResellerData.durationDays, 10) || 30,
+        perUserCost: parseFloat(newResellerData.perUserCost) || 0.00,
+        walletBalance: parseFloat(newResellerData.walletBalance) || 0.00,
+        customDomain: (newResellerData.customDomain || '').trim()
       };
 
       const res = await fetch(`${API_BASE}/admin/resellers`, {
@@ -173,7 +179,10 @@ function AdminResellers({ currentUser, onViewClients }) {
         ...editingReseller,
         maxCustomers: parseInt(editingReseller.max_customers !== undefined ? editingReseller.max_customers : editingReseller.maxCustomers, 10) || 1,
         max_customers: parseInt(editingReseller.max_customers !== undefined ? editingReseller.max_customers : editingReseller.maxCustomers, 10) || 1,
-        durationDays: parseInt(editingReseller.durationDays, 10) || 30
+        durationDays: parseInt(editingReseller.durationDays, 10) || 30,
+        perUserCost: parseFloat(editingReseller.per_user_cost !== undefined ? editingReseller.per_user_cost : (editingReseller.perUserCost || 0)) || 0.00,
+        walletBalance: parseFloat(editingReseller.wallet_balance !== undefined ? editingReseller.wallet_balance : (editingReseller.walletBalance || 0)) || 0.00,
+        customDomain: (editingReseller.custom_domain !== undefined ? editingReseller.custom_domain : (editingReseller.customDomain || '')).trim()
       };
       const res = await fetch(`${API_BASE}/admin/resellers/${editingReseller.id}`, {
         method: 'PUT',
@@ -370,7 +379,9 @@ function AdminResellers({ currentUser, onViewClients }) {
             <thead>
               <tr>
                 <th>Reseller Partner</th>
-                <th>Role</th>
+                <th>Wholesale Price</th>
+                <th>Wallet Balance</th>
+                <th>User Creation Domain</th>
                 <th>Assigned Plan</th>
                 <th>Active Customers</th>
                 <th>Status</th>
@@ -381,13 +392,13 @@ function AdminResellers({ currentUser, onViewClients }) {
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan="7" style={{ textAlign: 'center', padding: '40px', color: '#94a3b8' }}>
+                  <td colSpan="9" style={{ textAlign: 'center', padding: '40px', color: '#94a3b8' }}>
                     Loading resellers database...
                   </td>
                 </tr>
               ) : resellers.length === 0 ? (
                 <tr>
-                  <td colSpan="7" style={{ textAlign: 'center', padding: '40px', color: '#64748b' }}>
+                  <td colSpan="9" style={{ textAlign: 'center', padding: '40px', color: '#64748b' }}>
                     No reseller partners found matching filter criteria.
                   </td>
                 </tr>
@@ -427,20 +438,26 @@ function AdminResellers({ currentUser, onViewClients }) {
                         </div>
                       </td>
                       <td>
-                        <span
-                          className="badge-pill"
-                          style={{
-                            padding: '3px 10px',
-                            fontSize: '12px',
-                            background: 'rgba(56, 189, 248, 0.12)',
-                            color: '#38bdf8',
-                            border: '1px solid rgba(56, 189, 248, 0.3)',
-                            fontWeight: 600,
-                            textTransform: 'none'
-                          }}
-                        >
-                          🤝 Reseller
+                        <span style={{ fontWeight: 800, color: '#f59e0b', fontSize: '14px' }}>
+                          ${Number(r.per_user_cost || 0).toFixed(2)}
                         </span>
+                        <span style={{ fontSize: '11px', color: '#64748b', display: 'block' }}>per account</span>
+                      </td>
+                      <td>
+                        <span style={{ fontWeight: 800, color: Number(r.wallet_balance || 0) > 0 ? '#4ade80' : '#f87171', fontSize: '14px' }}>
+                          ${Number(r.wallet_balance || 0).toFixed(2)}
+                        </span>
+                      </td>
+                      <td>
+                        {r.custom_domain ? (
+                          <span style={{ color: '#38bdf8', fontWeight: 700, fontSize: '13px', fontFamily: 'monospace' }}>
+                            @{r.custom_domain}
+                          </span>
+                        ) : (
+                          <span style={{ color: '#64748b', fontSize: '12px' }}>
+                            Default (@toolsbydcx)
+                          </span>
+                        )}
                       </td>
                       <td>
                         {(() => {

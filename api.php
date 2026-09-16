@@ -10,19 +10,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
 
 header("Content-Type: application/json; charset=UTF-8");
 
-// Strict domain lock: Build & API are strictly mapped to toolsbydcx.com
-$httpHost = strtolower($_SERVER['HTTP_HOST'] ?? '');
-$cleanHost = explode(':', $httpHost)[0];
-$allowedHosts = ['toolsbydcx.com', 'www.toolsbydcx.com', 'localhost', '127.0.0.1'];
-if (!in_array($cleanHost, $allowedHosts)) {
-    http_response_code(403);
-    echo json_encode([
-        "success" => false,
-        "error" => "License violation: This platform is strictly authorized to operate exclusively on toolsbydcx.com."
-    ]);
-    exit;
-}
-
 // Load .env
 $envPath = __DIR__ . '/.env';
 $env = [];
@@ -53,6 +40,33 @@ try {
 } catch (Exception $e) {
     http_response_code(500);
     echo json_encode(["error" => "Database connection failed", "details" => $e->getMessage()]);
+    exit;
+}
+
+// Multi-Tenant Domain Authorization:
+// Allows default platform domains + any active reseller's registered custom domain
+$httpHost = strtolower($_SERVER['HTTP_HOST'] ?? '');
+$cleanHost = explode(':', $httpHost)[0];
+$allowedHosts = ['toolsbydcx.com', 'www.toolsbydcx.com', 'localhost', '127.0.0.1', 'flowbydcx.com', 'www.flowbydcx.com'];
+$isDomainAllowed = in_array($cleanHost, $allowedHosts);
+
+if (!$isDomainAllowed && !empty($cleanHost)) {
+    try {
+        $dStmt = $pdo->prepare("SELECT id FROM users WHERE role = 'reseller' AND (custom_domain = ? OR custom_domain = ? OR custom_domain = ?) LIMIT 1");
+        $strippedHost = preg_replace('/^www\./', '', $cleanHost);
+        $dStmt->execute([$cleanHost, 'www.' . $cleanHost, $strippedHost]);
+        if ($dStmt->fetch()) {
+            $isDomainAllowed = true;
+        }
+    } catch (Exception $e) {}
+}
+
+if (!$isDomainAllowed) {
+    http_response_code(403);
+    echo json_encode([
+        "success" => false,
+        "error" => "License violation: Domain '$cleanHost' is not authorized. If this is a reseller domain, please register it in your reseller settings."
+    ]);
     exit;
 }
 
@@ -408,6 +422,139 @@ if (preg_match('#^/api/plans$#', $basePath) && $method === 'GET') {
 }
 
 // --------------------------------------------------------------------------
+// 2.1 TENANT BRANDING & CONFIG: GET /api/tenant/info
+if (preg_match('#^/api/tenant/info#', $basePath) && $method === 'GET') {
+    $domain = strtolower(trim($_GET['domain'] ?? $cleanHost));
+    $domain = preg_replace('/^www\./', '', $domain);
+    $resellerId = trim($_GET['reseller'] ?? ($_GET['reseller_id'] ?? ''));
+
+    $reseller = null;
+    if ($resellerId) {
+        $stmt = $pdo->prepare("SELECT id, name, brand_name, brand_logo, brand_color, support_contact, custom_domain FROM users WHERE id = ? AND role = 'reseller'");
+        $stmt->execute([$resellerId]);
+        $reseller = $stmt->fetch();
+    } else if (!in_array($domain, ['toolsbydcx.com', 'localhost', '127.0.0.1', 'flowbydcx.com'])) {
+        $stmt = $pdo->prepare("SELECT id, name, brand_name, brand_logo, brand_color, support_contact, custom_domain FROM users WHERE role = 'reseller' AND (custom_domain = ? OR custom_domain = ? OR custom_domain = ?) LIMIT 1");
+        $stmt->execute([$domain, 'www.' . $domain, $domain]);
+        $reseller = $stmt->fetch();
+    }
+
+    if ($reseller) {
+        $pStmt = $pdo->prepare("SELECT id, name, price, duration_days, description, features FROM reseller_plans WHERE reseller_id = ? AND is_active = 1 ORDER BY price ASC");
+        $pStmt->execute([$reseller['id']]);
+        $rPlans = $pStmt->fetchAll();
+        $formattedPlans = array_map(function($p) {
+            $p['features'] = json_decode($p['features'] ?? '[]', true) ?: [];
+            $p['price'] = (float)$p['price'];
+            $p['duration_days'] = (int)$p['duration_days'];
+            return $p;
+        }, $rPlans);
+
+        echo json_encode([
+            "success" => true,
+            "is_reseller" => true,
+            "reseller_id" => $reseller['id'],
+            "tenant" => [
+                "id" => $reseller['id'],
+                "name" => $reseller['name'],
+                "brand_name" => $reseller['brand_name'] ?: ($reseller['name'] . ' Tools'),
+                "brand_logo" => $reseller['brand_logo'] ?: '/logo.png',
+                "brand_color" => $reseller['brand_color'] ?: '#22c55e',
+                "support_contact" => $reseller['support_contact'] ?: '',
+                "custom_domain" => $reseller['custom_domain'] ?: ''
+            ],
+            "plans" => $formattedPlans
+        ]);
+        exit;
+    }
+
+    echo json_encode([
+        "success" => true,
+        "is_reseller" => false,
+        "tenant" => [
+            "brand_name" => "ToolsByDcx",
+            "brand_logo" => "/logo.png",
+            "brand_color" => "#22c55e",
+            "support_contact" => "support@toolsbydcx.com",
+            "custom_domain" => "toolsbydcx.com"
+        ]
+    ]);
+    exit;
+}
+
+// 2.2 PUBLIC PAYMENT GATEWAYS: GET /api/payment-gateways
+if (preg_match('#^/api/payment-gateways$#', $basePath) && $method === 'GET') {
+    $gateways = $pdo->query("SELECT id, name, currency, instructions, account_details FROM manual_payment_gateways WHERE is_active = 1 ORDER BY created_at DESC")->fetchAll();
+    echo json_encode(["success" => true, "gateways" => $gateways]);
+    exit;
+}
+
+// 2.3 SECURE UPLOAD (PROOFS & BRANDING): POST /api/upload
+if (preg_match('#^/api/upload$#', $basePath) && $method === 'POST') {
+    $user = getAuthUser($pdo, $jwtSecret);
+    if (!$user) {
+        http_response_code(401);
+        echo json_encode(["error" => "Authentication required."]);
+        exit;
+    }
+
+    $uploadType = trim($_POST['type'] ?? ($body['type'] ?? 'proof'));
+    $folder = ($uploadType === 'logo' || $uploadType === 'branding') ? 'branding' : 'proofs';
+    $targetDir = __DIR__ . '/uploads/' . $folder;
+    if (!file_exists($targetDir)) {
+        @mkdir($targetDir, 0755, true);
+    }
+
+    // 1. Multipart file upload
+    $fileObj = $_FILES['file'] ?? ($_FILES['proof'] ?? ($_FILES['image'] ?? null));
+    if ($fileObj && !empty($fileObj['tmp_name'])) {
+        $ext = strtolower(pathinfo($fileObj['name'], PATHINFO_EXTENSION));
+        $allowedExts = ['jpg', 'jpeg', 'png', 'webp', 'gif', 'pdf', 'svg'];
+        if (!in_array($ext, $allowedExts)) {
+            http_response_code(400);
+            echo json_encode(["error" => "Invalid file format. Allowed: JPG, PNG, WEBP, GIF, PDF"]);
+            exit;
+        }
+
+        $filename = $folder . '_' . time() . '_' . substr(md5(rand()), 0, 8) . '.' . $ext;
+        $destPath = $targetDir . '/' . $filename;
+        if (move_uploaded_file($fileObj['tmp_name'], $destPath)) {
+            $webUrl = '/uploads/' . $folder . '/' . $filename;
+            echo json_encode(["success" => true, "url" => $webUrl, "filename" => $filename]);
+            exit;
+        } else {
+            http_response_code(500);
+            echo json_encode(["error" => "Failed to save uploaded file."]);
+            exit;
+        }
+    }
+
+    // 2. Base64 data upload
+    $base64Data = $body['image'] ?? ($body['file'] ?? '');
+    if ($base64Data && preg_match('#^data:image/(\w+);base64,#i', $base64Data, $m)) {
+        $ext = strtolower($m[1]);
+        if ($ext === 'jpeg') $ext = 'jpg';
+        $allowedExts = ['jpg', 'png', 'webp', 'gif', 'svg'];
+        if (!in_array($ext, $allowedExts)) $ext = 'png';
+
+        $data = substr($base64Data, strpos($base64Data, ',') + 1);
+        $decoded = base64_decode($data);
+        if ($decoded !== false) {
+            $filename = $folder . '_' . time() . '_' . substr(md5(rand()), 0, 8) . '.' . $ext;
+            $destPath = $targetDir . '/' . $filename;
+            if (file_put_contents($destPath, $decoded) !== false) {
+                $webUrl = '/uploads/' . $folder . '/' . $filename;
+                echo json_encode(["success" => true, "url" => $webUrl, "filename" => $filename]);
+                exit;
+            }
+        }
+    }
+
+    http_response_code(400);
+    echo json_encode(["error" => "No valid file or image provided."]);
+    exit;
+}
+
 // 3. AUTH: REGISTER (STRICTLY DISABLED)
 // --------------------------------------------------------------------------
 if (preg_match('#^/api/auth/register#', $basePath) && $method === 'POST') {
@@ -492,7 +639,14 @@ if (preg_match('#^/api/auth/login#', $basePath) && $method === 'POST') {
             "role" => $user['role'] ?? 'user',
             "plan" => $user['plan'] ?? 'free',
             "isVerified" => (bool)$user['is_verified'],
-            "credits" => (int)($user['credits'] ?? 100)
+            "credits" => (int)($user['credits'] ?? 100),
+            "wallet_balance" => (float)($user['wallet_balance'] ?? 0.00),
+            "per_user_cost" => (float)($user['per_user_cost'] ?? 0.00),
+            "custom_domain" => $user['custom_domain'] ?? '',
+            "brand_name" => $user['brand_name'] ?? '',
+            "brand_logo" => $user['brand_logo'] ?? '',
+            "brand_color" => $user['brand_color'] ?? '#22c55e',
+            "support_contact" => $user['support_contact'] ?? ''
         ]
     ]);
     exit;
@@ -518,7 +672,14 @@ if (preg_match('#^/api/auth/me#', $basePath) && $method === 'GET') {
             "isVerified" => (bool)$user['is_verified'],
             "credits" => (int)($user['credits'] ?? 100),
             "max_customers" => (int)($user['max_customers'] ?? 10),
-            "expires_at" => $user['expires_at']
+            "expires_at" => $user['expires_at'],
+            "wallet_balance" => (float)($user['wallet_balance'] ?? 0.00),
+            "per_user_cost" => (float)($user['per_user_cost'] ?? 0.00),
+            "custom_domain" => $user['custom_domain'] ?? '',
+            "brand_name" => $user['brand_name'] ?? '',
+            "brand_logo" => $user['brand_logo'] ?? '',
+            "brand_color" => $user['brand_color'] ?? '#22c55e',
+            "support_contact" => $user['support_contact'] ?? ''
         ]
     ]);
     exit;
@@ -675,7 +836,7 @@ if (preg_match('#^/api/admin/#', $basePath)) {
 
     // 8.3 Resellers List: GET /api/admin/resellers
     if (preg_match('#^/api/admin/resellers$#', $basePath) && $method === 'GET') {
-        $stmt = $pdo->query("SELECT u.id, u.name, u.email, u.role, u.plan, u.credits, u.expires_at, u.is_verified, u.max_customers, u.created_at,
+        $stmt = $pdo->query("SELECT u.id, u.name, u.email, u.role, u.plan, u.credits, u.expires_at, u.is_verified, u.max_customers, u.wallet_balance, u.per_user_cost, u.custom_domain, u.brand_name, u.brand_logo, u.brand_color, u.support_contact, u.created_at,
             (SELECT COUNT(*) FROM users sub WHERE sub.reseller_id = u.id) as sub_users_count
             FROM users u WHERE u.role = 'reseller' ORDER BY u.created_at DESC");
         $resellers = $stmt->fetchAll();
@@ -707,8 +868,14 @@ if (preg_match('#^/api/admin/#', $basePath)) {
 
         $resellerId = 'res_' . time() . '_' . substr(md5(rand()), 0, 5);
         $hash = password_hash($password, PASSWORD_BCRYPT);
-        $stmt = $pdo->prepare("INSERT INTO users (id, name, email, password_hash, is_verified, role, plan, max_customers) VALUES (?, ?, ?, ?, 1, 'reseller', ?, ?)");
-        $stmt->execute([$resellerId, $name, $email, $hash, $plan, $maxCustomers]);
+        $perUserCost = isset($body['perUserCost']) ? (float)$body['perUserCost'] : (float)($body['per_user_cost'] ?? 0.00);
+        $walletBal = isset($body['walletBalance']) ? (float)$body['walletBalance'] : (float)($body['wallet_balance'] ?? 0.00);
+        $customDomain = strtolower(trim($body['customDomain'] ?? ($body['custom_domain'] ?? '')));
+        $customDomain = preg_replace('#^https?://#i', '', $customDomain);
+        $customDomain = rtrim($customDomain, '/');
+
+        $stmt = $pdo->prepare("INSERT INTO users (id, name, email, password_hash, is_verified, role, plan, max_customers, per_user_cost, wallet_balance, custom_domain) VALUES (?, ?, ?, ?, 1, 'reseller', ?, ?, ?, ?, ?)");
+        $stmt->execute([$resellerId, $name, $email, $hash, $plan, $maxCustomers, $perUserCost, $walletBal, $customDomain ?: null]);
 
         echo json_encode(["success" => true, "message" => "Reseller created.", "id" => $resellerId]);
         exit;
@@ -720,8 +887,19 @@ if (preg_match('#^/api/admin/#', $basePath)) {
         $name = trim($body['name'] ?? '');
         $email = strtolower(trim($body['email'] ?? ''));
         $maxCustomers = (int)($body['maxCustomers'] ?? ($body['max_customers'] ?? 10));
+        $perUserCost = isset($body['perUserCost']) ? (float)$body['perUserCost'] : (float)($body['per_user_cost'] ?? 0.00);
+        $walletBal = isset($body['walletBalance']) ? (float)$body['walletBalance'] : (isset($body['wallet_balance']) ? (float)$body['wallet_balance'] : null);
+        $customDomain = strtolower(trim($body['customDomain'] ?? ($body['custom_domain'] ?? '')));
+        $customDomain = preg_replace('#^https?://#i', '', $customDomain);
+        $customDomain = rtrim($customDomain, '/');
 
-        $pdo->prepare("UPDATE users SET name = ?, email = ?, max_customers = ? WHERE id = ? AND role = 'reseller'")->execute([$name, $email, $maxCustomers, $resellerId]);
+        if ($walletBal !== null) {
+            $pdo->prepare("UPDATE users SET name = ?, email = ?, max_customers = ?, per_user_cost = ?, wallet_balance = ?, custom_domain = ? WHERE id = ? AND role = 'reseller'")
+                ->execute([$name, $email, $maxCustomers, $perUserCost, $walletBal, $customDomain ?: null, $resellerId]);
+        } else {
+            $pdo->prepare("UPDATE users SET name = ?, email = ?, max_customers = ?, per_user_cost = ?, custom_domain = ? WHERE id = ? AND role = 'reseller'")
+                ->execute([$name, $email, $maxCustomers, $perUserCost, $customDomain ?: null, $resellerId]);
+        }
         if (!empty($body['password'])) {
             $hash = password_hash($body['password'], PASSWORD_BCRYPT);
             $pdo->prepare("UPDATE users SET password_hash = ? WHERE id = ?")->execute([$hash, $resellerId]);
@@ -736,6 +914,148 @@ if (preg_match('#^/api/admin/#', $basePath)) {
         $pdo->prepare("UPDATE users SET reseller_id = NULL WHERE reseller_id = ?")->execute([$resellerId]);
         $pdo->prepare("DELETE FROM users WHERE id = ? AND role = 'reseller'")->execute([$resellerId]);
         echo json_encode(["success" => true, "message" => "Reseller deleted."]);
+        exit;
+    }
+
+    // 8.6b Admin Payment Gateways List: GET /api/admin/payment-gateways
+    if (preg_match('#^/api/admin/payment-gateways$#', $basePath) && $method === 'GET') {
+        $gateways = $pdo->query("SELECT * FROM manual_payment_gateways ORDER BY created_at DESC")->fetchAll();
+        echo json_encode(["success" => true, "gateways" => $gateways]);
+        exit;
+    }
+
+    // 8.6c Admin Create Payment Gateway: POST /api/admin/payment-gateways
+    if (preg_match('#^/api/admin/payment-gateways$#', $basePath) && $method === 'POST') {
+        $name = trim($body['name'] ?? '');
+        $currency = trim($body['currency'] ?? 'USD');
+        $instructions = trim($body['instructions'] ?? '');
+        $accountDetails = trim($body['account_details'] ?? ($body['accountDetails'] ?? ''));
+        $isActive = isset($body['is_active']) ? (int)(bool)$body['is_active'] : 1;
+
+        if (!$name || !$instructions) {
+            http_response_code(400);
+            echo json_encode(["error" => "Gateway name and payment instructions are required."]);
+            exit;
+        }
+
+        $id = 'gw_' . time() . '_' . substr(md5(rand()), 0, 5);
+        $stmt = $pdo->prepare("INSERT INTO manual_payment_gateways (id, name, currency, instructions, account_details, is_active) VALUES (?, ?, ?, ?, ?, ?)");
+        $stmt->execute([$id, $name, $currency, $instructions, $accountDetails, $isActive]);
+
+        echo json_encode(["success" => true, "message" => "Payment gateway created.", "id" => $id]);
+        exit;
+    }
+
+    // 8.6d Admin Update Payment Gateway: PUT /api/admin/payment-gateways/:id
+    if (preg_match('#^/api/admin/payment-gateways/([^/]+)$#', $basePath, $m) && $method === 'PUT') {
+        $gwId = $m[1];
+        $name = trim($body['name'] ?? '');
+        $currency = trim($body['currency'] ?? 'USD');
+        $instructions = trim($body['instructions'] ?? '');
+        $accountDetails = trim($body['account_details'] ?? ($body['accountDetails'] ?? ''));
+        $isActive = isset($body['is_active']) ? (int)(bool)$body['is_active'] : 1;
+
+        $pdo->prepare("UPDATE manual_payment_gateways SET name = ?, currency = ?, instructions = ?, account_details = ?, is_active = ? WHERE id = ?")
+            ->execute([$name, $currency, $instructions, $accountDetails, $isActive, $gwId]);
+
+        echo json_encode(["success" => true, "message" => "Payment gateway updated."]);
+        exit;
+    }
+
+    // 8.6e Admin Delete Payment Gateway: DELETE /api/admin/payment-gateways/:id
+    if (preg_match('#^/api/admin/payment-gateways/([^/]+)$#', $basePath, $m) && $method === 'DELETE') {
+        $gwId = $m[1];
+        $pdo->prepare("DELETE FROM manual_payment_gateways WHERE id = ?")->execute([$gwId]);
+        echo json_encode(["success" => true, "message" => "Payment gateway deleted."]);
+        exit;
+    }
+
+    // 8.6f Admin Recharges List: GET /api/admin/recharges
+    if (preg_match('#^/api/admin/recharges$#', $basePath) && $method === 'GET') {
+        $status = trim($_GET['status'] ?? '');
+        $sql = "SELECT r.*, u.name as reseller_name, u.email as reseller_email, u.wallet_balance as current_wallet_balance 
+                FROM wallet_recharges r 
+                LEFT JOIN users u ON r.reseller_id = u.id 
+                WHERE 1=1";
+        $params = [];
+        if ($status && in_array($status, ['pending', 'approved', 'rejected'])) {
+            $sql .= " AND r.status = ?";
+            $params[] = $status;
+        }
+        $sql .= " ORDER BY r.created_at DESC";
+
+        $stmt = $pdo->prepare($sql);
+        $stmt->execute($params);
+        $recharges = $stmt->fetchAll();
+        echo json_encode(["success" => true, "recharges" => $recharges]);
+        exit;
+    }
+
+    // 8.6g Admin Approve Recharge: POST /api/admin/recharges/:id/approve
+    if (preg_match('#^/api/admin/recharges/([^/]+)/approve$#', $basePath, $m) && $method === 'POST') {
+        $rechargeId = $m[1];
+        $adminNotes = trim($body['admin_notes'] ?? ($body['adminNotes'] ?? ''));
+
+        $rStmt = $pdo->prepare("SELECT * FROM wallet_recharges WHERE id = ?");
+        $rStmt->execute([$rechargeId]);
+        $recharge = $rStmt->fetch();
+
+        if (!$recharge) {
+            http_response_code(404);
+            echo json_encode(["error" => "Recharge request not found."]);
+            exit;
+        }
+
+        if ($recharge['status'] === 'approved') {
+            http_response_code(400);
+            echo json_encode(["error" => "Recharge request has already been approved."]);
+            exit;
+        }
+
+        $rResellerId = $recharge['reseller_id'];
+        $amount = (float)$recharge['amount'];
+
+        $uStmt = $pdo->prepare("SELECT wallet_balance FROM users WHERE id = ?");
+        $uStmt->execute([$rResellerId]);
+        $balanceBefore = (float)$uStmt->fetchColumn();
+        $balanceAfter = $balanceBefore + $amount;
+
+        $pdo->beginTransaction();
+        try {
+            $pdo->prepare("UPDATE wallet_recharges SET status = 'approved', approved_at = NOW(), admin_notes = ? WHERE id = ?")
+                ->execute([$adminNotes, $rechargeId]);
+
+            $pdo->prepare("UPDATE users SET wallet_balance = wallet_balance + ? WHERE id = ?")
+                ->execute([$amount, $rResellerId]);
+
+            $txId = 'tx_' . time() . '_' . substr(md5(rand()), 0, 5);
+            $pdo->prepare("INSERT INTO wallet_transactions (id, reseller_id, type, amount, balance_before, balance_after, reference_id, description) VALUES (?, ?, 'recharge', ?, ?, ?, ?, ?)")
+                ->execute([$txId, $rResellerId, $amount, $balanceBefore, $balanceAfter, $rechargeId, "Wallet Recharge via " . ($recharge['gateway_name'] ?: 'Manual Gateway')]);
+
+            $pdo->commit();
+            echo json_encode([
+                "success" => true,
+                "message" => "Recharge request approved. Reseller wallet credited with $" . number_format($amount, 2),
+                "new_balance" => $balanceAfter
+            ]);
+            exit;
+        } catch (Exception $e) {
+            $pdo->rollBack();
+            http_response_code(500);
+            echo json_encode(["error" => "Failed to process approval: " . $e->getMessage()]);
+            exit;
+        }
+    }
+
+    // 8.6h Admin Reject Recharge: POST /api/admin/recharges/:id/reject
+    if (preg_match('#^/api/admin/recharges/([^/]+)/reject$#', $basePath, $m) && $method === 'POST') {
+        $rechargeId = $m[1];
+        $adminNotes = trim($body['admin_notes'] ?? ($body['adminNotes'] ?? ''));
+
+        $pdo->prepare("UPDATE wallet_recharges SET status = 'rejected', admin_notes = ? WHERE id = ?")
+            ->execute([$adminNotes, $rechargeId]);
+
+        echo json_encode(["success" => true, "message" => "Recharge request rejected."]);
         exit;
     }
 
@@ -1231,13 +1551,21 @@ if (preg_match('#^/api/reseller/#', $basePath)) {
         $stmt->execute([$resellerId]);
         $customerCount = (int)$stmt->fetchColumn();
 
+        $rUser = $pdo->prepare("SELECT wallet_balance, per_user_cost, custom_domain, brand_name, brand_logo, brand_color FROM users WHERE id = ?");
+        $rUser->execute([$resellerId]);
+        $rInfo = $rUser->fetch() ?: [];
+
         $maxCustomers = (int)($reseller['max_customers'] ?? 10);
         echo json_encode([
             "success" => true,
             "stats" => [
                 "totalCustomers" => $customerCount,
                 "maxCustomers" => $maxCustomers,
-                "availableSlots" => max(0, $maxCustomers - $customerCount)
+                "availableSlots" => max(0, $maxCustomers - $customerCount),
+                "wallet_balance" => (float)($rInfo['wallet_balance'] ?? 0.00),
+                "per_user_cost" => (float)($rInfo['per_user_cost'] ?? 0.00),
+                "custom_domain" => $rInfo['custom_domain'] ?? '',
+                "brand_name" => $rInfo['brand_name'] ?? ''
             ]
         ]);
         exit;
@@ -1254,12 +1582,13 @@ if (preg_match('#^/api/reseller/#', $basePath)) {
         exit;
     }
 
-    // 9.3 Create Customer: POST /api/reseller/users
+    // 9.3 Create Customer: POST /api/reseller/users (with wholesale wallet check & deduction)
     if (preg_match('#^/api/reseller/users$#', $basePath) && $method === 'POST') {
         $name = trim($body['name'] ?? '');
         $email = strtolower(trim($body['email'] ?? ''));
         $password = $body['password'] ?? 'Password123!';
-        $durationDays = (int)($body['durationDays'] ?? 30);
+        $durationDays = (int)($body['durationDays'] ?? ($body['duration_days'] ?? 30));
+        $plan = trim($body['plan'] ?? 'plan_pro');
 
         if (!$name || !$email) {
             http_response_code(400);
@@ -1267,14 +1596,34 @@ if (preg_match('#^/api/reseller/#', $basePath)) {
             exit;
         }
 
+        // Fetch fresh reseller status
+        $uStmt = $pdo->prepare("SELECT wallet_balance, per_user_cost, max_customers, custom_domain FROM users WHERE id = ?");
+        $uStmt->execute([$resellerId]);
+        $resellerData = $uStmt->fetch();
+
+        $perUserCost = (float)($resellerData['per_user_cost'] ?? 0.00);
+        $walletBalance = (float)($resellerData['wallet_balance'] ?? 0.00);
+        $maxCustomers = (int)($resellerData['max_customers'] ?? 10);
+
+        // Check slot quota
         $cntStmt = $pdo->prepare("SELECT COUNT(*) FROM users WHERE reseller_id = ?");
         $cntStmt->execute([$resellerId]);
         $currentCount = (int)$cntStmt->fetchColumn();
-        $maxCustomers = (int)($reseller['max_customers'] ?? 10);
         if ($currentCount >= $maxCustomers) {
             http_response_code(403);
-            echo json_encode(["error" => "Customer limit ($maxCustomers) reached. Please contact admin to upgrade limit."]);
+            echo json_encode(["error" => "Customer limit ($maxCustomers) reached. Please contact admin to upgrade customer limit."]);
             exit;
+        }
+
+        // Wholesale Cost Wallet Check
+        if ($perUserCost > 0) {
+            if ($walletBalance < $perUserCost) {
+                http_response_code(402);
+                echo json_encode([
+                    "error" => "Insufficient wallet balance. Account creation costs $" . number_format($perUserCost, 2) . ", but your current balance is $" . number_format($walletBalance, 2) . ". Please recharge your wallet first."
+                ]);
+                exit;
+            }
         }
 
         $check = $pdo->prepare("SELECT id FROM users WHERE email = ?");
@@ -1289,11 +1638,38 @@ if (preg_match('#^/api/reseller/#', $basePath)) {
         $hash = password_hash($password, PASSWORD_BCRYPT);
         $expiresAt = date('Y-m-d H:i:s', strtotime("+$durationDays days"));
 
-        $stmt = $pdo->prepare("INSERT INTO users (id, name, email, password_hash, is_verified, role, reseller_id, plan, expires_at) VALUES (?, ?, ?, ?, 1, 'user', ?, 'plan_pro', ?)");
-        $stmt->execute([$userId, $name, $email, $hash, $resellerId, $expiresAt]);
+        $pdo->beginTransaction();
+        try {
+            // Deduct wholesale price from wallet if > 0
+            if ($perUserCost > 0) {
+                $newBal = $walletBalance - $perUserCost;
+                $pdo->prepare("UPDATE users SET wallet_balance = wallet_balance - ? WHERE id = ?")
+                    ->execute([$perUserCost, $resellerId]);
 
-        echo json_encode(["success" => true, "message" => "Customer created successfully.", "id" => $userId]);
-        exit;
+                $txId = 'tx_' . time() . '_' . substr(md5(rand()), 0, 5);
+                $pdo->prepare("INSERT INTO wallet_transactions (id, reseller_id, type, amount, balance_before, balance_after, reference_id, description) VALUES (?, ?, 'user_creation', ?, ?, ?, ?, ?)")
+                    ->execute([$txId, $resellerId, $perUserCost, $walletBalance, $newBal, $userId, "Customer account created: $email ($name)"]);
+            }
+
+            $stmt = $pdo->prepare("INSERT INTO users (id, name, email, password_hash, is_verified, role, reseller_id, plan, expires_at) VALUES (?, ?, ?, ?, 1, 'user', ?, ?, ?)");
+            $stmt->execute([$userId, $name, $email, $hash, $resellerId, $plan, $expiresAt]);
+
+            $pdo->commit();
+
+            echo json_encode([
+                "success" => true,
+                "message" => "Customer created successfully.",
+                "id" => $userId,
+                "deducted" => $perUserCost,
+                "remaining_balance" => ($perUserCost > 0 ? $walletBalance - $perUserCost : $walletBalance)
+            ]);
+            exit;
+        } catch (Exception $e) {
+            $pdo->rollBack();
+            http_response_code(500);
+            echo json_encode(["error" => "Failed to create customer: " . $e->getMessage()]);
+            exit;
+        }
     }
 
     // 9.4 Update Customer: PUT /api/reseller/users/:id
@@ -1344,6 +1720,178 @@ if (preg_match('#^/api/reseller/#', $basePath)) {
         $pdo->prepare("DELETE FROM extension_sessions WHERE user_id = ?")->execute([$userId]);
         $pdo->prepare("DELETE FROM users WHERE id = ? AND reseller_id = ?")->execute([$userId, $resellerId]);
         echo json_encode(["success" => true, "message" => "Customer deleted."]);
+        exit;
+    }
+
+    // 9.8 Reseller Wallet Overview: GET /api/reseller/wallet
+    if (preg_match('#^/api/reseller/wallet$#', $basePath) && $method === 'GET') {
+        $uStmt = $pdo->prepare("SELECT id, name, email, wallet_balance, per_user_cost, custom_domain FROM users WHERE id = ?");
+        $uStmt->execute([$resellerId]);
+        $walletInfo = $uStmt->fetch();
+
+        $rStmt = $pdo->prepare("SELECT * FROM wallet_recharges WHERE reseller_id = ? ORDER BY created_at DESC LIMIT 50");
+        $rStmt->execute([$resellerId]);
+        $recharges = $rStmt->fetchAll();
+
+        $tStmt = $pdo->prepare("SELECT * FROM wallet_transactions WHERE reseller_id = ? ORDER BY created_at DESC LIMIT 50");
+        $tStmt->execute([$resellerId]);
+        $transactions = $tStmt->fetchAll();
+
+        echo json_encode([
+            "success" => true,
+            "wallet" => [
+                "balance" => (float)($walletInfo['wallet_balance'] ?? 0.00),
+                "per_user_cost" => (float)($walletInfo['per_user_cost'] ?? 0.00),
+                "custom_domain" => $walletInfo['custom_domain'] ?? ''
+            ],
+            "recharges" => $recharges,
+            "transactions" => $transactions
+        ]);
+        exit;
+    }
+
+    // 9.9 Reseller Submit Recharge: POST /api/reseller/recharge
+    if (preg_match('#^/api/reseller/recharge$#', $basePath) && $method === 'POST') {
+        $gatewayId = trim($body['gateway_id'] ?? ($body['gatewayId'] ?? ''));
+        $amount = (float)($body['amount'] ?? 0);
+        $transactionId = trim($body['transaction_id'] ?? ($body['transactionId'] ?? ($body['txr_id'] ?? '')));
+        $proofImage = trim($body['proof_image'] ?? ($body['proofImage'] ?? ''));
+        $notes = trim($body['notes'] ?? '');
+
+        if ($amount <= 0) {
+            http_response_code(400);
+            echo json_encode(["error" => "Please enter a recharge amount greater than 0."]);
+            exit;
+        }
+
+        if (!$transactionId) {
+            http_response_code(400);
+            echo json_encode(["error" => "Transaction ID (TXR ID) is required."]);
+            exit;
+        }
+
+        $gwName = 'Manual Payment Gateway';
+        $currency = 'USD';
+        if ($gatewayId) {
+            $gwStmt = $pdo->prepare("SELECT name, currency FROM manual_payment_gateways WHERE id = ?");
+            $gwStmt->execute([$gatewayId]);
+            $gw = $gwStmt->fetch();
+            if ($gw) {
+                $gwName = $gw['name'];
+                $currency = $gw['currency'];
+            }
+        }
+
+        $rechargeId = 'rch_' . time() . '_' . substr(md5(rand()), 0, 5);
+        $stmt = $pdo->prepare("INSERT INTO wallet_recharges (id, reseller_id, gateway_id, gateway_name, amount, currency, transaction_id, proof_image, notes, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending')");
+        $stmt->execute([$rechargeId, $resellerId, $gatewayId ?: null, $gwName, $amount, $currency, $transactionId, $proofImage ?: null, $notes ?: null]);
+
+        echo json_encode([
+            "success" => true,
+            "message" => "Recharge request submitted successfully. Once confirmed by admin, your wallet balance will be credited.",
+            "id" => $rechargeId
+        ]);
+        exit;
+    }
+
+    // 9.10 Reseller Custom Plans List: GET /api/reseller/plans
+    if (preg_match('#^/api/reseller/plans$#', $basePath) && $method === 'GET') {
+        $stmt = $pdo->prepare("SELECT * FROM reseller_plans WHERE reseller_id = ? ORDER BY created_at DESC");
+        $stmt->execute([$resellerId]);
+        $plans = $stmt->fetchAll();
+        $formatted = array_map(function($p) {
+            $p['features'] = json_decode($p['features'] ?? '[]', true) ?: [];
+            $p['price'] = (float)$p['price'];
+            $p['duration_days'] = (int)$p['duration_days'];
+            return $p;
+        }, $plans);
+        echo json_encode(["success" => true, "plans" => $formatted]);
+        exit;
+    }
+
+    // 9.11 Reseller Create Plan: POST /api/reseller/plans
+    if (preg_match('#^/api/reseller/plans$#', $basePath) && $method === 'POST') {
+        $name = trim($body['name'] ?? '');
+        $price = (float)($body['price'] ?? 0);
+        $durationDays = (int)($body['duration_days'] ?? ($body['durationDays'] ?? 30));
+        $description = trim($body['description'] ?? '');
+        $features = is_array($body['features'] ?? null) ? json_encode($body['features']) : (string)($body['features'] ?? '[]');
+        $isActive = isset($body['is_active']) ? (int)(bool)$body['is_active'] : 1;
+
+        if (!$name) {
+            http_response_code(400);
+            echo json_encode(["error" => "Plan name is required."]);
+            exit;
+        }
+
+        $planId = 'rplan_' . time() . '_' . substr(md5(rand()), 0, 5);
+        $stmt = $pdo->prepare("INSERT INTO reseller_plans (id, reseller_id, name, price, duration_days, description, features, is_active) VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
+        $stmt->execute([$planId, $resellerId, $name, $price, $durationDays, $description, $features, $isActive]);
+
+        echo json_encode(["success" => true, "message" => "Custom plan created successfully.", "id" => $planId]);
+        exit;
+    }
+
+    // 9.12 Reseller Update Plan: PUT /api/reseller/plans/:id
+    if (preg_match('#^/api/reseller/plans/([^/]+)$#', $basePath, $m) && $method === 'PUT') {
+        $planId = $m[1];
+        $name = trim($body['name'] ?? '');
+        $price = (float)($body['price'] ?? 0);
+        $durationDays = (int)($body['duration_days'] ?? ($body['durationDays'] ?? 30));
+        $description = trim($body['description'] ?? '');
+        $features = is_array($body['features'] ?? null) ? json_encode($body['features']) : (string)($body['features'] ?? '[]');
+        $isActive = isset($body['is_active']) ? (int)(bool)$body['is_active'] : 1;
+
+        $pdo->prepare("UPDATE reseller_plans SET name = ?, price = ?, duration_days = ?, description = ?, features = ?, is_active = ? WHERE id = ? AND reseller_id = ?")
+            ->execute([$name, $price, $durationDays, $description, $features, $isActive, $planId, $resellerId]);
+
+        echo json_encode(["success" => true, "message" => "Custom plan updated."]);
+        exit;
+    }
+
+    // 9.13 Reseller Delete Plan: DELETE /api/reseller/plans/:id
+    if (preg_match('#^/api/reseller/plans/([^/]+)$#', $basePath, $m) && $method === 'DELETE') {
+        $planId = $m[1];
+        $pdo->prepare("DELETE FROM reseller_plans WHERE id = ? AND reseller_id = ?")->execute([$planId, $resellerId]);
+        echo json_encode(["success" => true, "message" => "Custom plan deleted."]);
+        exit;
+    }
+
+    // 9.14 Reseller Settings & Branding: GET /api/reseller/settings
+    if (preg_match('#^/api/reseller/settings$#', $basePath) && $method === 'GET') {
+        $stmt = $pdo->prepare("SELECT id, name, email, wallet_balance, per_user_cost, custom_domain, brand_name, brand_logo, brand_color, support_contact FROM users WHERE id = ?");
+        $stmt->execute([$resellerId]);
+        $settings = $stmt->fetch();
+        echo json_encode(["success" => true, "settings" => $settings]);
+        exit;
+    }
+
+    // 9.15 Reseller Update Settings & Branding: PUT /api/reseller/settings
+    if (preg_match('#^/api/reseller/settings$#', $basePath) && $method === 'PUT') {
+        $customDomain = strtolower(trim($body['custom_domain'] ?? ($body['customDomain'] ?? '')));
+        $brandName = trim($body['brand_name'] ?? ($body['brandName'] ?? ''));
+        $brandLogo = trim($body['brand_logo'] ?? ($body['brandLogo'] ?? ''));
+        $brandColor = trim($body['brand_color'] ?? ($body['brandColor'] ?? '#22c55e'));
+        $supportContact = trim($body['support_contact'] ?? ($body['supportContact'] ?? ''));
+
+        // Clean domain format
+        $customDomain = preg_replace('#^https?://#i', '', $customDomain);
+        $customDomain = rtrim($customDomain, '/');
+
+        if ($customDomain) {
+            $dCheck = $pdo->prepare("SELECT id FROM users WHERE (custom_domain = ? OR custom_domain = ?) AND id != ?");
+            $dCheck->execute([$customDomain, 'www.' . $customDomain, $resellerId]);
+            if ($dCheck->fetch()) {
+                http_response_code(409);
+                echo json_encode(["error" => "This custom domain is already linked to another account."]);
+                exit;
+            }
+        }
+
+        $pdo->prepare("UPDATE users SET custom_domain = ?, brand_name = ?, brand_logo = ?, brand_color = ?, support_contact = ? WHERE id = ?")
+            ->execute([$customDomain ?: null, $brandName ?: null, $brandLogo ?: null, $brandColor ?: '#22c55e', $supportContact ?: null, $resellerId]);
+
+        echo json_encode(["success" => true, "message" => "Branding and custom domain settings updated successfully."]);
         exit;
     }
 }

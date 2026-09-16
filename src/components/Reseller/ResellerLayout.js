@@ -2,6 +2,9 @@ import React, { useState, useEffect } from 'react';
 import '../Admin/admin.css';
 import ResellerDashboard from './ResellerDashboard';
 import ResellerUsers from './ResellerUsers';
+import ResellerPlans from './ResellerPlans';
+import ResellerWallet from './ResellerWallet';
+import ResellerSettings from './ResellerSettings';
 import { API_BASE, handleAuthError, authFetch } from '../../apiConfig';
 
 function ResellerLayout({ currentUser, onExitReseller, onSwitchPortal, onLogout }) {
@@ -11,6 +14,9 @@ function ResellerLayout({ currentUser, onExitReseller, onSwitchPortal, onLogout 
     const tabParam = search.get('tab');
     if (tabParam) return tabParam;
     if (path.includes('/reseller/users')) return 'users';
+    if (path.includes('/reseller/plans')) return 'plans';
+    if (path.includes('/reseller/wallet') || path.includes('/reseller/recharge')) return 'wallet';
+    if (path.includes('/reseller/settings') || path.includes('/reseller/branding')) return 'settings';
     return 'dashboard';
   };
 
@@ -69,6 +75,9 @@ function ResellerLayout({ currentUser, onExitReseller, onSwitchPortal, onLogout 
     switch (activeTab) {
       case 'dashboard': return '📊 Reseller Dashboard';
       case 'users': return '👥 Customers';
+      case 'plans': return '💳 My Custom Plans';
+      case 'wallet': return '💰 Wallet & Balance';
+      case 'settings': return '⚙️ Branding & Domain';
       default: return 'Reseller Portal';
     }
   };
@@ -79,19 +88,19 @@ function ResellerLayout({ currentUser, onExitReseller, onSwitchPortal, onLogout 
       <aside className={`admin-sidebar ${mobileOpen ? 'open' : ''}`}>
         <div className="admin-sidebar-header">
           <div className="admin-brand-block">
-            <div className="admin-brand-icon">
+            <div className="admin-brand-icon" style={{ borderColor: (currentUser?.brand_color || '#22c55e') }}>
               <img
-                src="/logo.png"
+                src={currentUser?.brand_logo || '/logo.png'}
                 alt="Logo"
                 onError={(e) => {
                   e.currentTarget.style.display = 'none';
                   if (e.currentTarget.nextElementSibling) e.currentTarget.nextElementSibling.style.display = 'block';
                 }}
               />
-              <span style={{ display: 'none', fontSize: '18px', color: '#22c55e' }}>⚡</span>
+              <span style={{ display: 'none', fontSize: '18px', color: (currentUser?.brand_color || '#22c55e') }}>⚡</span>
             </div>
             <div>
-              <div className="admin-brand-title">ToolsBy<span>Dcx</span></div>
+              <div className="admin-brand-title">{currentUser?.brand_name || 'ToolsBy'}<span>{currentUser?.brand_name ? '' : 'Dcx'}</span></div>
               <div className="admin-brand-subtitle">Reseller Panel</div>
             </div>
           </div>
@@ -117,14 +126,42 @@ function ResellerLayout({ currentUser, onExitReseller, onSwitchPortal, onLogout 
             <span>Dashboard</span>
           </button>
 
-          <div className="admin-nav-section-title">Customers</div>
+          <div className="admin-nav-section-title">Management</div>
           <button
             type="button"
             className={`admin-nav-item ${activeTab === 'users' ? 'active' : ''}`}
             onClick={() => switchTab('users')}
           >
             <span className="admin-nav-icon">👥</span>
-            <span>Customer</span>
+            <span>Customers</span>
+          </button>
+
+          <button
+            type="button"
+            className={`admin-nav-item ${activeTab === 'plans' ? 'active' : ''}`}
+            onClick={() => switchTab('plans')}
+          >
+            <span className="admin-nav-icon">💳</span>
+            <span>My Plans</span>
+          </button>
+
+          <button
+            type="button"
+            className={`admin-nav-item ${activeTab === 'wallet' ? 'active' : ''}`}
+            onClick={() => switchTab('wallet')}
+          >
+            <span className="admin-nav-icon">💰</span>
+            <span>Wallet & Balance</span>
+          </button>
+
+          <div className="admin-nav-section-title">Configuration</div>
+          <button
+            type="button"
+            className={`admin-nav-item ${activeTab === 'settings' ? 'active' : ''}`}
+            onClick={() => switchTab('settings')}
+          >
+            <span className="admin-nav-icon">⚙️</span>
+            <span>Branding & Domain</span>
           </button>
         </nav>
 
@@ -251,8 +288,15 @@ function ResellerLayout({ currentUser, onExitReseller, onSwitchPortal, onLogout 
               currentUser={currentUser}
               isCreateOpen={isCreateUserOpen}
               onCloseCreate={(val) => setIsCreateUserOpen(Boolean(val))}
+              onNavigateTab={(tab) => switchTab(tab)}
             />
           )}
+
+          {activeTab === 'plans' && <ResellerPlans />}
+
+          {activeTab === 'wallet' && <ResellerWallet currentUser={currentUser} onOpenRecharge={() => switchTab('wallet')} />}
+
+          {activeTab === 'settings' && <ResellerSettings currentUser={currentUser} />}
         </div>
       </main>
     </div>
